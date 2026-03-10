@@ -89,7 +89,7 @@ def create_app() -> FastAPI:
     # app.include_router(tender_matching_router, prefix="/api/v1")
     app.include_router(compliance_vault_router, prefix="/api/v1")
     app.include_router(bid_lifecycle_router, prefix="/api/v1")
-    app.include_router(alert_engine_router, prefix="/api/v1")
+    # app.include_router(alert_engine_router, prefix="/api/v1")
     # app.include_router(bid_intelligence_router, prefix="/api/v1")
     # app.include_router(company_profile_router, prefix="/api/v1")
     # app.include_router(user_management_router, prefix="/api/v1")
