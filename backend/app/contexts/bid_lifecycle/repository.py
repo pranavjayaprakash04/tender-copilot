@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import and_, desc, func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.contexts.bid_lifecycle.models import (
     Bid,
@@ -31,7 +31,7 @@ from app.shared.exceptions import NotFoundException, ValidationException
 class BidRepository:
     """Repository for Bid operations with state machine enforcement."""
 
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
     async def create(self, bid_data: BidCreate) -> Bid:
@@ -419,7 +419,7 @@ class BidRepository:
 class BidOutcomeRecordRepository:
     """Repository for BidOutcomeRecord operations."""
 
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
     async def create(self, outcome_data: BidOutcomeRecordCreate) -> BidOutcomeRecord:
@@ -486,7 +486,7 @@ class BidOutcomeRecordRepository:
 class BidPaymentRepository:
     """Repository for BidPayment operations."""
 
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
     async def create(self, payment_data: BidPaymentCreate) -> BidPayment:
@@ -571,7 +571,7 @@ class BidPaymentRepository:
 class BidFollowUpRepository:
     """Repository for BidFollowUp operations."""
 
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
     async def create(self, follow_up_data: BidFollowUpCreate) -> BidFollowUp:

@@ -32,8 +32,8 @@ class TestBidRepository(TestDatabase):
     """Test BidRepository operations."""
 
     @pytest.fixture
-    def bid_repo(self, session):
-        return BidRepository(session)
+    def bid_repo(self, db_session):
+        return BidRepository(db_session)
 
     @pytest.fixture
     def sample_bid_data(self):

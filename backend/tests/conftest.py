@@ -15,6 +15,9 @@ from sqlalchemy.orm import sessionmaker
 from app.database import Base, get_async_session
 from app.main import app
 
+# Import all models to ensure they are registered with Base
+from app.contexts.bid_lifecycle.models import Bid, BidFollowUp, BidOutcomeRecord, BidPayment
+from app.contexts.company_profile.models import Company
 
 # Test database URL
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"

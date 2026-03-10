@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field, validator
-from pydantic_settings import BaseSettings
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
     # App
     SECRET_KEY: str = Field(..., description="JWT secret key")
     ENVIRONMENT: Literal["development", "production", "test"] = "development"
@@ -42,13 +43,15 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = Field(default="", description="Celery broker URL (defaults to REDIS_URL)")
     CELERY_RESULT_BACKEND: str = Field(default="", description="Celery result backend (defaults to REDIS_URL)")
 
-    @validator("CELERY_BROKER_URL", pre=True, always=True)
-    def set_celery_broker(cls, v, values):
-        return v or values.get("REDIS_URL", "")
+    @field_validator("CELERY_BROKER_URL", mode='before')
+    @classmethod
+    def set_celery_broker(cls, v, info):
+        return v or info.data.get("REDIS_URL", "")
 
-    @validator("CELERY_RESULT_BACKEND", pre=True, always=True)
-    def set_celery_backend(cls, v, values):
-        return v or values.get("REDIS_URL", "")
+    @field_validator("CELERY_RESULT_BACKEND", mode='before')
+    @classmethod
+    def set_celery_backend(cls, v, info):
+        return v or info.data.get("REDIS_URL", "")
 
     # CORS
     CORS_ORIGINS: list[str] = Field(
@@ -67,10 +70,6 @@ class Settings(BaseSettings):
     # Rate limiting
     RATE_LIMIT_REQUESTS: int = Field(default=100, description="Requests per minute")
     RATE_LIMIT_WINDOW: int = Field(default=60, description="Rate limit window in seconds")
-
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
 
 
 settings = Settings()

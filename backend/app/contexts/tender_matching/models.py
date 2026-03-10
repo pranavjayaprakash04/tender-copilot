@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, dict
+from typing import Any, Dict
 from uuid import UUID
 
 from sqlalchemy import (
@@ -15,11 +15,12 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    func,
+    desc,
 )
-from sqlalchemy import UUID as SQLAlchemyUUID
-from sqlalchemy.dialects.postgresql import VECTOR
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.sql import func
+from pgvector.sqlalchemy import Vector
 
 from app.database import Base
 
@@ -36,9 +37,9 @@ class TenderMatch(Base):
     """Tender-company matching model with pgvector embeddings."""
     __tablename__ = "tender_matches"
 
-    id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, primary_key=True, default=func.uuid_generate_v4())
-    company_id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
-    tender_id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, ForeignKey("tenders.id", ondelete="CASCADE"), nullable=False, index=True)
+    id: Mapped[UUID] = mapped_column(UUID, primary_key=True, default=func.uuid_generate_v4())
+    company_id: Mapped[UUID] = mapped_column(UUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    tender_id: Mapped[UUID] = mapped_column(UUID, ForeignKey("tenders.id", ondelete="CASCADE"), nullable=False, index=True)
 
     # Matching results
     match_score: Mapped[float] = mapped_column(Float, nullable=False, index=True)  # 0.0-1.0 cosine similarity
@@ -48,9 +49,9 @@ class TenderMatch(Base):
     recommendations: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)  # Recommendations
 
     # Embedding data
-    company_embedding: Mapped[VECTOR] = mapped_column(VECTOR(1536), nullable=False)  # Company capability embedding
-    tender_embedding: Mapped[VECTOR] = mapped_column(VECTOR(1536), nullable=False)  # Tender requirement embedding
-    embedding_model: Mapped[str] = mapped_column(String(50), nullable=False, default="text-embedding-ada-002")
+    company_embedding: Mapped[Vector] = mapped_column(Vector(384), nullable=False)  # Company capability embedding
+    tender_embedding: Mapped[Vector] = mapped_column(Vector(384), nullable=False)  # Tender requirement embedding
+    embedding_model: Mapped[str] = mapped_column(String(50), nullable=False, default="all-MiniLM-L6-v2")
     embedding_version: Mapped[str] = mapped_column(String(20), nullable=False, default="v1")
 
     # Processing metadata
@@ -91,10 +92,10 @@ class TenderMatch(Base):
     # Indexes for performance
     __table_args__ = (
         Index('idx_company_tender_match', 'company_id', 'tender_id'),
-        Index('idx_match_score_desc', 'match_score.desc()'),
-        Index('idx_company_score', 'company_id', 'match_score.desc()'),
-        Index('idx_tender_score', 'tender_id', 'match_score.desc()'),
-        Index('idx_status_created', 'status', 'created_at.desc()'),
+        Index('idx_match_score_desc', desc('match_score')),
+        Index('idx_company_score', 'company_id', desc('match_score')),
+        Index('idx_tender_score', 'tender_id', desc('match_score')),
+        Index('idx_status_created', 'status', desc('created_at')),
     )
 
     def __repr__(self) -> str:
@@ -122,12 +123,12 @@ class CompanyEmbedding(Base):
     """Company capability embeddings for faster matching."""
     __tablename__ = "company_embeddings"
 
-    id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, primary_key=True, default=func.uuid_generate_v4())
-    company_id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    id: Mapped[UUID] = mapped_column(UUID, primary_key=True, default=func.uuid_generate_v4())
+    company_id: Mapped[UUID] = mapped_column(UUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
 
     # Embedding data
-    capabilities_embedding: Mapped[VECTOR] = mapped_column(VECTOR(1536), nullable=False)
-    embedding_model: Mapped[str] = mapped_column(String(50), nullable=False, default="text-embedding-ada-002")
+    capabilities_embedding: Mapped[Vector] = mapped_column(Vector(384), nullable=False)
+    embedding_model: Mapped[str] = mapped_column(String(50), nullable=False, default="all-MiniLM-L6-v2")
     embedding_version: Mapped[str] = mapped_column(String(20), nullable=False, default="v1")
 
     # Source data
@@ -158,12 +159,12 @@ class TenderEmbedding(Base):
     """Tender requirement embeddings for faster matching."""
     __tablename__ = "tender_embeddings"
 
-    id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, primary_key=True, default=func.uuid_generate_v4())
-    tender_id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, ForeignKey("tenders.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    id: Mapped[UUID] = mapped_column(UUID, primary_key=True, default=func.uuid_generate_v4())
+    tender_id: Mapped[UUID] = mapped_column(UUID, ForeignKey("tenders.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
 
     # Embedding data
-    requirements_embedding: Mapped[VECTOR] = mapped_column(VECTOR(1536), nullable=False)
-    embedding_model: Mapped[str] = mapped_column(String(50), nullable=False, default="text-embedding-ada-002")
+    requirements_embedding: Mapped[Vector] = mapped_column(Vector(384), nullable=False)
+    embedding_model: Mapped[str] = mapped_column(String(50), nullable=False, default="all-MiniLM-L6-v2")
     embedding_version: Mapped[str] = mapped_column(String(20), nullable=False, default="v1")
 
     # Source data
@@ -194,8 +195,8 @@ class MatchingAnalytics(Base):
     """Analytics for tender matching performance."""
     __tablename__ = "matching_analytics"
 
-    id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, primary_key=True, default=func.uuid_generate_v4())
-    company_id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    id: Mapped[UUID] = mapped_column(UUID, primary_key=True, default=func.uuid_generate_v4())
+    company_id: Mapped[UUID] = mapped_column(UUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
 
     # Analytics period
     period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

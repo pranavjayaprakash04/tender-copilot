@@ -5,8 +5,8 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import and_, func, or_
-from sqlalchemy.orm import Session, select
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.orm import Session
 
 from app.contexts.alert_engine.models import (
     Notification,

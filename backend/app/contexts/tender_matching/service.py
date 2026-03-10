@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, dict
+from typing import Any, Dict
 from uuid import UUID
 
 import structlog
+from sentence_transformers import SentenceTransformer
 
 from app.contexts.company_profile.repository import CompanyRepository
 from app.contexts.tender_discovery.repository import TenderRepository
@@ -21,10 +22,12 @@ from app.contexts.tender_matching.repository import (
 from app.contexts.tender_matching.schemas import (
     TenderMatchCreate,
 )
-from app.infrastructure.groq_client import GroqClient, GroqModel
 from app.shared.exceptions import NotFoundException, ValidationException
 
 logger = structlog.get_logger()
+
+# Initialize sentence transformer model
+embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
 
 
 class TenderMatchingService:
@@ -37,14 +40,12 @@ class TenderMatchingService:
         tender_embedding_repo: TenderEmbeddingRepository,
         company_repo: CompanyRepository,
         tender_repo: TenderRepository,
-        groq_client: GroqClient
     ) -> None:
         self._match_repo = match_repo
         self._company_embedding_repo = company_embedding_repo
         self._tender_embedding_repo = tender_embedding_repo
         self._company_repo = company_repo
         self._tender_repo = tender_repo
-        self._groq = groq_client
 
     async def generate_company_embedding(
         self,
@@ -72,13 +73,9 @@ class TenderMatchingService:
         # Prepare capabilities text
         capabilities_text = self._prepare_company_capabilities_text(company)
 
-        # Generate embedding using Groq
+        # Generate embedding using sentence-transformers
         start_time = datetime.utcnow()
-        embedding = await self._groq.generate_embedding(
-            text=capabilities_text,
-            model="text-embedding-ada-002",  # Use OpenAI embedding model
-            trace_id=trace_id
-        )
+        embedding = embedding_model.encode(capabilities_text)
         processing_time = int((datetime.utcnow() - start_time).total_seconds() * 1000)
 
         # Store embedding
@@ -126,13 +123,9 @@ class TenderMatchingService:
         # Prepare requirements text
         requirements_text = self._prepare_tender_requirements_text(tender)
 
-        # Generate embedding using Groq
+        # Generate embedding using sentence-transformers
         start_time = datetime.utcnow()
-        embedding = await self._groq.generate_embedding(
-            text=requirements_text,
-            model="text-embedding-ada-002",
-            trace_id=trace_id
-        )
+        embedding = embedding_model.encode(requirements_text)
         processing_time = int((datetime.utcnow() - start_time).total_seconds() * 1000)
 
         # Store embedding

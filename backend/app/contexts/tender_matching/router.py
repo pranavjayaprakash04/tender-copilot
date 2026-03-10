@@ -6,15 +6,13 @@ from app.shared.dependencies import get_current_user
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.contexts.company_profile.repository import CompanyRepository
-from app.contexts.tender_discovery.repository import TenderRepository
-from app.contexts.tender_matching.repository import (
-    CompanyEmbeddingRepository,
-    TenderEmbeddingRepository,
-    TenderMatchRepository,
-)
 from app.contexts.tender_matching.service import TenderMatchingService
+from app.contexts.tender_matching.repository import (
+    TenderMatchRepository, CompanyEmbeddingRepository, TenderEmbeddingRepository
+)
+from app.contexts.company_profile.repository import CompanyRepository
+from app.contexts.tender_discovery.repository import TenderRepository
 from app.database import get_async_session
-from app.infrastructure.groq_client import GroqClient
 
 router = APIRouter(prefix="/matching", tags=["tender-matching"])
 
@@ -36,8 +34,7 @@ async def find_matches_for_company(
             company_embedding_repo=CompanyEmbeddingRepository(session),
             tender_embedding_repo=TenderEmbeddingRepository(session),
             company_repo=CompanyRepository(session),
-            tender_repo=TenderRepository(session),
-            groq_client=GroqClient()
+            tender_repo=TenderRepository(session)
         )
 
         try:
@@ -103,8 +100,7 @@ async def find_matches_for_tender(
             company_embedding_repo=CompanyEmbeddingRepository(session),
             tender_embedding_repo=TenderEmbeddingRepository(session),
             company_repo=CompanyRepository(session),
-            tender_repo=TenderRepository(session),
-            groq_client=GroqClient()
+            tender_repo=TenderRepository(session)
         )
 
         try:
@@ -168,8 +164,7 @@ async def calculate_similarity(
             company_embedding_repo=CompanyEmbeddingRepository(session),
             tender_embedding_repo=TenderEmbeddingRepository(session),
             company_repo=CompanyRepository(session),
-            tender_repo=TenderRepository(session),
-            groq_client=GroqClient()
+            tender_repo=TenderRepository(session)
         )
 
         try:
@@ -211,8 +206,7 @@ async def generate_company_embedding(
             company_embedding_repo=CompanyEmbeddingRepository(session),
             tender_embedding_repo=TenderEmbeddingRepository(session),
             company_repo=CompanyRepository(session),
-            tender_repo=TenderRepository(session),
-            groq_client=GroqClient()
+            tender_repo=TenderRepository(session)
         )
 
         try:
@@ -256,8 +250,7 @@ async def generate_tender_embedding(
             company_embedding_repo=CompanyEmbeddingRepository(session),
             tender_embedding_repo=TenderEmbeddingRepository(session),
             company_repo=CompanyRepository(session),
-            tender_repo=TenderRepository(session),
-            groq_client=GroqClient()
+            tender_repo=TenderRepository(session)
         )
 
         try:
@@ -301,8 +294,7 @@ async def create_match_record(
             company_embedding_repo=CompanyEmbeddingRepository(session),
             tender_embedding_repo=TenderEmbeddingRepository(session),
             company_repo=CompanyRepository(session),
-            tender_repo=TenderRepository(session),
-            groq_client=GroqClient()
+            tender_repo=TenderRepository(session)
         )
 
         try:

@@ -235,7 +235,7 @@ class ComplianceVaultService:
             user_prompt = build_prompt(request.filename, request.content_preview or "")
 
             # Call Groq for classification
-            from app.prompts.compliance.eligibility_check_v1 import (
+            from app.prompts.compliance.document_classification_v1 import (
                 ClassificationOutput,
             )
 
