@@ -28,7 +28,13 @@ class NotificationRepository:
 
     async def create(self, notification_data: Any) -> Notification:
         """Create a new notification."""
-        notification = Notification(**notification_data.model_dump())
+        # Handle both dict and model inputs
+        if hasattr(notification_data, 'model_dump'):
+            data = notification_data.model_dump()
+        else:
+            data = notification_data
+        
+        notification = Notification(**data)
         self._session.add(notification)
         await self._session.commit()
         await self._session.refresh(notification)

@@ -59,15 +59,16 @@ class AlertEngineService:
         trace_id: str | None = None
     ) -> Notification:
         """Create a new notification."""
-        notification_data.company_id = company_id
-
         # Check user preferences
         preferences = await self._preference_repo.get_by_company(company_id)
         if not self._should_send_notification(notification_data, preferences):
             logger.info("notification_skipped_preferences", trace_id=trace_id)
             return None
 
-        notification = await self._notification_repo.create(notification_data)
+        # Create notification with company_id
+        notification_dict = notification_data.model_dump()
+        notification_dict["company_id"] = company_id
+        notification = await self._notification_repo.create(notification_dict)
 
         logger.info(
             "notification_created",

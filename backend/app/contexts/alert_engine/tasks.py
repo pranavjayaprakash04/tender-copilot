@@ -4,13 +4,13 @@ from datetime import datetime, timedelta
 from uuid import UUID
 
 import structlog
-from app.infrastructure.email_client import EmailClient
 from celery import Celery
 from celery.schedules import crontab
 
 from app.contexts.alert_engine.schemas import AlertEvent
 from app.contexts.alert_engine.service import AlertEngineService
 from app.database import get_async_session
+from app.infrastructure.resend_client import ResendClient
 from app.infrastructure.whatsapp_client import WhatsAppClient
 
 logger = structlog.get_logger()
@@ -35,7 +35,7 @@ def process_domain_events_task() -> dict:
                 notification_repo=NotificationRepository(session),
                 template_repo=NotificationTemplateRepository(session),
                 preference_repo=NotificationPreferenceRepository(session),
-                email_client=EmailClient(),
+                resend_client=ResendClient(),
                 whatsapp_client=WhatsAppClient()
             )
 
@@ -114,7 +114,7 @@ def retry_failed_notifications_task() -> dict:
                 notification_repo=NotificationRepository(session),
                 template_repo=NotificationTemplateRepository(session),
                 preference_repo=NotificationPreferenceRepository(session),
-                email_client=EmailClient(),
+                resend_client=ResendClient(),
                 whatsapp_client=WhatsAppClient()
             )
 
@@ -192,7 +192,7 @@ def send_daily_digest_task() -> dict:
                 notification_repo=NotificationRepository(session),
                 template_repo=NotificationTemplateRepository(session),
                 preference_repo=NotificationPreferenceRepository(session),
-                email_client=EmailClient(),
+                resend_client=ResendClient(),
                 whatsapp_client=WhatsAppClient()
             )
 

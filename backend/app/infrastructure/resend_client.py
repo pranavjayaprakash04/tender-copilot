@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-import structlog
-import resend
-from jinja2 import Environment, FileSystemLoader
 from pathlib import Path
 from typing import Any
 
+import httpx
+import structlog
+from jinja2 import Environment, FileSystemLoader
+
 from app.config import settings
-from app.infrastructure.groq_client import GroqModel, GroqClient
+from app.infrastructure.groq_client import GroqClient, GroqModel
+from app.shared.exceptions import ExternalServiceException
 from app.shared.lang_context import LangContext
 
 logger = structlog.get_logger()
@@ -17,7 +19,7 @@ class ResendClient:
     """Async Resend email client with template support."""
 
     def __init__(self) -> None:
-        resend.api_key = settings.RESEND_API_KEY
+        self._api_key = settings.RESEND_API_KEY
         self._template_env = Environment(
             loader=FileSystemLoader(
                 Path(__file__).parent.parent / "contexts" / "alert_engine" / "templates"
@@ -52,8 +54,18 @@ class ResendClient:
                 "html": html_content
             }
 
-            response = resend.Emails.send(params)
-            message_id = response.get("id")
+            async with httpx.AsyncClient() as client:
+                response = client.post(
+                    "https://api.resend.com/emails",
+                    headers={
+                        "Authorization": f"Bearer {self._api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json=params
+                )
+                response.raise_for_status()
+                result = response.json()
+                message_id = result.get("id")
 
             logger.info(
                 "email_sent_via_resend",
@@ -65,6 +77,16 @@ class ResendClient:
 
             return message_id
 
+        except httpx.HTTPStatusError as e:
+            logger.error(
+                "resend_http_error",
+                trace_id=trace_id,
+                recipient=to,
+                subject=subject,
+                status_code=e.response.status_code,
+                error=str(e)
+            )
+            raise ExternalServiceException("Resend", f"HTTP {e.response.status_code}: {e.response.text}")
         except Exception as e:
             logger.error(
                 "resend_email_failed",
@@ -73,7 +95,7 @@ class ResendClient:
                 subject=subject,
                 error=str(e)
             )
-            raise
+            raise ExternalServiceException("Resend", str(e))
 
     async def send_tender_alert(
         self,
@@ -109,21 +131,21 @@ class ResendClient:
         try:
             prompt = f"""
             Generate a concise, professional email subject line for a tender alert.
-            
+
             Context: {template_data}
-            
+
             Rules:
             - Maximum 60 characters
             - Include relevant emoji if appropriate
             - Be action-oriented
             - Use title case
             - Avoid spammy language
-            
+
             Examples:
             - "🔔 Tender Deadline: ABC Corp - 2 Days Left"
             - "🆕 New Tender: Infrastructure Project Worth $50K"
             - "📊 Bid Status Update: Submitted Successfully"
-            
+
             Return only the subject line, nothing else.
             """
 
@@ -136,13 +158,13 @@ class ResendClient:
                 lang=LangContext.from_lang("en"),
                 trace_id=None
             )
-            
+
             subject = response.strip().strip('"').strip("'")
-            
+
             # Ensure subject is not too long
             if len(subject) > 60:
                 subject = subject[:57] + "..."
-                
+
             return subject
 
         except Exception as e:
