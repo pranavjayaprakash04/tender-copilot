@@ -5,7 +5,7 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from app.infrastructure.email_client import EmailClient
+from app.infrastructure.resend_client import ResendClient
 
 from app.contexts.alert_engine.models import (
     Notification,
@@ -42,13 +42,13 @@ class AlertEngineService:
         notification_repo: NotificationRepository,
         template_repo: NotificationTemplateRepository,
         preference_repo: NotificationPreferenceRepository,
-        email_client: EmailClient,
+        resend_client: ResendClient,
         whatsapp_client: WhatsAppClient
     ) -> None:
         self._notification_repo = notification_repo
         self._template_repo = template_repo
         self._preference_repo = preference_repo
-        self._email_client = email_client
+        self._resend_client = resend_client
         self._whatsapp_client = whatsapp_client
         self._event_consumer = DomainEventConsumer()
 
@@ -316,16 +316,29 @@ class AlertEngineService:
         notification: Notification,
         trace_id: str | None = None
     ) -> None:
-        """Send email notification."""
-        await self._email_client.send_email(
+        """Send email notification via Resend."""
+        # Prepare template data
+        template_data = {
+            "alert_type": notification.context_data.get("alert_type", "general"),
+            "tender_title": notification.context_data.get("tender_title"),
+            "tender_id": notification.context_data.get("tender_id"),
+            "company_name": notification.context_data.get("company_name"),
+            "deadline_date": notification.context_data.get("deadline_date"),
+            "tender_value": notification.context_data.get("tender_value"),
+            "message": notification.message,
+            "urgency": notification.context_data.get("urgency", "medium"),
+            "action_url": notification.context_data.get("action_url")
+        }
+
+        # Send via Resend with template
+        await self._resend_client.send_tender_alert(
             to=notification.recipient,
-            subject=notification.subject,
-            message=notification.message,
+            alert_data=template_data,
             trace_id=trace_id
         )
 
         logger.info(
-            "email_notification_sent",
+            "email_notification_sent_via_resend",
             trace_id=trace_id,
             notification_id=notification.id,
             recipient=notification.recipient

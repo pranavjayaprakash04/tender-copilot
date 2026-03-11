@@ -14,7 +14,7 @@ from app.config import settings
 # from app.contexts.user_management.router import router as user_management_router
 # from app.contexts.whatsapp_gateway.router import router as whatsapp_gateway_router
 # from app.contexts.partner_portal.router import router as partner_portal_router
-# from app.contexts.alert_engine.router import router as alert_engine_router
+from app.contexts.alert_engine.router import router as alert_engine_router
 from app.contexts.bid_lifecycle.router import router as bid_lifecycle_router
 
 # from app.contexts.tender_intelligence.router import router as tender_intelligence_router
@@ -89,7 +89,7 @@ def create_app() -> FastAPI:
     # app.include_router(tender_matching_router, prefix="/api/v1")
     app.include_router(compliance_vault_router, prefix="/api/v1")
     app.include_router(bid_lifecycle_router, prefix="/api/v1")
-    # app.include_router(alert_engine_router, prefix="/api/v1")
+    app.include_router(alert_engine_router, prefix="/api/v1")
     # app.include_router(bid_intelligence_router, prefix="/api/v1")
     # app.include_router(company_profile_router, prefix="/api/v1")
     # app.include_router(user_management_router, prefix="/api/v1")
