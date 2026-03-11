@@ -200,7 +200,6 @@ export default function TenderDetailPage({ params }: { params: { id: string } })
               size="lg"
               onClick={() => generateBidMutation.mutate(tender.id)}
               disabled={generateBidMutation.isPending || polling}
-              className="flex-1"
             >
               {generateBidMutation.isPending || polling ? (
                 <>
@@ -224,7 +223,6 @@ export default function TenderDetailPage({ params }: { params: { id: string } })
                 }
               })}
               disabled={createAlertMutation.isPending}
-              className="flex-1"
             >
               {createAlertMutation.isPending ? t("tenders.setting_alert") : t("tenders.set_alert")}
             </Button>
