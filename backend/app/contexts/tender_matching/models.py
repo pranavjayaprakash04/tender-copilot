@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Dict
+from typing import Any
 from uuid import UUID
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     JSON,
     Boolean,
@@ -15,12 +16,11 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    func,
     desc,
+    func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from pgvector.sqlalchemy import Vector
 
 from app.database import Base
 
@@ -37,9 +37,9 @@ class TenderMatch(Base):
     """Tender-company matching model with pgvector embeddings."""
     __tablename__ = "tender_matches"
 
-    id: Mapped[UUID] = mapped_column(UUID, primary_key=True, default=func.uuid_generate_v4())
-    company_id: Mapped[UUID] = mapped_column(UUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
-    tender_id: Mapped[UUID] = mapped_column(UUID, ForeignKey("tenders.id", ondelete="CASCADE"), nullable=False, index=True)
+    id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, default=func.uuid_generate_v4())
+    company_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    tender_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("tenders.id", ondelete="CASCADE"), nullable=False, index=True)
 
     # Matching results
     match_score: Mapped[float] = mapped_column(Float, nullable=False, index=True)  # 0.0-1.0 cosine similarity
@@ -87,7 +87,7 @@ class TenderMatch(Base):
 
     # Relationships
     company: Mapped[Any] = relationship("Company", back_populates="tender_matches")
-    tender: Mapped[Any] = relationship("Tender", back_populates="company_matches")
+    tender: Mapped[Any] = relationship("Tender", back_populates="tender_matches")
 
     # Indexes for performance
     __table_args__ = (
@@ -123,8 +123,8 @@ class CompanyEmbedding(Base):
     """Company capability embeddings for faster matching."""
     __tablename__ = "company_embeddings"
 
-    id: Mapped[UUID] = mapped_column(UUID, primary_key=True, default=func.uuid_generate_v4())
-    company_id: Mapped[UUID] = mapped_column(UUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, default=func.uuid_generate_v4())
+    company_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
 
     # Embedding data
     capabilities_embedding: Mapped[Vector] = mapped_column(Vector(384), nullable=False)
@@ -159,8 +159,8 @@ class TenderEmbedding(Base):
     """Tender requirement embeddings for faster matching."""
     __tablename__ = "tender_embeddings"
 
-    id: Mapped[UUID] = mapped_column(UUID, primary_key=True, default=func.uuid_generate_v4())
-    tender_id: Mapped[UUID] = mapped_column(UUID, ForeignKey("tenders.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, default=func.uuid_generate_v4())
+    tender_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("tenders.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
 
     # Embedding data
     requirements_embedding: Mapped[Vector] = mapped_column(Vector(384), nullable=False)
@@ -195,8 +195,8 @@ class MatchingAnalytics(Base):
     """Analytics for tender matching performance."""
     __tablename__ = "matching_analytics"
 
-    id: Mapped[UUID] = mapped_column(UUID, primary_key=True, default=func.uuid_generate_v4())
-    company_id: Mapped[UUID] = mapped_column(UUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, default=func.uuid_generate_v4())
+    company_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
 
     # Analytics period
     period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

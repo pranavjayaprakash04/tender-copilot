@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any, dict
+from typing import Any, Dict
 from uuid import UUID
 
 import structlog
@@ -55,7 +55,7 @@ class BidGenerationService:
         bid_title: str | None = None,
         bid_description: str | None = None,
         template_id: UUID | None = None,
-        customization: dict[str, Any] | None = None,
+        customization: Dict[str, Any] | None = None,
         trace_id: str | None = None
     ) -> BidGeneration:
         """Initiate bid generation and return task ID immediately."""
@@ -139,6 +139,8 @@ class BidGenerationService:
         try:
             # Get tender information
             tender = await self._tender_repo.get_by_id(bid_generation.tender_id, company_id)
+            if not tender:
+                raise NotFoundException("Tender not found")
 
             # Get template if specified
             template = None
@@ -195,7 +197,7 @@ class BidGenerationService:
         bid_generation: BidGeneration,
         template: BidTemplate | None,
         trace_id: str | None = None
-    ) -> dict[str, Any]:
+    ) -> Dict[str, Any]:
         """Generate bid content using Groq AI."""
         start_time = datetime.utcnow()
 

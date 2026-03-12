@@ -1,9 +1,19 @@
 import structlog
 from fastapi import Request
+from uuid import UUID
 
 from app.shared.exceptions import AuthorizationException
 
 logger = structlog.get_logger()
+
+
+def get_company_id(request: Request) -> UUID:
+    """Get company ID from request state."""
+    company_id = getattr(request.state, "company_id", None)
+    if not company_id:
+        raise AuthorizationException("Company ID not found in request")
+    return UUID(company_id)
+
 
 async def tenant_middleware(request: Request, call_next):
     """Middleware to inject company_id from JWT token for multi-tenancy."""

@@ -17,9 +17,9 @@ from app.config import settings
 from app.contexts.alert_engine.router import router as alert_engine_router
 from app.contexts.bid_lifecycle.router import router as bid_lifecycle_router
 
-# from app.contexts.tender_intelligence.router import router as tender_intelligence_router
-# from app.contexts.bid_generation.router import router as bid_generation_router
-# from app.contexts.tender_matching.router import router as tender_matching_router
+from app.contexts.tender_intelligence.router import router as tender_intelligence_router
+from app.contexts.tender_matching.router import router as tender_matching_router
+from app.contexts.tender_matching.embedding_router import router as embedding_router
 from app.contexts.compliance_vault.router import router as compliance_vault_router
 
 # Import routers (will be created in subsequent phases)
@@ -84,9 +84,9 @@ def create_app() -> FastAPI:
 
     # Register routers (will be uncommented as contexts are implemented)
     app.include_router(tender_discovery_router, prefix="/api/v1")
-    # app.include_router(tender_intelligence_router, prefix="/api/v1")
-    # app.include_router(bid_generation_router, prefix="/api/v1")
-    # app.include_router(tender_matching_router, prefix="/api/v1")
+    app.include_router(tender_intelligence_router, prefix="/api/v1")
+    app.include_router(tender_matching_router, prefix="/api/v1")
+    app.include_router(embedding_router, prefix="/api/v1")
     app.include_router(compliance_vault_router, prefix="/api/v1")
     app.include_router(bid_lifecycle_router, prefix="/api/v1")
     app.include_router(alert_engine_router, prefix="/api/v1")

@@ -74,7 +74,7 @@ class TenderDocument(Base):
     ai_processing_time: Mapped[float | None] = mapped_column(Integer, nullable=True)  # milliseconds
 
     # Document metadata
-    metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    document_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     tags: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     is_confidential: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     access_level: Mapped[str] = mapped_column(String(20), nullable=False, default="internal")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from uuid import UUID
+from decimal import Decimal
 
 from pydantic import BaseModel, validator
 
@@ -201,6 +202,7 @@ class BidOutcomeRecordCreate(BaseModel):
     """Bid outcome record creation schema."""
     bid_id: UUID
     outcome: BidOutcome
+    our_price: Decimal | None = None
     loss_reason: LossReason | None = None
     loss_reason_details: str | None = None
     winning_bidder: str | None = None

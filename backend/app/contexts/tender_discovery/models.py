@@ -17,7 +17,8 @@ from sqlalchemy import (
 from sqlalchemy import (
     UUID as SQLAlchemyUUID,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.database import Base
@@ -135,6 +136,8 @@ class Tender(Base):
     raw_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # Original scraped data
 
     # Relationships
+    tender_matches: Mapped[list[Any]] = relationship("TenderMatch", back_populates="tender")
+    embedding: Mapped[Any] = relationship("TenderEmbedding", back_populates="tender", uselist=False)
     # document_mappings: Mapped[list["VaultDocumentMapping"]] = relationship("VaultDocumentMapping", back_populates="tender")
     # alerts: Mapped[list["TenderAlert"]] = relationship("TenderAlert", back_populates="tender")
 
