@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
 import structlog
-from app.infrastructure.resend_client import ResendClient
 
 from app.contexts.alert_engine.models import (
     Notification,
@@ -28,6 +27,7 @@ from app.contexts.alert_engine.schemas import (
     NotificationTemplateCreate,
     NotificationUpdate,
 )
+from app.infrastructure.resend_client import ResendClient
 from app.infrastructure.whatsapp_client import WhatsAppClient
 from app.shared.events import DomainEventConsumer
 
@@ -286,7 +286,7 @@ class AlertEngineService:
                 notification.company_id,
                 NotificationUpdate(
                     status=NotificationStatus.SENT,
-                    sent_at=datetime.utcnow()
+                    sent_at=datetime.now(UTC)
                 )
             )
 
@@ -299,8 +299,8 @@ class AlertEngineService:
                 NotificationUpdate(
                     status=NotificationStatus.FAILED,
                     error_message=str(e),
-                    failed_at=datetime.utcnow(),
-                    next_retry_at=datetime.utcnow() + retry_delay
+                    failed_at=datetime.now(UTC),
+                    next_retry_at=datetime.now(UTC) + retry_delay
                 )
             )
 

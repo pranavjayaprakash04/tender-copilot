@@ -4,7 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.contexts.company_profile.repository import CompanyRepository
+from app.contexts.company_profile.repository import CompanyProfileRepository
 from app.contexts.tender_discovery.repository import TenderRepository
 from app.contexts.tender_matching.repository import (
     CompanyEmbeddingRepository,
@@ -33,7 +33,7 @@ async def find_matches_for_company(
             match_repo=TenderMatchRepository(session),
             company_embedding_repo=CompanyEmbeddingRepository(session),
             tender_embedding_repo=TenderEmbeddingRepository(session),
-            company_repo=CompanyRepository(session),
+            company_repo=CompanyProfileRepository(session),
             tender_repo=TenderRepository(session)
         )
 
@@ -97,7 +97,7 @@ async def find_matches_for_tender(
             match_repo=TenderMatchRepository(session),
             company_embedding_repo=CompanyEmbeddingRepository(session),
             tender_embedding_repo=TenderEmbeddingRepository(session),
-            company_repo=CompanyRepository(session),
+            company_repo=CompanyProfileRepository(session),
             tender_repo=TenderRepository(session)
         )
 
@@ -160,7 +160,7 @@ async def create_match_record(
             match_repo=TenderMatchRepository(session),
             company_embedding_repo=CompanyEmbeddingRepository(session),
             tender_embedding_repo=TenderEmbeddingRepository(session),
-            company_repo=CompanyRepository(session),
+            company_repo=CompanyProfileRepository(session),
             tender_repo=TenderRepository(session)
         )
 

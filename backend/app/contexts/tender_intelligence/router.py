@@ -3,8 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 
 from app.contexts.user_management.schemas import UserResponse
-from app.dependencies import get_current_user_id
-from app.middleware.tenant import get_company_id
+from app.dependencies import get_current_company_id, get_current_user_id
 
 from .schemas import (
     ClauseExtractionRequest,
@@ -23,7 +22,7 @@ router = APIRouter(prefix="/intelligence", tags=["tender_intelligence"])
 async def explain_tender(
     request: TenderExplainRequest,
     _current_user: UserResponse = Depends(get_current_user_id),
-    company_id: UUID = Depends(get_company_id),
+    company_id: UUID = Depends(get_current_company_id),
 ) -> TenderExplainResponse:
     """Explain tender in natural language."""
     service = TenderIntelligenceService()
@@ -34,7 +33,7 @@ async def explain_tender(
 async def extract_clauses(
     request: ClauseExtractionRequest,
     _current_user: UserResponse = Depends(get_current_user_id),
-    company_id: UUID = Depends(get_company_id),
+    company_id: UUID = Depends(get_current_company_id),
 ) -> ClauseExtractionResponse:
     """Extract key clauses from tender document."""
     service = TenderIntelligenceService()
@@ -45,7 +44,7 @@ async def extract_clauses(
 async def detect_risks(
     request: RiskDetectionRequest,
     _current_user: UserResponse = Depends(get_current_user_id),
-    company_id: UUID = Depends(get_company_id),
+    company_id: UUID = Depends(get_current_company_id),
 ) -> RiskDetectionResponse:
     """Detect risks and compliance issues in tender."""
     service = TenderIntelligenceService()

@@ -6,7 +6,6 @@ from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_async_session
-from app.shared.exceptions import AuthorizationException
 from app.shared.lang_context import Lang, LangContext
 
 
@@ -18,14 +17,14 @@ def get_current_user_id(request: Request) -> str:
     """Get current user ID from request state."""
     user_id = getattr(request.state, "user_id", None)
     if not user_id:
-        raise AuthorizationException("User not authenticated")
+        raise HTTPException(status_code=401, detail="User not authenticated")
     return user_id
 
 def get_current_company_id(request: Request) -> str:
     """Get current company ID from request state."""
     company_id = getattr(request.state, "company_id", None)
     if not company_id:
-        raise AuthorizationException("Company context not found")
+        raise HTTPException(status_code=403, detail="Company context not found")
     return company_id
 
 def get_lang_context(request: Request) -> LangContext:

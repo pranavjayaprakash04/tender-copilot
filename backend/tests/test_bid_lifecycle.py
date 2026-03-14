@@ -1,6 +1,6 @@
 """Tests for Bid Lifecycle context."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -49,7 +49,7 @@ class TestBidRepository:
             title="Test Bid",
             description="Test bid description",
             bid_amount=100000.00,
-            submission_deadline=datetime.utcnow() + timedelta(days=30)
+            submission_deadline=datetime.now(UTC) + timedelta(days=30)
         )
 
     @pytest.mark.asyncio
@@ -321,7 +321,7 @@ class TestBidRepository:
             bid_number="BID-2024-002",
             title="Another Bid",
             bid_amount=200000.00,
-            submission_deadline=datetime.utcnow() + timedelta(days=45)
+            submission_deadline=datetime.now(UTC) + timedelta(days=45)
         )
         await bid_repo.create(bid2_data)
 
@@ -355,7 +355,7 @@ class TestBidLifecycleService:
             bid_number="BID-2024-001",
             title="Test Bid",
             bid_amount=100000.00,
-            submission_deadline=datetime.utcnow() + timedelta(days=30)
+            submission_deadline=datetime.now(UTC) + timedelta(days=30)
         )
 
         # Configure mock
@@ -383,14 +383,14 @@ class TestBidLifecycleService:
             bid_number="BID-2024-001",
             title="Test Bid",
             bid_amount=100000.00,
-            submission_deadline=datetime.utcnow() + timedelta(days=30)
+            submission_deadline=datetime.now(UTC) + timedelta(days=30)
         )
 
         # Configure mocks
         mock_bid = MagicMock()
         mock_bid.id = uuid4()
         mock_bid.status = BidStatus.SUBMITTED
-        mock_bid.submission_date = datetime.utcnow()
+        mock_bid.submission_date = datetime.now(UTC)
 
         mock_outcome = None
 
@@ -421,7 +421,7 @@ class TestBidLifecycleService:
             bid_number="BID-2024-001",
             title="Test Bid",
             bid_amount=100000.00,
-            submission_deadline=datetime.utcnow() + timedelta(days=30)
+            submission_deadline=datetime.now(UTC) + timedelta(days=30)
         )
 
         # Configure mocks

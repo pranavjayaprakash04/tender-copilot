@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import AsyncGenerator
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -211,3 +212,11 @@ def mock_user_data():
         "role": "admin",
         "is_active": True
     }
+
+
+@pytest.fixture(scope="session", autouse=True)
+def mock_embedding_model():
+    """Mock the embedding model to prevent HuggingFace network calls during tests."""
+    with patch("app.contexts.tender_matching.embedding_service.get_embedding_model") as mock_model:
+        mock_model.return_value = MagicMock()
+        yield mock_model

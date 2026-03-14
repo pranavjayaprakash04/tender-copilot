@@ -1,54 +1,40 @@
-import structlog
+from __future__ import annotations
+
 from fastapi import Request
-from uuid import UUID
+from sqlalchemy import text
+from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.shared.exceptions import AuthorizationException
+from app.database import get_async_session
+from app.shared.logger import get_logger
 
-logger = structlog.get_logger()
+logger = get_logger()
 
+SKIP_PATHS = {
+    "/health", "/docs", "/redoc", "/openapi.json",
+    "/api/v1/webhook",
+}
 
-def get_company_id(request: Request) -> UUID:
-    """Get company ID from request state."""
-    company_id = getattr(request.state, "company_id", None)
-    if not company_id:
-        raise AuthorizationException("Company ID not found in request")
-    return UUID(company_id)
+class TenantMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if request.url.path in SKIP_PATHS or request.url.path.startswith("/docs"):
+            return await call_next(request)
 
+        user_id = getattr(request.state, "user_id", None)
+        if not user_id:
+            request.state.company_id = None
+            return await call_next(request)
 
-async def tenant_middleware(request: Request, call_next):
-    """Middleware to inject company_id from JWT token for multi-tenancy."""
+        try:
+            async for session in get_async_session():
+                result = await session.execute(
+                    text("SELECT id FROM companies WHERE user_id = :user_id LIMIT 1"),
+                    {"user_id": user_id},
+                )
+                row = result.fetchone()
+                request.state.company_id = str(row[0]) if row else None
+                break
+        except Exception as e:
+            logger.error("tenant_middleware_error", error=str(e))
+            request.state.company_id = None
 
-    # Skip tenant injection for health check and docs
-    if request.url.path in ["/health", "/docs", "/redoc", "/openapi.json"]:
         return await call_next(request)
-
-    # Get user info from auth middleware
-    user_id = getattr(request.state, "user_id", None)
-    if not user_id:
-        raise AuthorizationException("User not authenticated")
-
-    try:
-        # TODO: Extract company_id from JWT token or user session
-        # For now, we'll use a mock company_id
-        # This will be implemented when we integrate proper multi-tenancy
-
-        # Mock company for development
-        request.state.company_id = "mock-company-id"
-
-        logger.info(
-            "tenant_context_set",
-            trace_id=getattr(request.state, "trace_id", None),
-            user_id=user_id,
-            company_id=request.state.company_id,
-        )
-
-    except Exception as e:
-        logger.error(
-            "tenant_context_failed",
-            trace_id=getattr(request.state, "trace_id", None),
-            user_id=user_id,
-            error=str(e),
-        )
-        raise AuthorizationException("Failed to establish tenant context")
-
-    return await call_next(request)

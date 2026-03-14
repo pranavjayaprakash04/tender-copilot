@@ -3,9 +3,11 @@ from uuid import UUID
 from celery import shared_task
 
 from app.infrastructure.groq_client import GroqClient
-from app.shared.logger import logger
+from app.shared.logger import get_logger
 
 from .repository import TenderMatchingRepository
+
+logger = get_logger()
 
 
 @shared_task(bind=True, name="generate_company_embedding_task")

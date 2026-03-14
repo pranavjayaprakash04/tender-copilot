@@ -1,44 +1,42 @@
-import structlog
+from __future__ import annotations
+
+import jwt
 from fastapi import Request
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.shared.exceptions import AuthenticationException
+from app.config import settings
+from app.shared.logger import get_logger
 
-logger = structlog.get_logger()
+logger = get_logger()
 
-async def auth_middleware(request: Request, call_next):
-    """Middleware to validate JWT tokens from Supabase."""
+SKIP_PATHS = {
+    "/health", "/docs", "/redoc", "/openapi.json",
+    "/api/v1/webhook",  # WhatsApp webhook — secured via HMAC
+}
 
-    # Skip auth for health check and docs
-    if request.url.path in ["/health", "/docs", "/redoc", "/openapi.json"]:
+class AuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if request.url.path in SKIP_PATHS or request.url.path.startswith("/docs"):
+            return await call_next(request)
+
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            request.state.user_id = None
+            return await call_next(request)
+
+        token = auth_header.split(" ", 1)[1]
+        try:
+            payload = jwt.decode(
+                token,
+                settings.SUPABASE_JWT_SECRET,
+                algorithms=["HS256"],
+                audience="authenticated",
+            )
+            request.state.user_id = payload.get("sub")
+        except jwt.ExpiredSignatureError:
+            return JSONResponse(status_code=401, content={"detail": "Token expired"})
+        except jwt.InvalidTokenError:
+            return JSONResponse(status_code=401, content={"detail": "Invalid token"})
+
         return await call_next(request)
-
-    # Get Authorization header
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        raise AuthenticationException("Missing or invalid Authorization header")
-
-    try:
-        # TODO: Validate JWT token with Supabase
-        # For now, we'll skip actual validation and add user_id to state
-        # This will be implemented when we integrate Supabase Auth
-
-        # Mock user for development
-        request.state.user_id = "mock-user-id"
-        request.state.user_email = "mock@example.com"
-        request.state.user_role = "msme_owner"
-
-        logger.info(
-            "auth_success",
-            trace_id=getattr(request.state, "trace_id", None),
-            user_id=request.state.user_id,
-        )
-
-    except Exception as e:
-        logger.error(
-            "auth_failed",
-            trace_id=getattr(request.state, "trace_id", None),
-            error=str(e),
-        )
-        raise AuthenticationException("Invalid authentication token")
-
-    return await call_next(request)

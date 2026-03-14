@@ -39,6 +39,7 @@ from app.contexts.bid_lifecycle.tasks import (
 )
 from app.dependencies import (
     get_current_company_id,
+    get_current_user_id,
     get_db_session,
     get_lang_context,
     get_pagination_params,
@@ -76,10 +77,12 @@ def get_bid_lifecycle_service(
 async def create_bid(
     bid_data: BidCreate,
     service: BidLifecycleService = Depends(get_bid_lifecycle_service),
+    company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[BidResponse]:
     """Create a new bid."""
-    bid = await service.create_bid(bid_data, trace_id)
+    bid = await service.create_bid(bid_data, company_id, trace_id)
     return BaseResponse(data=bid, trace_id=trace_id)
 
 
@@ -102,6 +105,7 @@ async def list_bids(
     pagination: dict = Depends(get_pagination_params),
     service: BidLifecycleService = Depends(get_bid_lifecycle_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> PaginatedResponse[BidResponse]:
     """List bids with filters."""
@@ -147,6 +151,7 @@ async def get_bid(
     bid_id: UUID,
     service: BidLifecycleService = Depends(get_bid_lifecycle_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[BidResponse]:
     """Get a specific bid."""
@@ -160,6 +165,7 @@ async def update_bid(
     update_data: BidUpdate,
     service: BidLifecycleService = Depends(get_bid_lifecycle_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[BidResponse]:
     """Update a bid."""
@@ -172,6 +178,7 @@ async def delete_bid(
     bid_id: UUID,
     service: BidLifecycleService = Depends(get_bid_lifecycle_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> JSONResponse:
     """Delete a bid."""
@@ -187,6 +194,7 @@ async def transition_bid_status(
     outcome_data: BidOutcomeRecordCreate | None = None,
     service: BidLifecycleService = Depends(get_bid_lifecycle_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[dict]:
     """Transition bid status with outcome record if required."""
@@ -205,6 +213,7 @@ async def transition_bid_status(
 async def get_bid_stats(
     service: BidLifecycleService = Depends(get_bid_lifecycle_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[BidStatsResponse]:
     """Get bid statistics."""
@@ -218,6 +227,7 @@ async def bulk_update_bids(
     bulk_data: BidBulkUpdate,
     service: BidLifecycleService = Depends(get_bid_lifecycle_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[list[BidResponse]]:
     """Bulk update bids."""
@@ -230,6 +240,7 @@ async def bulk_transition_bids(
     bulk_data: BidBulkStatusTransition,
     service: BidLifecycleService = Depends(get_bid_lifecycle_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[list[BidResponse]]:
     """Bulk transition bid statuses."""
@@ -243,6 +254,7 @@ async def create_outcome_record(
     outcome_data: BidOutcomeRecordCreate,
     service: BidLifecycleService = Depends(get_bid_lifecycle_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[BidOutcomeRecordResponse]:
     """Create a bid outcome record."""
@@ -255,6 +267,7 @@ async def get_outcome_record(
     outcome_id: UUID,
     service: BidLifecycleService = Depends(get_bid_lifecycle_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[BidOutcomeRecordResponse]:
     """Get outcome record by ID."""
@@ -268,6 +281,7 @@ async def update_outcome_record(
     update_data: BidOutcomeRecordUpdate,
     service: BidLifecycleService = Depends(get_bid_lifecycle_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[BidOutcomeRecordResponse]:
     """Update an outcome record."""
@@ -280,6 +294,7 @@ async def delete_outcome_record(
     outcome_id: UUID,
     service: BidLifecycleService = Depends(get_bid_lifecycle_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> JSONResponse:
     """Delete an outcome record."""
@@ -293,6 +308,7 @@ async def create_payment(
     payment_data: BidPaymentCreate,
     service: BidLifecycleService = Depends(get_bid_lifecycle_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[BidPaymentResponse]:
     """Create a bid payment."""
@@ -305,6 +321,7 @@ async def get_payment(
     payment_id: UUID,
     service: BidLifecycleService = Depends(get_bid_lifecycle_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[BidPaymentResponse]:
     """Get payment by ID."""
@@ -317,6 +334,7 @@ async def get_bid_payments(
     bid_id: UUID,
     service: BidLifecycleService = Depends(get_bid_lifecycle_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[list[BidPaymentResponse]]:
     """Get payments for a bid."""
@@ -330,6 +348,7 @@ async def update_payment(
     update_data: BidPaymentUpdate,
     service: BidLifecycleService = Depends(get_bid_lifecycle_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[BidPaymentResponse]:
     """Update a payment."""
@@ -342,6 +361,7 @@ async def delete_payment(
     payment_id: UUID,
     service: BidLifecycleService = Depends(get_bid_lifecycle_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> JSONResponse:
     """Delete a payment."""
@@ -354,6 +374,7 @@ async def get_overdue_payments(
     days_overdue: int = Query(0, ge=0),
     service: BidLifecycleService = Depends(get_bid_lifecycle_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[list[BidPaymentResponse]]:
     """Get overdue payments."""
@@ -366,6 +387,7 @@ async def process_payment_follow_ups(
     request: PaymentFollowUpRequest,
     service: BidLifecycleService = Depends(get_bid_lifecycle_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[PaymentFollowUpResponse]:
     """Process payment follow-ups for overdue payments."""
@@ -379,6 +401,7 @@ async def create_follow_up(
     follow_up_data: BidFollowUpCreate,
     service: BidLifecycleService = Depends(get_bid_lifecycle_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[BidFollowUpResponse]:
     """Create a follow-up."""
@@ -391,6 +414,7 @@ async def get_follow_up(
     follow_up_id: UUID,
     service: BidLifecycleService = Depends(get_bid_lifecycle_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[BidFollowUpResponse]:
     """Get follow-up by ID."""
@@ -403,6 +427,7 @@ async def get_bid_follow_ups(
     bid_id: UUID,
     service: BidLifecycleService = Depends(get_bid_lifecycle_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[list[BidFollowUpResponse]]:
     """Get follow-ups for a bid."""
@@ -416,6 +441,7 @@ async def update_follow_up(
     update_data: BidFollowUpUpdate,
     service: BidLifecycleService = Depends(get_bid_lifecycle_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[BidFollowUpResponse]:
     """Update a follow-up."""
@@ -428,6 +454,7 @@ async def delete_follow_up(
     follow_up_id: UUID,
     service: BidLifecycleService = Depends(get_bid_lifecycle_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> JSONResponse:
     """Delete a follow-up."""
@@ -439,6 +466,7 @@ async def delete_follow_up(
 async def get_overdue_follow_ups(
     service: BidLifecycleService = Depends(get_bid_lifecycle_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[list[BidFollowUpResponse]]:
     """Get overdue follow-ups."""
@@ -454,7 +482,8 @@ async def analyze_bid_loss(
     service: BidLifecycleService = Depends(get_bid_lifecycle_service),
     lang: LangContext = Depends(get_lang_context),
     trace_id: str = Depends(get_trace_id),
-    company_id: UUID = Depends(get_current_company_id)
+    company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id)
 ) -> BaseResponse[LossAnalysisResponse]:
     """Analyze bid loss using AI."""
     request.bid_id = bid_id
@@ -467,6 +496,7 @@ async def analyze_bid_loss(
 async def trigger_loss_analysis_task(
     bid_id: UUID,
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[dict]:
     """Trigger loss analysis as background task."""
@@ -486,6 +516,7 @@ async def trigger_loss_analysis_task(
 async def trigger_payment_schedule_task(
     bid_id: UUID,
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[dict]:
     """Trigger payment schedule creation as background task."""
@@ -506,6 +537,7 @@ async def trigger_payment_follow_up_task(
     days_overdue: int = Query(30, ge=0),
     send_notifications: bool = Query(False),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[dict]:
     """Trigger payment follow-up processing as background task."""

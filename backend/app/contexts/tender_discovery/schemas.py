@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.contexts.tender_discovery.models import (
     TenderCategory,
@@ -59,8 +59,7 @@ class TenderResponse(BaseModel):
     is_urgent: bool = False
     is_closing_soon: bool = False
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TenderCreate(BaseModel):
@@ -99,13 +98,15 @@ class TenderCreate(BaseModel):
     contact_email: str | None = None
     raw_data: dict | None = None
 
-    @validator('bid_submission_deadline')
+    @field_validator('bid_submission_deadline')
+    @classmethod
     def validate_deadline_future(cls, v):
-        if v and v <= datetime.utcnow():
+        if v and v <= datetime.now(UTC):
             raise ValueError('Bid submission deadline must be in the future')
         return v
 
-    @validator('estimated_value', 'emd_amount', 'processing_fee')
+    @field_validator('estimated_value', 'emd_amount', 'processing_fee')
+    @classmethod
     def validate_positive_amounts(cls, v):
         if v is not None and v < 0:
             raise ValueError('Amounts must be positive')
@@ -159,13 +160,15 @@ class TenderSearchFilters(BaseModel):
     date_from: datetime | None = None
     date_to: datetime | None = None
 
-    @validator('min_value', 'max_value')
+    @field_validator('min_value', 'max_value')
+    @classmethod
     def validate_value_range(cls, v):
         if v is not None and v < 0:
             raise ValueError('Values must be positive')
         return v
 
-    @validator('deadline_days')
+    @field_validator('deadline_days')
+    @classmethod
     def validate_deadline_days(cls, v):
         if v is not None and v < 0:
             raise ValueError('Deadline days must be positive')
@@ -213,8 +216,7 @@ class TenderSearchResponse(BaseModel):
     last_run: datetime | None
     run_count: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TenderSearchCreate(BaseModel):
@@ -262,8 +264,7 @@ class TenderAlertResponse(BaseModel):
     # Include tender details
     tender: TenderResponse | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TenderAlertCreate(BaseModel):
@@ -329,7 +330,8 @@ class TenderBulkDelete(BaseModel):
     tender_ids: list[UUID]
     confirm: bool = False
 
-    @validator('confirm')
+    @field_validator('confirm')
+    @classmethod
     def validate_confirmation(cls, v):
         if not v:
             raise ValueError('Must confirm bulk deletion')

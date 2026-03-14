@@ -8,7 +8,7 @@ from app.contexts.bid_intelligence.consortium_schemas import (
     ConsortiumMatchResponse,
     ConsortiumPartner,
 )
-from app.contexts.company_profile.repository import CompanyRepository
+from app.contexts.company_profile.repository import CompanyProfileRepository
 from app.contexts.tender_discovery.repository import TenderRepository
 
 logger = structlog.get_logger()
@@ -19,7 +19,7 @@ class ConsortiumService:
 
     def __init__(
         self,
-        company_repo: CompanyRepository,
+        company_repo: CompanyProfileRepository,
         tender_repo: TenderRepository,
         session: AsyncSession,
     ) -> None:

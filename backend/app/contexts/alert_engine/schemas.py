@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.contexts.alert_engine.models import (
     NotificationPriority,
@@ -24,8 +24,7 @@ class NotificationCreate(BaseModel):
     template_id: str | None = None
     max_retries: int = 3
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class NotificationUpdate(BaseModel):
@@ -35,8 +34,7 @@ class NotificationUpdate(BaseModel):
     error_message: str | None = None
     next_retry_at: datetime | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class NotificationResponse(BaseModel):
@@ -62,10 +60,10 @@ class NotificationResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
-    @validator('context_data', pre=True)
+    @field_validator('context_data', mode='before')
+    @classmethod
     def parse_context_data(cls, v):
         """Parse JSON context data."""
         if isinstance(v, str):
@@ -82,8 +80,7 @@ class NotificationTemplateCreate(BaseModel):
     message_template: str
     variables: dict[str, Any] | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class NotificationTemplateUpdate(BaseModel):
@@ -93,8 +90,7 @@ class NotificationTemplateUpdate(BaseModel):
     variables: dict[str, Any] | None = None
     is_active: bool | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class NotificationTemplateResponse(BaseModel):
@@ -109,10 +105,10 @@ class NotificationTemplateResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
-    @validator('variables', pre=True)
+    @field_validator('variables', mode='before')
+    @classmethod
     def parse_variables(cls, v):
         """Parse JSON variables."""
         if isinstance(v, str):
@@ -136,15 +132,15 @@ class NotificationPreferenceCreate(BaseModel):
     quiet_hours_end: int | None = None
     timezone: str = "UTC"
 
-    @validator('quiet_hours_start', 'quiet_hours_end')
+    @field_validator('quiet_hours_start', 'quiet_hours_end')
+    @classmethod
     def validate_hours(cls, v):
         """Validate quiet hours."""
         if v is not None and (v < 0 or v > 23):
             raise ValueError('Hour must be between 0 and 23')
         return v
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class NotificationPreferenceUpdate(BaseModel):
@@ -161,15 +157,15 @@ class NotificationPreferenceUpdate(BaseModel):
     quiet_hours_end: int | None = None
     timezone: str | None = None
 
-    @validator('quiet_hours_start', 'quiet_hours_end')
+    @field_validator('quiet_hours_start', 'quiet_hours_end')
+    @classmethod
     def validate_hours(cls, v):
         """Validate quiet hours."""
         if v is not None and (v < 0 or v > 23):
             raise ValueError('Hour must be between 0 and 23')
         return v
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class NotificationPreferenceResponse(BaseModel):
@@ -191,8 +187,7 @@ class NotificationPreferenceResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class NotificationSearchFilters(BaseModel):
@@ -205,8 +200,7 @@ class NotificationSearchFilters(BaseModel):
     created_to: datetime | None = None
     has_failed: bool | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class NotificationStats(BaseModel):
@@ -221,16 +215,14 @@ class NotificationStats(BaseModel):
     notifications_by_priority: dict[str, int]
     recent_failures: list[NotificationResponse]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class BulkNotificationCreate(BaseModel):
     """Bulk notification creation."""
     notifications: list[NotificationCreate]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class BulkNotificationResponse(BaseModel):
@@ -241,8 +233,7 @@ class BulkNotificationResponse(BaseModel):
     total_created: int
     total_failed: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AlertEvent(BaseModel):
@@ -255,8 +246,7 @@ class AlertEvent(BaseModel):
     urgency: str = "medium"
     context_data: dict[str, Any] | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class NotificationDeliveryReport(BaseModel):
@@ -267,5 +257,4 @@ class NotificationDeliveryReport(BaseModel):
     response_data: dict[str, Any] | None = None
     error_details: str | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

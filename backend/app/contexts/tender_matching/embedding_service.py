@@ -5,9 +5,8 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from sentence_transformers import SentenceTransformer
 
-from app.contexts.company_profile.repository import CompanyRepository
+from app.contexts.company_profile.repository import CompanyProfileRepository
 from app.contexts.tender_discovery.repository import TenderRepository
 from app.contexts.tender_matching.models import (
     CompanyEmbedding,
@@ -21,8 +20,16 @@ from app.shared.exceptions import NotFoundException
 
 logger = structlog.get_logger()
 
-# Initialize sentence transformer model
-embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+# Global variable for lazy-loaded model
+_embedding_model = None
+
+def get_embedding_model():
+    """Get the sentence transformer model, loading it lazily."""
+    global _embedding_model
+    if _embedding_model is None:
+        from sentence_transformers import SentenceTransformer
+        _embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+    return _embedding_model
 
 
 class EmbeddingService:
@@ -32,7 +39,7 @@ class EmbeddingService:
         self,
         company_embedding_repo: CompanyEmbeddingRepository,
         tender_embedding_repo: TenderEmbeddingRepository,
-        company_repo: CompanyRepository,
+        company_repo: CompanyProfileRepository,
         tender_repo: TenderRepository,
     ) -> None:
         self._company_embedding_repo = company_embedding_repo
@@ -68,6 +75,7 @@ class EmbeddingService:
 
         # Generate embedding using sentence-transformers
         start_time = datetime.utcnow()
+        embedding_model = get_embedding_model()
         embedding = embedding_model.encode(capabilities_text)
         processing_time = int((datetime.utcnow() - start_time).total_seconds() * 1000)
 
@@ -118,6 +126,7 @@ class EmbeddingService:
 
         # Generate embedding using sentence-transformers
         start_time = datetime.utcnow()
+        embedding_model = get_embedding_model()
         embedding = embedding_model.encode(requirements_text)
         processing_time = int((datetime.utcnow() - start_time).total_seconds() * 1000)
 

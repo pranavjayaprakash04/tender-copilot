@@ -31,6 +31,7 @@ from app.contexts.tender_discovery.schemas import (
 from app.contexts.tender_discovery.service import TenderDiscoveryService
 from app.dependencies import (
     get_current_company_id,
+    get_current_user_id,
     get_db_session,
     get_lang_context,
     get_pagination_params,
@@ -91,6 +92,7 @@ async def list_tenders(
     pagination: dict = Depends(get_pagination_params),
     service: TenderDiscoveryService = Depends(get_tender_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> PaginatedResponse[TenderResponse]:
     """List tenders with filters."""
@@ -135,6 +137,7 @@ async def get_tender(
     tender_id: UUID,
     service: TenderDiscoveryService = Depends(get_tender_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[TenderResponse]:
     """Get a specific tender."""
@@ -148,6 +151,7 @@ async def update_tender(
     update_data: TenderUpdate,
     service: TenderDiscoveryService = Depends(get_tender_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[TenderResponse]:
     """Update a tender."""
@@ -160,6 +164,7 @@ async def delete_tender(
     tender_id: UUID,
     service: TenderDiscoveryService = Depends(get_tender_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> JSONResponse:
     """Delete a tender."""
@@ -173,6 +178,7 @@ async def toggle_bookmark(
     tender_id: UUID,
     service: TenderDiscoveryService = Depends(get_tender_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[TenderResponse]:
     """Toggle tender bookmark status."""
@@ -185,6 +191,7 @@ async def get_bookmarked_tenders(
     pagination: dict = Depends(get_pagination_params),
     service: TenderDiscoveryService = Depends(get_tender_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> PaginatedResponse[TenderResponse]:
     """Get bookmarked tenders."""
@@ -212,6 +219,7 @@ async def get_closing_soon_tenders(
     days: int = Query(7, ge=1, le=30),
     service: TenderDiscoveryService = Depends(get_tender_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[list[TenderResponse]]:
     """Get tenders closing within specified days."""
@@ -223,6 +231,7 @@ async def get_closing_soon_tenders(
 async def get_urgent_tenders(
     service: TenderDiscoveryService = Depends(get_tender_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[list[TenderResponse]]:
     """Get urgent tenders (closing within 3 days)."""
@@ -235,6 +244,7 @@ async def get_urgent_tenders(
 async def get_tender_stats(
     service: TenderDiscoveryService = Depends(get_tender_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[TenderStatsResponse]:
     """Get tender statistics."""
@@ -249,7 +259,8 @@ async def classify_tender(
     service: TenderDiscoveryService = Depends(get_tender_service),
     lang: LangContext = Depends(get_lang_context),
     trace_id: str = Depends(get_trace_id),
-    company_id: UUID = Depends(get_current_company_id)
+    company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id)
 ) -> BaseResponse[TenderClassificationResponse]:
     """Classify a tender using AI."""
     classification = await service.classify_tender(
@@ -264,6 +275,7 @@ async def bulk_update_tenders(
     bulk_data: TenderBulkUpdate,
     service: TenderDiscoveryService = Depends(get_tender_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[list[TenderResponse]]:
     """Bulk update tenders."""
@@ -276,6 +288,7 @@ async def bulk_delete_tenders(
     bulk_data: TenderBulkDelete,
     service: TenderDiscoveryService = Depends(get_tender_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> JSONResponse:
     """Bulk delete tenders."""
@@ -289,6 +302,7 @@ async def create_search(
     search_data: TenderSearchCreate,
     service: TenderDiscoveryService = Depends(get_tender_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[TenderSearchResponse]:
     """Create a new search."""
@@ -301,6 +315,7 @@ async def get_searches(
     saved_only: bool = Query(False),
     service: TenderDiscoveryService = Depends(get_tender_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[list[TenderSearchResponse]]:
     """Get searches for a company."""
@@ -314,6 +329,7 @@ async def update_search(
     update_data: TenderSearchUpdate,
     service: TenderDiscoveryService = Depends(get_tender_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[TenderSearchResponse]:
     """Update a search."""
@@ -326,6 +342,7 @@ async def delete_search(
     search_id: UUID,
     service: TenderDiscoveryService = Depends(get_tender_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> JSONResponse:
     """Delete a search."""
@@ -338,6 +355,7 @@ async def run_saved_search(
     search_id: UUID,
     service: TenderDiscoveryService = Depends(get_tender_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> PaginatedResponse[TenderResponse]:
     """Run a saved search and return results."""
@@ -363,6 +381,7 @@ async def create_alert(
     alert_data: TenderAlertCreate,
     service: TenderDiscoveryService = Depends(get_tender_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[TenderAlertResponse]:
     """Create a new alert."""
@@ -376,6 +395,7 @@ async def get_alerts(
     limit: int = Query(50, ge=1, le=200),
     service: TenderDiscoveryService = Depends(get_tender_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[list[TenderAlertResponse]]:
     """Get alerts for a company."""
@@ -389,6 +409,7 @@ async def update_alert(
     update_data: TenderAlertUpdate,
     service: TenderDiscoveryService = Depends(get_tender_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[TenderAlertResponse]:
     """Update an alert."""
@@ -400,6 +421,7 @@ async def update_alert(
 async def mark_all_alerts_read(
     service: TenderDiscoveryService = Depends(get_tender_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> JSONResponse:
     """Mark all alerts as read."""
@@ -412,6 +434,7 @@ async def delete_alert(
     alert_id: UUID,
     service: TenderDiscoveryService = Depends(get_tender_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> JSONResponse:
     """Delete an alert."""
@@ -423,6 +446,7 @@ async def delete_alert(
 async def get_unread_alerts_count(
     service: TenderDiscoveryService = Depends(get_tender_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[int]:
     """Get count of unread alerts."""
@@ -434,6 +458,7 @@ async def get_unread_alerts_count(
 async def create_deadline_alerts(
     service: TenderDiscoveryService = Depends(get_tender_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[int]:
     """Create deadline reminder alerts."""

@@ -4,10 +4,12 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.shared.logger import logger
+from app.shared.logger import get_logger
 
 from .models import User
 from .schemas import UserCreate
+
+logger = get_logger()
 
 
 class UserRepository:

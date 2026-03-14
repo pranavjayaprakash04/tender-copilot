@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from app.shared.exceptions import NotFoundException
-from app.shared.logger import logger
+from app.shared.logger import get_logger
 
 from .repository import UserRepository
 from .schemas import (
@@ -9,6 +9,8 @@ from .schemas import (
     UserCreate,
     UserResponse,
 )
+
+logger = get_logger()
 
 
 class UserService:

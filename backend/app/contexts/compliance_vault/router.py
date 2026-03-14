@@ -19,6 +19,7 @@ from app.contexts.compliance_vault.schemas import (
 from app.contexts.compliance_vault.service import ComplianceVaultService
 from app.dependencies import (
     get_current_company_id,
+    get_current_user_id,
     get_db_session,
     get_lang_context,
     get_pagination_params,
@@ -56,6 +57,7 @@ async def upload_document(
     expires_at: str | None = Query(None),
     service: ComplianceVaultService = Depends(get_vault_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     lang: LangContext = Depends(get_lang_context),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[VaultDocumentResponse]:
@@ -92,6 +94,7 @@ async def list_documents(
     pagination: dict = Depends(get_pagination_params),
     service: ComplianceVaultService = Depends(get_vault_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> PaginatedResponse[VaultDocumentResponse]:
     """List documents with optional filters."""
@@ -133,6 +136,7 @@ async def get_document(
     document_id: UUID,
     service: ComplianceVaultService = Depends(get_vault_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[VaultDocumentResponse]:
     """Get a specific document."""
@@ -146,6 +150,7 @@ async def update_document(
     update_data: VaultDocumentUpdate,
     service: ComplianceVaultService = Depends(get_vault_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[VaultDocumentResponse]:
     """Update a document."""
@@ -158,6 +163,7 @@ async def delete_document(
     document_id: UUID,
     service: ComplianceVaultService = Depends(get_vault_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> JSONResponse:
     """Delete a document."""
@@ -171,7 +177,8 @@ async def classify_document(
     service: ComplianceVaultService = Depends(get_vault_service),
     lang: LangContext = Depends(get_lang_context),
     trace_id: str = Depends(get_trace_id),
-    company_id: UUID = Depends(get_current_company_id)
+    company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id)
 ) -> BaseResponse[DocumentClassificationResponse]:
     """Classify a document type using AI."""
     classification = await service.classify_document(
@@ -187,6 +194,7 @@ async def classify_document(
 async def get_document_stats(
     service: ComplianceVaultService = Depends(get_vault_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[DocumentStatsResponse]:
     """Get document statistics."""
@@ -200,6 +208,7 @@ async def map_documents_to_tender(
     mapping_data: TenderDocumentMappingCreate,
     service: ComplianceVaultService = Depends(get_vault_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[TenderDocumentMappingResponse]:
     """Map documents to a tender."""
@@ -212,10 +221,12 @@ async def map_documents_to_tender(
 async def get_tender_documents(
     tender_id: UUID,
     service: ComplianceVaultService = Depends(get_vault_service),
+    company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[TenderDocumentMappingResponse]:
     """Get all documents mapped to a tender."""
-    documents = await service.get_tender_documents(tender_id, trace_id)
+    documents = await service.get_tender_documents(tender_id, company_id, trace_id)
     return BaseResponse(data=documents, trace_id=trace_id)
 
 
@@ -225,6 +236,7 @@ async def analyze_tender_requirements(
     tender_requirements: str = Query(...),
     service: ComplianceVaultService = Depends(get_vault_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     lang: LangContext = Depends(get_lang_context),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[list[DocumentType]]:
@@ -244,6 +256,7 @@ async def get_expiring_soon_documents(
     days: int = Query(default=30, ge=1, le=365),
     service: ComplianceVaultService = Depends(get_vault_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[list[VaultDocumentResponse]]:
     """Get documents expiring within specified days."""
@@ -262,6 +275,7 @@ async def get_expiring_soon_documents(
 async def get_expired_documents(
     service: ComplianceVaultService = Depends(get_vault_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[list[VaultDocumentResponse]]:
     """Get expired documents."""

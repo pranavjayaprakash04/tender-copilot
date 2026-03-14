@@ -49,14 +49,20 @@ class TestComplianceVaultAPI:
     @pytest.fixture
     def client(self, test_app, mock_company_id, mock_document):
         """Create test client with dependency overrides."""
-        from app.dependencies import get_current_company_id, get_db_session, get_lang_context, get_trace_id
+        from app.dependencies import get_current_company_id, get_current_user_id, get_db_session, get_lang_context, get_trace_id
         from app.contexts.compliance_vault.router import get_vault_service
         from uuid import UUID
         from app.shared.lang_context import LangContext
         
+        TEST_USER_ID = "test-user-id"
+        TEST_COMPANY_ID = UUID(mock_company_id)
+        
         # Override dependencies
+        def override_get_current_user_id():
+            return TEST_USER_ID
+            
         def override_get_current_company_id():
-            return UUID(mock_company_id)
+            return str(TEST_COMPANY_ID)
             
         def override_get_db_session():
             return AsyncMock()
@@ -108,6 +114,7 @@ class TestComplianceVaultAPI:
         def override_get_trace_id():
             return "test-trace-id"
         
+        test_app.dependency_overrides[get_current_user_id] = override_get_current_user_id
         test_app.dependency_overrides[get_current_company_id] = override_get_current_company_id
         test_app.dependency_overrides[get_db_session] = override_get_db_session
         test_app.dependency_overrides[get_vault_service] = override_get_vault_service

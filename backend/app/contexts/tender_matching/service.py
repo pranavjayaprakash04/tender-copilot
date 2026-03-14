@@ -4,7 +4,7 @@ from uuid import UUID
 
 import structlog
 
-from app.contexts.company_profile.repository import CompanyRepository
+from app.contexts.company_profile.repository import CompanyProfileRepository
 from app.contexts.tender_discovery.repository import TenderRepository
 from app.contexts.tender_matching.embedding_service import EmbeddingService
 from app.contexts.tender_matching.models import TenderMatch
@@ -26,7 +26,7 @@ class TenderMatchingService:
         match_repo: TenderMatchRepository,
         company_embedding_repo: CompanyEmbeddingRepository,
         tender_embedding_repo: TenderEmbeddingRepository,
-        company_repo: CompanyRepository,
+        company_repo: CompanyProfileRepository,
         tender_repo: TenderRepository,
     ) -> None:
         self._match_repo = match_repo

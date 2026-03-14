@@ -4,7 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.contexts.company_profile.repository import CompanyRepository
+from app.contexts.company_profile.repository import CompanyProfileRepository
 from app.contexts.tender_discovery.repository import TenderRepository
 from app.contexts.tender_matching.embedding_service import EmbeddingService
 from app.contexts.tender_matching.repository import (
@@ -30,7 +30,7 @@ async def generate_company_embedding(
         embedding_service = EmbeddingService(
             company_embedding_repo=CompanyEmbeddingRepository(session),
             tender_embedding_repo=TenderEmbeddingRepository(session),
-            company_repo=CompanyRepository(session),
+            company_repo=CompanyProfileRepository(session),
             tender_repo=TenderRepository(session)
         )
 
@@ -70,7 +70,7 @@ async def generate_tender_embedding(
         embedding_service = EmbeddingService(
             company_embedding_repo=CompanyEmbeddingRepository(session),
             tender_embedding_repo=TenderEmbeddingRepository(session),
-            company_repo=CompanyRepository(session),
+            company_repo=CompanyProfileRepository(session),
             tender_repo=TenderRepository(session)
         )
 
@@ -109,7 +109,7 @@ async def batch_generate_company_embeddings(
         embedding_service = EmbeddingService(
             company_embedding_repo=CompanyEmbeddingRepository(session),
             tender_embedding_repo=TenderEmbeddingRepository(session),
-            company_repo=CompanyRepository(session),
+            company_repo=CompanyProfileRepository(session),
             tender_repo=TenderRepository(session)
         )
 
@@ -149,7 +149,7 @@ async def batch_generate_tender_embeddings(
         embedding_service = EmbeddingService(
             company_embedding_repo=CompanyEmbeddingRepository(session),
             tender_embedding_repo=TenderEmbeddingRepository(session),
-            company_repo=CompanyRepository(session),
+            company_repo=CompanyProfileRepository(session),
             tender_repo=TenderRepository(session)
         )
 

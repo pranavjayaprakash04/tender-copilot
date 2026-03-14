@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class DocumentTypeSchema(StrEnum):
@@ -56,8 +56,7 @@ class VaultDocumentResponse(VaultDocumentBase):
     days_until_expiry: int | None
     is_expiring_soon: bool
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DocumentUploadResponse(BaseModel):
@@ -86,8 +85,7 @@ class TenderDocumentMappingResponse(BaseModel):
     tender_id: UUID
     documents: list[VaultDocumentResponse]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Document classification schemas
@@ -128,10 +126,11 @@ class DocumentSearchFilters(BaseModel):
     date_from: datetime | None = None
     date_to: datetime | None = None
 
-    @validator('date_to')
-    def validate_date_range(cls, v, values):
-        if v and 'date_from' in values and values['date_from']:
-            if v < values['date_from']:
+    @field_validator('date_to')
+    @classmethod
+    def validate_date_range(cls, v, info):
+        if v and info.data.get('date_from'):
+            if v < info.data['date_from']:
                 raise ValueError('date_to must be after date_from')
         return v
 

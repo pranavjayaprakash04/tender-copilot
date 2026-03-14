@@ -15,7 +15,7 @@ from app.contexts.bid_intelligence.schemas import (
     WinProbabilityResponse,
 )
 from app.contexts.bid_lifecycle.market_prices import MarketPrice
-from app.contexts.company_profile.repository import CompanyRepository
+from app.contexts.company_profile.repository import CompanyProfileRepository
 from app.contexts.tender_discovery.repository import TenderRepository
 from app.infrastructure.groq_client import GroqClient, GroqModel
 from app.shared.exceptions import NotFoundException
@@ -30,7 +30,7 @@ class BidIntelligenceService:
         self,
         groq_client: GroqClient,
         tender_repo: TenderRepository,
-        company_repo: CompanyRepository,
+        company_repo: CompanyProfileRepository,
         bid_lifecycle_session: AsyncSession,
     ) -> None:
         self.groq_client = groq_client

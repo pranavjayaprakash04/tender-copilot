@@ -2,9 +2,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends
 
-from app.dependencies import get_current_user_id
-from app.middleware.tenant import get_company_id
 from app.contexts.user_management.schemas import UserResponse
+from app.dependencies import get_current_company_id, get_current_user_id
 
 from .schemas import (
     CompanyProfileCreate,
@@ -19,7 +18,7 @@ router = APIRouter(prefix="/company", tags=["company_profile"])
 @router.get("/company/profile", response_model=CompanyProfileResponse)
 async def get_profile(
     _current_user: UserResponse = Depends(get_current_user_id),
-    company_id: UUID = Depends(get_company_id),
+    company_id: UUID = Depends(get_current_company_id),
 ) -> CompanyProfileResponse:
     """Get current company profile."""
     service = CompanyProfileService()
@@ -40,7 +39,7 @@ async def create_profile(
 async def update_profile(
     data: CompanyProfileUpdate,
     _current_user: UserResponse = Depends(get_current_user_id),
-    company_id: UUID = Depends(get_company_id),
+    company_id: UUID = Depends(get_current_company_id),
 ) -> CompanyProfileResponse:
     """Update company profile."""
     service = CompanyProfileService()
@@ -50,7 +49,7 @@ async def update_profile(
 @router.get("/company/profile/lang")
 async def get_preferred_lang(
     _current_user: UserResponse = Depends(get_current_user_id),
-    company_id: UUID = Depends(get_company_id),
+    company_id: UUID = Depends(get_current_company_id),
 ) -> dict[str, str]:
     """Get preferred language (used by frontend Tamil toggle)."""
     service = CompanyProfileService()

@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     SUPABASE_URL: str = Field(..., description="Supabase project URL")
     SUPABASE_ANON_KEY: str = Field(..., description="Supabase anonymous key")
     SUPABASE_SERVICE_ROLE_KEY: str = Field(..., description="Supabase service role key")
+    SUPABASE_JWT_SECRET: str = Field(default="", description="Supabase JWT secret")
 
     # Groq
     GROQ_API_KEY: str = Field(..., description="Groq API key")
@@ -55,7 +56,7 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ORIGINS: list[str] = Field(
-        default=["http://localhost:3000", "http://localhost:3001"],
+        default=["http://localhost:3000", "http://localhost:3001", "https://nivedha.ai", "https://www.nivedha.ai"],
         description="Allowed CORS origins"
     )
 

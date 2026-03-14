@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.contexts.company_profile.repository import CompanyRepository
+from app.contexts.company_profile.repository import CompanyProfileRepository
 from app.contexts.tender_discovery.repository import TenderRepository
 from app.contexts.tender_matching.repository import (
     CompanyEmbeddingRepository,
@@ -42,7 +42,7 @@ def mock_tender_embedding_repo():
 @pytest.fixture
 def mock_company_repo():
     """Mock company repository."""
-    repo = AsyncMock(spec=CompanyRepository)
+    repo = AsyncMock(spec=CompanyProfileRepository)
     return repo
 
 

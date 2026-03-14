@@ -1,7 +1,9 @@
 from uuid import UUID
 
 from app.shared.exceptions import NotFoundException
-from app.shared.logger import logger
+from app.shared.logger import get_logger
+
+logger = get_logger()
 
 from .repository import CompanyProfileRepository
 from .schemas import (

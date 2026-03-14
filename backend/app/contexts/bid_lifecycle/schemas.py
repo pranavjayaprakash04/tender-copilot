@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.contexts.bid_lifecycle.models import (
     BidOutcome,
@@ -52,8 +52,7 @@ class BidResponse(BaseModel):
     days_since_submission: int | None
     is_overdue_payment: bool = False
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class BidCreate(BaseModel):
@@ -77,15 +76,17 @@ class BidCreate(BaseModel):
     internal_notes: str | None = None
     tags: dict | None = None
 
-    @validator('bid_amount', 'emd_amount', 'bid_security_amount')
+    @field_validator('bid_amount', 'emd_amount', 'bid_security_amount')
+    @classmethod
     def validate_positive_amounts(cls, v):
         if v is not None and v < 0:
             raise ValueError('Amounts must be positive')
         return v
 
-    @validator('submission_deadline')
+    @field_validator('submission_deadline')
+    @classmethod
     def validate_deadline_future(cls, v):
-        if v and v <= datetime.utcnow():
+        if v and v <= datetime.now(UTC):
             raise ValueError('Submission deadline must be in the future')
         return v
 
@@ -194,8 +195,7 @@ class BidOutcomeRecordResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class BidOutcomeRecordCreate(BaseModel):
@@ -272,8 +272,7 @@ class BidPaymentResponse(BaseModel):
     days_overdue: int = 0
     outstanding_amount: float = 0.0
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class BidPaymentCreate(BaseModel):
@@ -287,7 +286,8 @@ class BidPaymentCreate(BaseModel):
     payment_terms: str | None = None
     notes: str | None = None
 
-    @validator('payment_amount')
+    @field_validator('payment_amount')
+    @classmethod
     def validate_positive_amount(cls, v):
         if v <= 0:
             raise ValueError('Payment amount must be positive')
@@ -330,8 +330,7 @@ class BidFollowUpResponse(BaseModel):
     is_overdue: bool = False
     days_overdue: int = 0
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class BidFollowUpCreate(BaseModel):

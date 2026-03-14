@@ -8,29 +8,29 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.contexts.alert_engine.router import router as alert_engine_router
 
 # from app.contexts.bid_intelligence.router import router as bid_intel_router
 from app.contexts.bid_intelligence.router import router as bid_intel_router
-# from app.contexts.company_profile.router import router as company_profile_router
-# from app.contexts.user_management.router import router as user_management_router
+from app.contexts.bid_lifecycle.router import router as bid_lifecycle_router
+from app.contexts.company_profile.router import router as company_profile_router
+from app.contexts.compliance_vault.router import router as compliance_vault_router
+
 # from app.contexts.whatsapp_gateway.router import router as whatsapp_gateway_router
 # from app.contexts.partner_portal.router import router as partner_portal_router
 from app.contexts.partner_portal.router import router as partner_portal_router
-from app.contexts.alert_engine.router import router as alert_engine_router
-from app.contexts.bid_lifecycle.router import router as bid_lifecycle_router
-
-from app.contexts.tender_intelligence.router import router as tender_intelligence_router
-from app.contexts.tender_matching.router import router as tender_matching_router
-from app.contexts.tender_matching.embedding_router import router as embedding_router
-from app.contexts.compliance_vault.router import router as compliance_vault_router
 
 # Import routers (will be created in subsequent phases)
 from app.contexts.tender_discovery.router import router as tender_discovery_router
+from app.contexts.tender_intelligence.router import router as tender_intelligence_router
+from app.contexts.tender_matching.embedding_router import router as embedding_router
+from app.contexts.tender_matching.router import router as tender_matching_router
+from app.contexts.user_management.router import router as user_management_router
 from app.database import close_db, init_db
-from app.middleware.auth import auth_middleware
+from app.middleware.auth import AuthMiddleware
 from app.middleware.error_handler import global_exception_handler
 from app.middleware.logging import logging_middleware
-from app.middleware.tenant import tenant_middleware
+from app.middleware.tenant import TenantMiddleware
 from app.shared.exceptions import AppException
 
 logger = structlog.get_logger()
@@ -73,8 +73,8 @@ def create_app() -> FastAPI:
 
     # Add custom middleware
     app.middleware("http")(logging_middleware)
-    app.middleware("http")(auth_middleware)
-    app.middleware("http")(tenant_middleware)
+    app.add_middleware(AuthMiddleware)
+    app.add_middleware(TenantMiddleware)
 
     # Add exception handler
     app.add_exception_handler(AppException, global_exception_handler)
@@ -93,8 +93,8 @@ def create_app() -> FastAPI:
     app.include_router(bid_lifecycle_router, prefix="/api/v1")
     app.include_router(alert_engine_router, prefix="/api/v1")
     app.include_router(bid_intel_router, prefix="/api/v1")
-    # app.include_router(company_profile_router, prefix="/api/v1")
-    # app.include_router(user_management_router, prefix="/api/v1")
+    app.include_router(company_profile_router, prefix="/api/v1")
+    app.include_router(user_management_router, prefix="/api/v1")
     # app.include_router(whatsapp_gateway_router, prefix="/api/v1")
     # app.include_router(partner_portal_router, prefix="/api/v1")
     app.include_router(partner_portal_router, prefix="/api/v1")

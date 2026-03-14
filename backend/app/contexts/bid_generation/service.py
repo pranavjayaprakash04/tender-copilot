@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
-from typing import Any, Dict
+from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 import structlog
@@ -55,7 +55,7 @@ class BidGenerationService:
         bid_title: str | None = None,
         bid_description: str | None = None,
         template_id: UUID | None = None,
-        customization: Dict[str, Any] | None = None,
+        customization: dict[str, Any] | None = None,
         trace_id: str | None = None
     ) -> BidGeneration:
         """Initiate bid generation and return task ID immediately."""
@@ -197,9 +197,9 @@ class BidGenerationService:
         bid_generation: BidGeneration,
         template: BidTemplate | None,
         trace_id: str | None = None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Generate bid content using Groq AI."""
-        start_time = datetime.utcnow()
+        start_time = datetime.now(UTC)
 
         # Prepare tender context
         tender_context = self._prepare_tender_context(tender)
@@ -236,7 +236,7 @@ Bid Title: {bid_generation.bid_title}
                 temperature=0.7  # Higher temperature for creative bid content
             )
 
-            processing_time = (datetime.utcnow() - start_time).total_seconds() * 1000
+            processing_time = (datetime.now(UTC) - start_time).total_seconds() * 1000
 
             # Convert to dict for storage
             content_dict = result.model_dump()
@@ -390,7 +390,7 @@ Generate professional, compelling, and compliant bid proposals that maximize the
         """Update bid generation analytics."""
         try:
             # Get or create today's analytics
-            today = datetime.utcnow().date()
+            today = datetime.now(UTC).date()
             period_start = datetime.combine(today, datetime.min.time())
             period_end = datetime.combine(today, datetime.max.time())
 

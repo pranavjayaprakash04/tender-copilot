@@ -25,6 +25,7 @@ from app.contexts.alert_engine.schemas import (
 from app.contexts.alert_engine.service import AlertEngineService
 from app.dependencies import (
     get_current_company_id,
+    get_current_user_id,
     get_db_session,
     get_pagination_params,
     get_trace_id,
@@ -39,7 +40,6 @@ def get_alert_engine_service(
 ) -> AlertEngineService:
     """Dependency to get alert engine service."""
     from app.infrastructure.email_client import EmailClient
-
     from app.infrastructure.whatsapp_client import WhatsAppClient
 
     return AlertEngineService(
@@ -57,6 +57,7 @@ async def create_notification(
     notification_data: NotificationCreate,
     service: AlertEngineService = Depends(get_alert_engine_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[NotificationResponse]:
     """Create a new notification."""
@@ -84,6 +85,7 @@ async def list_notifications(
     pagination: dict = Depends(get_pagination_params),
     service: AlertEngineService = Depends(get_alert_engine_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> PaginatedResponse[NotificationResponse]:
     """List notifications with filters."""
@@ -128,6 +130,7 @@ async def get_notification(
     notification_id: UUID,
     service: AlertEngineService = Depends(get_alert_engine_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[NotificationResponse]:
     """Get a specific notification."""
@@ -141,6 +144,7 @@ async def update_notification(
     update_data: NotificationUpdate,
     service: AlertEngineService = Depends(get_alert_engine_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[NotificationResponse]:
     """Update a notification."""
@@ -153,6 +157,7 @@ async def delete_notification(
     notification_id: UUID,
     service: AlertEngineService = Depends(get_alert_engine_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> JSONResponse:
     """Delete a notification."""
@@ -168,6 +173,7 @@ async def delete_notification(
 async def get_notification_stats(
     service: AlertEngineService = Depends(get_alert_engine_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[NotificationStats]:
     """Get notification statistics."""
@@ -180,6 +186,7 @@ async def get_notification_stats(
 async def retry_failed_notifications(
     service: AlertEngineService = Depends(get_alert_engine_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[dict]:
     """Retry failed notifications."""
@@ -195,6 +202,7 @@ async def retry_failed_notifications(
 async def create_template(
     template_data: NotificationTemplateCreate,
     service: AlertEngineService = Depends(get_alert_engine_service),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[NotificationTemplateResponse]:
     """Create a notification template."""
@@ -208,6 +216,7 @@ async def create_preference(
     preference_data: NotificationPreferenceCreate,
     service: AlertEngineService = Depends(get_alert_engine_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[NotificationPreferenceResponse]:
     """Create notification preferences."""
@@ -221,6 +230,7 @@ async def create_bulk_notifications(
     bulk_data: BulkNotificationCreate,
     service: AlertEngineService = Depends(get_alert_engine_service),
     company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[BulkNotificationResponse]:
     """Create multiple notifications."""
