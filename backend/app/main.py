@@ -82,7 +82,7 @@ def create_app() -> FastAPI:
     # Add health check endpoint
     @app.get("/health")
     async def health_check():
-        return {"status": "healthy", "environment": settings.ENVIRONMENT}
+        return {"status": "ok", "version": "1.5.0"}
 
     # Register routers (will be uncommented as contexts are implemented)
     app.include_router(tender_discovery_router, prefix="/api/v1")
