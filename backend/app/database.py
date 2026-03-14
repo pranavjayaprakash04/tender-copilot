@@ -67,6 +67,7 @@ async def init_db() -> None:
             from app.contexts.alert_engine.models import AlertRule  # noqa
             from app.contexts.whatsapp_gateway.models import WhatsAppSession  # noqa
             from app.contexts.partner_portal.models import Subscription  # noqa
+            from app.contexts.partner_portal.models import CAPartner, CAManagedCompany  # noqa
 
             # Create all tables
             await conn.run_sync(Base.metadata.create_all)

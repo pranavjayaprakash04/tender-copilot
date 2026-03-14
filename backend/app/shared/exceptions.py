@@ -83,3 +83,8 @@ class WhatsAppException(AppException):
 class PaymentException(AppException):
     def __init__(self, message: str) -> None:
         super().__init__(message=message, code="PAYMENT_ERROR", status_code=402)
+
+
+class ConflictException(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(message=message, code="CONFLICT", status_code=409)

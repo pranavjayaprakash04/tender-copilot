@@ -14,6 +14,7 @@ from app.config import settings
 # from app.contexts.user_management.router import router as user_management_router
 # from app.contexts.whatsapp_gateway.router import router as whatsapp_gateway_router
 # from app.contexts.partner_portal.router import router as partner_portal_router
+from app.contexts.partner_portal.router import router as partner_portal_router
 from app.contexts.alert_engine.router import router as alert_engine_router
 from app.contexts.bid_lifecycle.router import router as bid_lifecycle_router
 
@@ -95,6 +96,7 @@ def create_app() -> FastAPI:
     # app.include_router(user_management_router, prefix="/api/v1")
     # app.include_router(whatsapp_gateway_router, prefix="/api/v1")
     # app.include_router(partner_portal_router, prefix="/api/v1")
+    app.include_router(partner_portal_router, prefix="/api/v1")
 
     return app
 
