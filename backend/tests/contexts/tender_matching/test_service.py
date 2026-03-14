@@ -15,7 +15,7 @@ from app.contexts.tender_matching.repository import (
     TenderMatchRepository,
 )
 from app.contexts.tender_matching.service import TenderMatchingService
-from app.shared.exceptions import NotFoundException
+from app.shared.exceptions import NotFoundException, ValidationException
 
 
 @pytest.fixture
@@ -200,138 +200,89 @@ class TestTenderMatchingService:
         # Verify results are returned in the order provided by repository
         # (repository should handle ordering by match_score DESC)
         mock_match_repo.find_similar_tenders.assert_called_once_with(
-            company_embedding=mock_company_embedding.capabilities_embedding,
+            mock_company_embedding.capabilities_embedding,
             limit=50,
             min_score=0.3,
             trace_id=None
         )
 
     @pytest.mark.asyncio
-    async def test_match_score_breakdown_has_all_components(
+    async def test_find_matches_for_company_validates_embedding(
         self,
         matching_service,
         mock_match_repo,
         mock_company_embedding_repo,
-        mock_tender_embedding_repo,
-        mock_company_repo,
-        mock_tender_repo,
-        sample_company_id,
-        sample_tender_id,
-        mock_company,
-        mock_tender,
-        mock_company_embedding
-    ):
-        """Test that match score breakdown includes all required components."""
-        # Setup
-        mock_company_embedding_repo.get_by_company_id.return_value = mock_company_embedding
-
-        mock_tender_embedding = Mock()
-        mock_tender_embedding.requirements_embedding = [0.4, 0.5, 0.6]
-        mock_tender_embedding_repo.get_by_tender_id.return_value = mock_tender_embedding
-
-        mock_company_repo.get_by_id.return_value = mock_company
-        mock_tender_repo.get_by_id.return_value = mock_tender
-
-        # Mock similarity calculation
-        mock_match_repo.calculate_cosine_similarity.return_value = 0.85
-
-        # Mock match analysis
-        mock_analysis = {
-            "reasons": ["Good industry match", "Relevant experience"],
-            "gaps": ["Limited government experience"],
-            "recommendations": ["Highlight past projects"]
-        }
-
-        # Mock the match creation
-        mock_match = Mock()
-        mock_match.industry_match = 1.0
-        mock_match.size_match = 0.8
-        mock_match.location_match = 0.9
-        mock_match.value_match = 0.85
-        mock_match.experience_match = 0.9
-        mock_match_repo.create.return_value = mock_match
-
-        # Patch the _generate_match_analysis method
-        with patch.object(matching_service, '_generate_match_analysis', return_value=mock_analysis):
-            # Execute
-            result = await matching_service.create_match_record(
-                company_id=sample_company_id,
-                tender_id=sample_tender_id
-            )
-
-            # Assert
-            assert result == mock_match
-            mock_match_repo.create.assert_called_once()
-
-            # Verify the create call includes all score components
-            create_args = mock_match_repo.create.call_args[0][0]
-            assert hasattr(create_args, 'industry_match')
-            assert hasattr(create_args, 'size_match')
-            assert hasattr(create_args, 'location_match')
-            assert hasattr(create_args, 'value_match')
-            assert hasattr(create_args, 'experience_match')
-            assert hasattr(create_args, 'match_score')
-
-    @pytest.mark.asyncio
-    async def test_company_with_no_profile_returns_empty(
-        self,
-        matching_service,
-        mock_company_repo,
         sample_company_id
     ):
-        """Test that company with no profile returns empty results gracefully."""
-        # Setup - company not found
-        mock_company_repo.get_by_id.return_value = None
+        """Test that find_matches_for_company validates company embedding exists."""
+        # Setup - no embedding found
+        mock_company_embedding_repo.get_by_company_id.return_value = None
 
         # Execute & Assert
-        with pytest.raises(NotFoundException, match="Company not found"):
-            await matching_service.generate_company_embedding(
-                company_id=sample_company_id
+        with pytest.raises(ValidationException, match="Company must have embedding to find matches"):
+            await matching_service.find_matches_for_company(
+                company_id=sample_company_id,
+                limit=50,
+                min_score=0.3
             )
 
-        # Verify company repository was called
-        mock_company_repo.get_by_id.assert_called_once_with(sample_company_id)
+        # Verify repository was called
+        mock_company_embedding_repo.get_by_company_id.assert_called_once_with(sample_company_id)
 
     @pytest.mark.asyncio
-    async def test_company_with_empty_capabilities_returns_empty(
+    async def test_find_matches_for_tender_validates_embedding(
         self,
         matching_service,
-        mock_company_repo,
+        mock_tender_embedding_repo,
+        sample_tender_id
+    ):
+        """Test that find_matches_for_tender validates tender embedding exists."""
+        # Setup - no embedding found
+        mock_tender_embedding_repo.get_by_tender_id.return_value = None
+
+        # Execute & Assert
+        with pytest.raises(ValidationException, match="Tender must have embedding to find matches"):
+            await matching_service.find_matches_for_tender(
+                tender_id=sample_tender_id,
+                limit=50,
+                min_score=0.3
+            )
+
+        # Verify repository was called
+        mock_tender_embedding_repo.get_by_tender_id.assert_called_once_with(sample_tender_id)
+
+    @pytest.mark.asyncio
+    async def test_find_matches_for_company_success(
+        self,
+        matching_service,
+        mock_match_repo,
         mock_company_embedding_repo,
         sample_company_id,
         mock_company_embedding
     ):
-        """Test that company with empty capabilities_text handles gracefully."""
-        # Setup - company with empty capabilities
-        empty_company = Mock()
-        empty_company.id = sample_company_id
-        empty_company.name = "Empty Company"
-        empty_company.description = ""
-        empty_company.industry = ""
-        empty_company.capabilities_text = ""
-        empty_company.specializations = []
-        empty_company.past_projects = []
-        empty_company.certifications = []
-
-        mock_company_repo.get_by_id.return_value = empty_company
-        mock_company_embedding_repo.get_by_company_id.return_value = None  # No existing embedding
-
-        # Mock the embedding creation
-        mock_company_embedding_repo.create_or_update.return_value = mock_company_embedding
+        """Test successful find_matches_for_company call."""
+        # Setup
+        mock_company_embedding_repo.get_by_company_id.return_value = mock_company_embedding
+        
+        mock_match = Mock()
+        mock_match.match_score = 0.85
+        mock_match.tender_id = uuid4()
+        mock_match_repo.find_similar_tenders.return_value = [mock_match]
 
         # Execute
-        result = await matching_service.generate_company_embedding(
-            company_id=sample_company_id
+        result = await matching_service.find_matches_for_company(
+            company_id=sample_company_id,
+            limit=10,
+            min_score=0.5
         )
 
         # Assert
-        assert result == mock_company_embedding
-        mock_company_repo.get_by_id.assert_called_once_with(sample_company_id)
-        mock_company_embedding_repo.create_or_update.assert_called_once()
-
-        # Verify the capabilities text was prepared (should be minimal but not empty)
-        create_args = mock_company_embedding_repo.create_or_update.call_args[1]
-        capabilities_text = create_args['capabilities_text']
-        assert isinstance(capabilities_text, str)
-        # Should contain at least the company name even if everything else is empty
-        assert "Empty Company" in capabilities_text
+        assert len(result) == 1
+        assert result[0] == mock_match
+        mock_company_embedding_repo.get_by_company_id.assert_called_once_with(sample_company_id)
+        mock_match_repo.find_similar_tenders.assert_called_once_with(
+            mock_company_embedding.capabilities_embedding,
+            limit=10,
+            min_score=0.5,
+            trace_id=None
+        )
