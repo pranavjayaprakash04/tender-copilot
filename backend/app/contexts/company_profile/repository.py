@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import List
-
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,12 +40,12 @@ class CompanyProfileRepository:
         # Placeholder implementation
         return Company()
 
-    async def get_all_companies(self) -> List[Company]:
+    async def get_all_companies(self) -> list[Company]:
         """Get all companies."""
         # Placeholder implementation
         return []
 
-    async def get_all_without_embeddings(self) -> List[Company]:
+    async def get_all_without_embeddings(self) -> list[Company]:
         """Get all companies without embeddings."""
         # Placeholder implementation
         return []

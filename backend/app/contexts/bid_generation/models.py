@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from enum import StrEnum
-from typing import Any, Dict
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
@@ -62,11 +62,11 @@ class BidGeneration(Base):
     # Generated content
     bid_content: Mapped[str | None] = mapped_column(Text, nullable=True)
     executive_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
-    technical_proposal: Mapped[Dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    financial_proposal: Mapped[Dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    compliance_matrix: Mapped[Dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    risk_assessment: Mapped[Dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    implementation_plan: Mapped[Dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    technical_proposal: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    financial_proposal: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    compliance_matrix: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    risk_assessment: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    implementation_plan: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     # Quality metrics
     completeness_score: Mapped[float] = mapped_column(Float, nullable=True)  # 0-1
@@ -82,7 +82,7 @@ class BidGeneration(Base):
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Metadata
-    generation_metadata: Mapped[Dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    generation_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     tags: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     template_used: Mapped[str | None] = mapped_column(String(100), nullable=True)
     customization_applied: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -143,8 +143,8 @@ class BidTemplate(Base):
     language: Mapped[str] = mapped_column(String(10), nullable=False, default="en")
 
     # Template content
-    template_structure: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
-    sections: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
+    template_structure: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    sections: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     placeholders: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
 
     # Usage statistics
@@ -189,8 +189,8 @@ class BidGenerationAnalytics(Base):
     user_satisfaction_rate: Mapped[float] = mapped_column(Float, nullable=True)  # 0-1
 
     # Type breakdown
-    generations_by_type: Mapped[Dict[str, int]] = mapped_column(JSON, nullable=True)
-    success_rate_by_type: Mapped[Dict[str, float]] = mapped_column(JSON, nullable=True)
+    generations_by_type: Mapped[dict[str, int]] = mapped_column(JSON, nullable=True)
+    success_rate_by_type: Mapped[dict[str, float]] = mapped_column(JSON, nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())

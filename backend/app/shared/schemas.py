@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel
@@ -16,7 +16,7 @@ class BaseResponse(BaseModel, Generic[T]):
     timestamp: datetime
 
     def __init__(self, **data):
-        data["timestamp"] = datetime.now(timezone.utc)
+        data["timestamp"] = datetime.now(UTC)
         super().__init__(**data)
 
 class PaginatedResponse(BaseResponse[list[T]], Generic[T]):
@@ -40,7 +40,7 @@ class ErrorResponse(BaseModel):
     timestamp: datetime
 
     def __init__(self, **data):
-        data["timestamp"] = datetime.now(timezone.utc)
+        data["timestamp"] = datetime.now(UTC)
         super().__init__(**data)
 
 class ErrorDetail(BaseModel):

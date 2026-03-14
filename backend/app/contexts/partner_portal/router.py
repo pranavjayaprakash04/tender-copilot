@@ -5,7 +5,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_async_session
 from app.contexts.partner_portal.repository import CAPartnerRepository
 from app.contexts.partner_portal.schemas import (
     BulkAlertRequest,
@@ -14,6 +13,7 @@ from app.contexts.partner_portal.schemas import (
     ManagedCompanyResponse,
 )
 from app.contexts.partner_portal.service import CAPartnerService
+from app.database import get_async_session
 from app.dependencies import get_current_user_id
 from app.shared.exceptions import ConflictException, NotFoundException
 

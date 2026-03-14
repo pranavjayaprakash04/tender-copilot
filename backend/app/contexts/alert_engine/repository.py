@@ -33,7 +33,7 @@ class NotificationRepository:
             data = notification_data.model_dump()
         else:
             data = notification_data
-        
+
         notification = Notification(**data)
         self._session.add(notification)
         await self._session.commit()

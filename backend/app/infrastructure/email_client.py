@@ -2,26 +2,26 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
-import structlog
+from typing import Any
 
+import structlog
 
 logger = structlog.get_logger()
 
 
 class EmailClient:
     """Simple email client for MVP."""
-    
-    def __init__(self, api_key: Optional[str] = None):
+
+    def __init__(self, api_key: str | None = None):
         self.api_key = api_key
-    
+
     async def send_email(
         self,
         to: str,
         subject: str,
         html_content: str,
         from_email: str = "noreply@example.com"
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Send an email (placeholder implementation)."""
         logger.info(
             "email_sent",
@@ -30,20 +30,20 @@ class EmailClient:
             from_email=from_email,
             content_length=len(html_content)
         )
-        
+
         return {
             "success": True,
             "message_id": "mock_message_id",
             "status": "sent"
         }
-    
+
     async def send_template_email(
         self,
         to: str,
         template_id: str,
-        template_data: Dict[str, Any],
+        template_data: dict[str, Any],
         from_email: str = "noreply@example.com"
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Send a template email (placeholder implementation)."""
         logger.info(
             "template_email_sent",
@@ -52,7 +52,7 @@ class EmailClient:
             template_data=template_data,
             from_email=from_email
         )
-        
+
         return {
             "success": True,
             "message_id": "mock_message_id",

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from uuid import UUID
-from typing import Any
-from pydantic import BaseModel, Field
+
+from pydantic import BaseModel
 
 from app.contexts.bid_generation.models import BidType
 

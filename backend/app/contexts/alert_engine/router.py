@@ -243,7 +243,7 @@ async def create_bulk_notifications(
             if notification:
                 created.append(NotificationResponse.model_validate(notification))
         except Exception as e:
-            failed.append({"error": str(e), "notification": notification_data.dict()})
+            failed.append({"error": str(e), "notification": notification_data.model_dump()})
 
     response = BulkNotificationResponse(
         created=created,

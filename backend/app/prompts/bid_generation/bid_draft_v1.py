@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -12,13 +12,13 @@ class BidDraftOutput(BaseModel):
 
     executive_summary: str = Field(description="Brief executive summary of the bid proposal")
     technical_approach: str = Field(description="Technical approach and methodology")
-    implementation_plan: Dict[str, Any] = Field(description="Implementation plan with timeline")
-    resource_allocation: Dict[str, Any] = Field(description="Resource allocation and team structure")
+    implementation_plan: dict[str, Any] = Field(description="Implementation plan with timeline")
+    resource_allocation: dict[str, Any] = Field(description="Resource allocation and team structure")
     quality_assurance: str = Field(description="Quality assurance measures and processes")
-    risk_mitigation: List[Dict[str, Any]] = Field(description="Risk mitigation strategies")
-    compliance_matrix: Dict[str, Any] = Field(description="Compliance matrix showing tender requirements")
-    timeline_milestones: List[Dict[str, Any]] = Field(description="Timeline and key milestones")
-    cost_breakdown: Dict[str, Any] = Field(description="Cost breakdown structure (if applicable)")
+    risk_mitigation: list[dict[str, Any]] = Field(description="Risk mitigation strategies")
+    compliance_matrix: dict[str, Any] = Field(description="Compliance matrix showing tender requirements")
+    timeline_milestones: list[dict[str, Any]] = Field(description="Timeline and key milestones")
+    cost_breakdown: dict[str, Any] = Field(description="Cost breakdown structure (if applicable)")
     pricing_strategy: str = Field(description="Pricing methodology and strategy")
     value_proposition: str = Field(description="Value proposition and competitive advantages")
     confidence_score: int = Field(description="Confidence in bid quality (0-100)")
