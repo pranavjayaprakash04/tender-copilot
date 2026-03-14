@@ -2,6 +2,15 @@ import React, { useState, useCallback, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { Upload, File, AlertCircle, CheckCircle, Clock, Trash2, Eye, Download, Filter, Search } from 'lucide-react';
 import { format } from 'date-fns';
+import { api } from '@/lib/api';
+import { createClient } from '@supabase/supabase-js';
+
+export const dynamic = 'force-dynamic';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 interface Document {
   id: string;
@@ -46,17 +55,8 @@ const ComplianceVault: React.FC = () => {
   const fetchDocuments = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/v1/vault/documents', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'X-Company-ID': localStorage.getItem('companyId') || ''
-        }
-      });
-      
-      if (!response.ok) throw new Error('Failed to fetch documents');
-      
-      const data = await response.json();
-      setDocuments(data.data || []);
+      const data = await api.compliance.getDocuments();
+      setDocuments(data || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch documents');
     } finally {
@@ -66,17 +66,35 @@ const ComplianceVault: React.FC = () => {
 
   const fetchStats = async () => {
     try {
-      const response = await fetch('/api/v1/vault/stats', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'X-Company-ID': localStorage.getItem('companyId') || ''
-        }
-      });
-      
-      if (!response.ok) throw new Error('Failed to fetch stats');
-      
-      const data = await response.json();
-      setStats(data.data);
+      // For now, we'll calculate stats from documents
+      // This endpoint might need to be implemented in the backend
+      if (documents.length > 0) {
+        const total = documents.length;
+        const current = documents.filter(doc => doc.is_current).length;
+        const expired = documents.filter(doc => 
+          doc.expires_at && new Date(doc.expires_at) < new Date()
+        ).length;
+        const expiringSoon = documents.filter(doc => 
+          doc.expires_at && 
+          new Date(doc.expires_at) <= new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) &&
+          new Date(doc.expires_at) > new Date()
+        ).length;
+        
+        setStats({
+          total_documents: total,
+          current_documents: current,
+          expired_documents: expired,
+          expiring_soon_documents: expiringSoon,
+          by_type: documents.reduce((acc, doc) => {
+            acc[doc.doc_type] = (acc[doc.doc_type] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>),
+          upcoming_expiries: documents
+            .filter(doc => doc.expires_at && new Date(doc.expires_at) > new Date())
+            .sort((a, b) => new Date(a.expires_at!).getTime() - new Date(b.expires_at!).getTime())
+            .slice(0, 5)
+        });
+      }
     } catch (err) {
       console.error('Failed to fetch stats:', err);
     }
@@ -102,44 +120,11 @@ const ComplianceVault: React.FC = () => {
       }
       
       try {
-        // First classify the document
-        const classificationResponse = await fetch('/api/v1/vault/classify', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-            'X-Company-ID': localStorage.getItem('companyId') || ''
-          },
-          body: JSON.stringify({
-            filename: file.name,
-            content_preview: '' // Could extract text from PDF here
-          })
-        });
-        
-        let docType = 'other';
-        if (classificationResponse.ok) {
-          const classification = await classificationResponse.json();
-          docType = classification.data.doc_type;
-        }
-        
-        // Upload the file
-        const formData = new FormData();
-        formData.append('file', file);
-        
-        const uploadResponse = await fetch('/api/v1/vault/upload', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-            'X-Company-ID': localStorage.getItem('companyId') || ''
-          },
-          body: formData
-        });
-        
-        if (!uploadResponse.ok) throw new Error('Failed to upload file');
+        // Upload the file using the API
+        await api.compliance.uploadDocument(file);
         
         setSuccess(`Successfully uploaded ${file.name}`);
         fetchDocuments();
-        fetchStats();
       } catch (err) {
         setError(err instanceof Error ? err.message : `Failed to upload ${file.name}`);
       }
@@ -161,11 +146,11 @@ const ComplianceVault: React.FC = () => {
     if (!confirm('Are you sure you want to delete this document?')) return;
     
     try {
-      const response = await fetch(`/api/v1/vault/documents/${docId}`, {
+      // This endpoint might need to be implemented in the backend
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/compliance/documents/${docId}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'X-Company-ID': localStorage.getItem('companyId') || ''
+          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
         }
       });
       
@@ -181,19 +166,25 @@ const ComplianceVault: React.FC = () => {
 
   const downloadDocument = async (docId: string, filename: string) => {
     try {
-      const response = await fetch(`/api/v1/vault/documents/${docId}`, {
+      // This endpoint might need to be implemented in the backend
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/compliance/documents/${docId}/download`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'X-Company-ID': localStorage.getItem('companyId') || ''
+          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
         }
       });
       
       if (!response.ok) throw new Error('Failed to get download URL');
       
-      const data = await response.json();
-      if (data.data.download_url) {
-        window.open(data.data.download_url, '_blank');
-      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to download document');
     }

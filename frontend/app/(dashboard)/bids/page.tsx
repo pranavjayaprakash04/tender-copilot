@@ -1,7 +1,7 @@
 ﻿"use client";
+
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useTranslation } from "next-i18next";
 import { Button } from "@/components/ui/button";
 import { MessageLoading } from "@/components/ui/message-loading";
 import { api } from "@/lib/api";
@@ -34,19 +34,12 @@ const statusColors = {
 };
 
 export default function BidsPage() {
-  const { t, i18n } = useTranslation("common");
-  const [currentLang, setCurrentLang] = useState<"en" | "ta">(i18n.language as "en" | "ta");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
   const { data: bidsData, isLoading, error } = useQuery<BidListResponse>({
     queryKey: ["bids", statusFilter],
     queryFn: () => api.bids.list({ status: statusFilter === "all" ? undefined : statusFilter as any })
   });
-
-  const handleLanguageToggle = () => {
-    const newLang = currentLang === "en" ? "ta" : "en";
-    setCurrentLang(newLang);
-  };
 
   const handleViewBid = (bidId: string) => {
     window.location.href = `/bids/${bidId}`;
@@ -57,12 +50,12 @@ export default function BidsPage() {
   };
 
   const getStatusText = (status: string) => {
-    return t(`bids.status.${status}`);
+    return status.charAt(0).toUpperCase() + status.slice(1);
   };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString(
-      currentLang === "ta" ? "ta-IN" : "en-IN",
+      "en-IN",
       { 
         year: "numeric", 
         month: "short", 
@@ -77,7 +70,7 @@ export default function BidsPage() {
         <div className="max-w-7xl mx-auto px-4 py-8">
           <div className="flex items-center justify-center py-12">
             <MessageLoading />
-            <span className="ml-2 text-gray-600">{t("bids.loading")}</span>
+            <span className="ml-2 text-gray-600">Loading bids...</span>
           </div>
         </div>
       </div>
@@ -89,8 +82,8 @@ export default function BidsPage() {
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 py-8">
           <div className="text-center py-12">
-            <p className="text-red-600 mb-4">{t("bids.error_loading")}</p>
-            <Button onClick={() => window.location.reload()}>{t("common.retry")}</Button>
+            <p className="text-red-600 mb-4">Error loading bids</p>
+            <Button onClick={() => window.location.reload()}>Retry</Button>
           </div>
         </div>
       </div>
@@ -104,15 +97,8 @@ export default function BidsPage() {
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold text-gray-900">
-            {t("navigation.bids")}
+            Bids
           </h1>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleLanguageToggle}
-          >
-            {currentLang === "en" ? "EN" : "தமிழ்"}
-          </Button>
         </div>
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200">
@@ -124,7 +110,7 @@ export default function BidsPage() {
                   size="sm"
                   onClick={() => setStatusFilter("all")}
                 >
-                  {t("bids.filter.all")}
+                  All
                 </Button>
                 {["draft", "reviewing", "submitted", "won", "lost", "withdrawn"].map((status) => (
                   <Button
@@ -139,7 +125,7 @@ export default function BidsPage() {
               </div>
               
               <div className="text-sm text-gray-600">
-                {t("bids.total_count", { count: bids.length })}
+                Total: {bids.length} bids
               </div>
             </div>
           </div>
@@ -149,12 +135,12 @@ export default function BidsPage() {
               <div className="p-12 text-center">
                 <p className="text-gray-600 mb-4">
                   {statusFilter === "all" 
-                    ? t("bids.no_bids") 
-                    : t("bids.no_bids_filtered")
+                    ? "No bids found" 
+                    : "No bids found with this filter"
                   }
                 </p>
                 <Button onClick={() => window.location.href = "/tenders"}>
-                  {t("bids.view_tenders")}
+                  View Tenders
                 </Button>
               </div>
             ) : (
@@ -171,10 +157,10 @@ export default function BidsPage() {
                       </h3>
                       <div className="flex flex-wrap gap-4 text-sm text-gray-600">
                         <span>
-                          {t("bids.created")}: {formatDate(bid.created_at)}
+                          Created: {formatDate(bid.created_at)}
                         </span>
                         <span>
-                          {t("bids.updated")}: {formatDate(bid.updated_at)}
+                          Updated: {formatDate(bid.updated_at)}
                         </span>
                       </div>
                     </div>
@@ -194,7 +180,7 @@ export default function BidsPage() {
                         size="sm"
                         onClick={() => handleViewBid(bid.id)}
                       >
-                        {t("common.view")}
+                        View
                       </Button>
                     </div>
                   </div>

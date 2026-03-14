@@ -3,6 +3,7 @@ const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
   transpilePackages: ['three'],
+  output: 'standalone',
   webpack: (config) => {
     config.externals = [...(config.externals || []), { canvas: 'canvas' }];
     return config;

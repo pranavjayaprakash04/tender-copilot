@@ -1,19 +1,32 @@
 "use client";
+
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useTranslation } from "next-i18next";
 import { Button } from "@/components/ui/button";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 interface Tender {
   id: string;
   title: string;
-  department: string;
-  value: number;
+  description: string;
+  organization: string;
   deadline: string;
+  value?: string;
   category: string;
-  state: string;
-  match_score: number;
+  status: 'active' | 'closed' | 'cancelled';
+  posted_date: string;
+  source_url: string;
+  department?: string;
+  authority?: string;
+  state?: string;
+  requirements?: string[];
+  match_score?: number;
+  classification?: {
+    relevance_score: number;
+    category: string;
+    keywords: string[];
+  };
 }
 
 interface TenderListParams {
@@ -31,7 +44,6 @@ interface TenderListResponse {
 }
 
 export default function TendersPage() {
-  const { t, i18n } = useTranslation("common");
   const [filters, setFilters] = useState<TenderListParams>({
     category: "",
     state: "",
@@ -42,13 +54,7 @@ export default function TendersPage() {
   const { data: tendersData, isLoading, error } = useQuery<TenderListResponse>({
     queryKey: ["tenders", filters],
     queryFn: async () => {
-      const params = new URLSearchParams();
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value) params.append(key, value);
-      });
-      const response = await fetch(`/api/tenders?${params}`);
-      if (!response.ok) throw new Error("Failed to fetch tenders");
-      return response.json();
+      return api.tenders.search(filters);
     }
   });
 
@@ -82,14 +88,14 @@ export default function TendersPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-6">{t("tenders.title")}</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-6">Tenders</h1>
           
           {/* Search and Filters */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
               <input
                 type="text"
-                placeholder={t("tenders.search_placeholder")}
+                placeholder="Search tenders..."
                 value={filters.search}
                 onChange={(e) => setFilters({ ...filters, search: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -99,34 +105,34 @@ export default function TendersPage() {
                 onChange={(e) => setFilters({ ...filters, category: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">{t("tenders.all_categories")}</option>
-                <option value="construction">{t("tenders.construction")}</option>
-                <option value="it">{t("tenders.it")}</option>
-                <option value="transport">{t("tenders.transport")}</option>
+                <option value="">All Categories</option>
+                <option value="construction">Construction</option>
+                <option value="it">IT</option>
+                <option value="transport">Transport</option>
               </select>
               <select
                 value={filters.state}
                 onChange={(e) => setFilters({ ...filters, state: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">{t("tenders.all_states")}</option>
-                <option value="tamil-nadu">{t("tenders.tamil_nadu")}</option>
-                <option value="karnataka">{t("tenders.karnataka")}</option>
-                <option value="maharashtra">{t("tenders.maharashtra")}</option>
+                <option value="">All States</option>
+                <option value="tamil-nadu">Tamil Nadu</option>
+                <option value="karnataka">Karnataka</option>
+                <option value="maharashtra">Maharashtra</option>
               </select>
               <select
                 value={filters.deadline}
                 onChange={(e) => setFilters({ ...filters, deadline: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">{t("tenders.all_deadlines")}</option>
-                <option value="3">{t("tenders.next_3_days")}</option>
-                <option value="7">{t("tenders.next_7_days")}</option>
-                <option value="30">{t("tenders.next_30_days")}</option>
+                <option value="">All Deadlines</option>
+                <option value="3">Next 3 Days</option>
+                <option value="7">Next 7 Days</option>
+                <option value="30">Next 30 Days</option>
               </select>
             </div>
             <Button onClick={() => setFilters({ search: "", category: "", state: "", deadline: "" })}>
-              {t("tenders.clear_filters")}
+              Clear Filters
             </Button>
           </div>
         </div>
@@ -137,41 +143,43 @@ export default function TendersPage() {
             Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)
           ) : error ? (
             <div className="col-span-full text-center py-12">
-              <p className="text-red-600 mb-4">{t("tenders.error_loading")}</p>
-              <Button onClick={() => window.location.reload()}>{t("tenders.retry")}</Button>
+              <p className="text-red-600 mb-4">Error loading tenders</p>
+              <Button onClick={() => window.location.reload()}>Retry</Button>
             </div>
           ) : tendersData?.tenders.length === 0 ? (
             <div className="col-span-full text-center py-12">
-              <p className="text-gray-600">{t("tenders.no_tenders")}</p>
+              <p className="text-gray-600">No tenders found</p>
             </div>
           ) : (
             tendersData?.tenders.map((tender) => (
               <div key={tender.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">{tender.title}</h3>
-                <p className="text-gray-600 mb-2">{tender.department}</p>
-                <p className="text-lg font-medium text-gray-900 mb-4">₹{tender.value.toLocaleString("en-IN")}</p>
+                <p className="text-gray-600 mb-2">{tender.department || tender.organization}</p>
+                <p className="text-lg font-medium text-gray-900 mb-4">
+                  {tender.value ? `₹${parseInt(tender.value).toLocaleString("en-IN")}` : 'Value not specified'}
+                </p>
                 
                 <div className="flex justify-between items-center mb-4">
                   <span className={cn(
                     "px-2 py-1 rounded-full text-xs font-medium",
-                    getMatchScoreColor(tender.match_score)
+                    getMatchScoreColor(tender.match_score || 0)
                   )}>
-                    {t("tenders.match_score")}: {tender.match_score}%
+                    Match Score: {tender.match_score || 0}%
                   </span>
                   <span className={cn(
                     "text-sm font-medium",
                     getDeadlineColor(tender.deadline)
                   )}>
-                    {new Date(tender.deadline).toLocaleDateString(i18n.language === "ta" ? "ta-IN" : "en-IN")}
+                    {new Date(tender.deadline).toLocaleDateString("en-IN")}
                   </span>
                 </div>
                 
                 <div className="flex gap-2">
                   <Button size="sm" onClick={() => window.location.href = `/tenders/${tender.id}`}>
-                    {t("tenders.view_details")}
+                    View Details
                   </Button>
                   <Button size="sm" variant="outline">
-                    {t("tenders.set_alert")}
+                    Set Alert
                   </Button>
                 </div>
               </div>

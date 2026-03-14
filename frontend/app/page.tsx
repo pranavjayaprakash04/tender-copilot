@@ -1,4 +1,6 @@
-﻿import { NavSection }      from "@/components/sections/nav-section"
+﻿export const dynamic = 'force-dynamic';
+
+import { NavSection }      from "@/components/sections/nav-section"
 import { HeroSection }     from "@/components/sections/hero-section"
 import { SocialSection }   from "@/components/sections/social-section"
 import { CopilotSection }  from "@/components/sections/copilot-section"
