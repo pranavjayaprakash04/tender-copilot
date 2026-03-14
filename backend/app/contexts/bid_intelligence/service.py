@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -79,7 +79,7 @@ class BidIntelligenceService:
                 our_win_probability=0.75,  # Mock value
                 recommended_price=market_price.avg_estimated_value if market_price else None,
                 analysis_lang=req.lang,
-                generated_at=datetime.now(timezone.utc),
+                generated_at=datetime.now(UTC),
             )
         except NotFoundException:
             raise
