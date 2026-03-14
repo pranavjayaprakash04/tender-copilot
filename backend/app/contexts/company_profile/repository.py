@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import List
+
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,3 +21,8 @@ class CompanyRepository:
         """Get company by ID."""
         # Placeholder implementation
         return None
+
+    async def get_all_companies(self) -> List[Company]:
+        """Get all companies."""
+        # Placeholder implementation
+        return []

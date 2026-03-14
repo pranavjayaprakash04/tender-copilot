@@ -350,6 +350,33 @@ def weekly_loss_analysis_batch() -> dict:
     return asyncio.run(_weekly_batch())
 
 
+@celery_app.task(name="bid_lifecycle.refresh_market_prices")
+def refresh_market_prices_task() -> dict:
+    """Refresh market prices materialized view."""
+    async def _refresh():
+        async with get_async_session() as session:
+            try:
+                # Execute raw SQL to refresh materialized view
+                await session.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY market_prices")
+                await session.commit()
+
+                logger.info(
+                    "market_prices_refreshed",
+                    timestamp=datetime.utcnow().isoformat()
+                )
+                return {"status": "completed", "refreshed_at": datetime.utcnow().isoformat()}
+            except Exception as e:
+                await session.rollback()
+                logger.error(
+                    "market_prices_refresh_failed",
+                    error=str(e)
+                )
+                return {"status": "failed", "error": str(e)}
+
+    import asyncio
+    return asyncio.run(_refresh())
+
+
 # Configure Celery Beat schedule
 celery_app.conf.beat_schedule = {
     'daily-payment-follow-up': {
@@ -359,6 +386,10 @@ celery_app.conf.beat_schedule = {
     'weekly-loss-analysis': {
         'task': 'bid_lifecycle.weekly_loss_analysis_batch',
         'schedule': crontab(hour=10, minute=0, day_of_week=1),  # 10 AM every Monday
+    },
+    'refresh-market-prices-daily': {
+        'task': 'bid_lifecycle.refresh_market_prices',
+        'schedule': crontab(hour=2, minute=0),  # 2 AM daily
     },
 }
 

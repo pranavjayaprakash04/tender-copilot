@@ -9,7 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 
-# from app.contexts.bid_intelligence.router import router as bid_intelligence_router
+# from app.contexts.bid_intelligence.router import router as bid_intel_router
+from app.contexts.bid_intelligence.router import router as bid_intel_router
 # from app.contexts.company_profile.router import router as company_profile_router
 # from app.contexts.user_management.router import router as user_management_router
 # from app.contexts.whatsapp_gateway.router import router as whatsapp_gateway_router
@@ -91,7 +92,7 @@ def create_app() -> FastAPI:
     app.include_router(compliance_vault_router, prefix="/api/v1")
     app.include_router(bid_lifecycle_router, prefix="/api/v1")
     app.include_router(alert_engine_router, prefix="/api/v1")
-    # app.include_router(bid_intelligence_router, prefix="/api/v1")
+    app.include_router(bid_intel_router, prefix="/api/v1")
     # app.include_router(company_profile_router, prefix="/api/v1")
     # app.include_router(user_management_router, prefix="/api/v1")
     # app.include_router(whatsapp_gateway_router, prefix="/api/v1")
