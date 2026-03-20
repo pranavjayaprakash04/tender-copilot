@@ -1,13 +1,16 @@
 from __future__ import annotations
-
-from typing import Literal
-
+from typing import Literal, Optional
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
+    model_config = SettingsConfigDict(
+        env_file='.env',
+        env_file_encoding='utf-8',
+        extra='ignore'
+    )
+
     # App
     SECRET_KEY: str = Field(..., description="JWT secret key")
     ENVIRONMENT: Literal["development", "production", "test"] = "development"
@@ -28,17 +31,17 @@ class Settings(BaseSettings):
     # Redis
     REDIS_URL: str = Field(..., description="Redis connection URL")
 
-    # WhatsApp
-    WHATSAPP_ACCESS_TOKEN: str = Field(..., description="WhatsApp Cloud API access token")
-    WHATSAPP_PHONE_NUMBER_ID: str = Field(..., description="WhatsApp phone number ID")
-    WHATSAPP_APP_SECRET: str = Field(..., description="WhatsApp app secret for webhook verification")
+    # WhatsApp — Phase 4, optional until implemented
+    WHATSAPP_ACCESS_TOKEN: Optional[str] = Field(default=None, description="WhatsApp Cloud API access token")
+    WHATSAPP_PHONE_NUMBER_ID: Optional[str] = Field(default=None, description="WhatsApp phone number ID")
+    WHATSAPP_APP_SECRET: Optional[str] = Field(default=None, description="WhatsApp app secret for webhook verification")
 
     # Resend
     RESEND_API_KEY: str = Field(..., description="Resend API key for email")
 
-    # Razorpay
-    RAZORPAY_KEY_ID: str = Field(..., description="Razorpay key ID")
-    RAZORPAY_KEY_SECRET: str = Field(..., description="Razorpay key secret")
+    # Razorpay — optional until payment flow is live
+    RAZORPAY_KEY_ID: Optional[str] = Field(default=None, description="Razorpay key ID")
+    RAZORPAY_KEY_SECRET: Optional[str] = Field(default=None, description="Razorpay key secret")
 
     # Celery
     CELERY_BROKER_URL: str = Field(default="", description="Celery broker URL (defaults to REDIS_URL)")
