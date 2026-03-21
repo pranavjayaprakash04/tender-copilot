@@ -33,6 +33,7 @@ engine = create_async_engine(
     future=True,
     pool_pre_ping=True,
     pool_recycle=300,
+    connect_args={"statement_cache_size": 0},
 )
 
 AsyncSessionFactory = async_sessionmaker(
@@ -58,15 +59,14 @@ async def init_db() -> None:
     try:
         async with engine.begin() as conn:
             from app.contexts.tender_discovery.models import Tender  # noqa
-            from app.contexts.bid_generation.models import Bid  # noqa
+            from app.contexts.bid_generation.models import BidGeneration  # noqa
             from app.contexts.bid_lifecycle.models import BidOutcome, LossAnalysis  # noqa
             from app.contexts.compliance_vault.models import VaultDocument, VaultDocumentMapping  # noqa
             from app.contexts.company_profile.models import Company  # noqa
             from app.contexts.user_management.models import User, CAManagedCompany  # noqa
             from app.contexts.alert_engine.models import AlertRule  # noqa
             from app.contexts.whatsapp_gateway.models import WhatsAppSession  # noqa
-            from app.contexts.partner_portal.models import Subscription  # noqa
-            from app.contexts.partner_portal.models import CAPartner, CAManagedCompany  # noqa
+            from app.contexts.partner_portal.models import Subscription, CAPartner  # noqa
             await conn.run_sync(Base.metadata.create_all)
             logger.info("database_initialized")
     except Exception as e:
