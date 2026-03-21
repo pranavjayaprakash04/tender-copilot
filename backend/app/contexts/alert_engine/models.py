@@ -1,79 +1,95 @@
 from __future__ import annotations
-import structlog
-from sqlalchemy import MetaData
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import DeclarativeBase
-from app.config import settings
 
-logger = structlog.get_logger()
+from datetime import datetime
+from enum import StrEnum
+from typing import Any
+from uuid import UUID
 
-class Base(DeclarativeBase):
-    """Base model class for all SQLAlchemy models."""
-    metadata = MetaData(
-        naming_convention={
-            "ix": "ix_%(column_0_label)s",
-            "uq": "uq_%(table_name)s_%(column_0_name)s",
-            "ck": "ck_%(table_name)s_%(constraint_name)s",
-            "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
-            "pk": "pk_%(table_name)s",
-        }
-    )
+from sqlalchemy import UUID as SQLAlchemyUUID
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.sql import func
 
-def _get_async_db_url(url: str) -> str:
-    """Ensure the database URL uses the asyncpg driver."""
-    if url.startswith("postgresql://"):
-        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    if url.startswith("postgres://"):
-        return url.replace("postgres://", "postgresql+asyncpg://", 1)
-    return url
+from app.database import Base
 
-engine = create_async_engine(
-    _get_async_db_url(settings.DATABASE_URL),
-    echo=settings.ENVIRONMENT == "development",
-    future=True,
-    pool_pre_ping=True,
-    pool_recycle=300,
-    connect_args={"statement_cache_size": 0},
-)
 
-AsyncSessionFactory = async_sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-)
+class NotificationType(StrEnum):
+    EMAIL = "email"
+    WHATSAPP = "whatsapp"
+    SMS = "sms"
+    PUSH = "push"
 
-async def get_async_session() -> AsyncSession:
-    """Dependency to get async database session."""
-    async with AsyncSessionFactory() as session:
-        try:
-            yield session
-        except Exception as e:
-            logger.error("database_session_error", error=str(e))
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
 
-async def init_db() -> None:
-    """Initialize database tables."""
-    try:
-        async with engine.begin() as conn:
-            from app.contexts.tender_discovery.models import Tender  # noqa
-            from app.contexts.bid_generation.models import BidGeneration, BidTemplate, BidGenerationAnalytics  # noqa
-            from app.contexts.bid_lifecycle.models import Bid, BidOutcomeRecord, BidPayment, BidFollowUp  # noqa
-            from app.contexts.compliance_vault.models import VaultDocument, VaultDocumentMapping  # noqa
-            from app.contexts.company_profile.models import Company  # noqa
-            from app.contexts.user_management.models import User  # noqa
-            from app.contexts.alert_engine.models import Notification, NotificationTemplate, NotificationPreference  # noqa
-            from app.contexts.whatsapp_gateway.models import WhatsAppSession  # noqa
-            from app.contexts.partner_portal.models import CAPartner, CAManagedCompany  # noqa
-            await conn.run_sync(Base.metadata.create_all)
-            logger.info("database_initialized")
-    except Exception as e:
-        logger.error("database_init_failed", error=str(e))
-        raise
+class NotificationStatus(StrEnum):
+    PENDING = "pending"
+    SENT = "sent"
+    DELIVERED = "delivered"
+    FAILED = "failed"
+    RETRYING = "retrying"
 
-async def close_db() -> None:
-    """Close database connections."""
-    await engine.dispose()
-    logger.info("database_connections_closed")
+
+class NotificationPriority(StrEnum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    URGENT = "urgent"
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, primary_key=True, default=func.uuid_generate_v4())
+    company_id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    notification_type: Mapped[NotificationType] = mapped_column(String(20), nullable=False)
+    recipient: Mapped[str] = mapped_column(String(255), nullable=False)
+    subject: Mapped[str] = mapped_column(String(500), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[NotificationStatus] = mapped_column(String(20), nullable=False, default=NotificationStatus.PENDING)
+    priority: Mapped[NotificationPriority] = mapped_column(String(20), nullable=False, default=NotificationPriority.MEDIUM)
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_retries: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    context_data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    template_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    response: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+
+class NotificationTemplate(Base):
+    __tablename__ = "notification_templates"
+
+    id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, primary_key=True, default=func.uuid_generate_v4())
+    name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    notification_type: Mapped[NotificationType] = mapped_column(String(20), nullable=False)
+    subject_template: Mapped[str] = mapped_column(String(500), nullable=False)
+    message_template: Mapped[str] = mapped_column(Text, nullable=False)
+    variables: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+
+class NotificationPreference(Base):
+    __tablename__ = "notification_preferences"
+
+    id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, primary_key=True, default=func.uuid_generate_v4())
+    user_id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    company_id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    email_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    whatsapp_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    sms_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    push_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    deadline_alerts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    new_tender_alerts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    bid_status_alerts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    payment_alerts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    quiet_hours_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    quiet_hours_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    timezone: Mapped[str] = mapped_column(String(50), nullable=False, default="UTC")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
