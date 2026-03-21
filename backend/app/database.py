@@ -19,7 +19,6 @@ class Base(DeclarativeBase):
         }
     )
 
-# Auto-fix URL scheme for async engine
 def _get_async_db_url(url: str) -> str:
     """Ensure the database URL uses the asyncpg driver."""
     if url.startswith("postgresql://"):
@@ -28,7 +27,6 @@ def _get_async_db_url(url: str) -> str:
         return url.replace("postgres://", "postgresql+asyncpg://", 1)
     return url
 
-# Create async engine
 engine = create_async_engine(
     _get_async_db_url(settings.DATABASE_URL),
     echo=settings.ENVIRONMENT == "development",
@@ -36,8 +34,46 @@ engine = create_async_engine(
     pool_pre_ping=True,
     pool_recycle=300,
 )
-```
 
-Also make sure `asyncpg` is in your `requirements.txt`:
-```
-asyncpg==0.29.0
+AsyncSessionFactory = async_sessionmaker(
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
+
+async def get_async_session() -> AsyncSession:
+    """Dependency to get async database session."""
+    async with AsyncSessionFactory() as session:
+        try:
+            yield session
+        except Exception as e:
+            logger.error("database_session_error", error=str(e))
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
+
+async def init_db() -> None:
+    """Initialize database tables."""
+    try:
+        async with engine.begin() as conn:
+            from app.contexts.tender_discovery.models import Tender  # noqa
+            from app.contexts.bid_generation.models import Bid  # noqa
+            from app.contexts.bid_lifecycle.models import BidOutcome, LossAnalysis  # noqa
+            from app.contexts.compliance_vault.models import VaultDocument, VaultDocumentMapping  # noqa
+            from app.contexts.company_profile.models import Company  # noqa
+            from app.contexts.user_management.models import User, CAManagedCompany  # noqa
+            from app.contexts.alert_engine.models import AlertRule  # noqa
+            from app.contexts.whatsapp_gateway.models import WhatsAppSession  # noqa
+            from app.contexts.partner_portal.models import Subscription  # noqa
+            from app.contexts.partner_portal.models import CAPartner, CAManagedCompany  # noqa
+            await conn.run_sync(Base.metadata.create_all)
+            logger.info("database_initialized")
+    except Exception as e:
+        logger.error("database_init_failed", error=str(e))
+        raise
+
+async def close_db() -> None:
+    """Close database connections."""
+    await engine.dispose()
+    logger.info("database_connections_closed")
