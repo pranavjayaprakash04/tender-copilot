@@ -145,7 +145,7 @@ class BidFollowUp(Base):
     scheduled_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     completed_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     subject: Mapped[str] = mapped_column(String(500), nullable=False)
-    message: Mapped[Text] = mapped_column(Text, nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
     response: Mapped[str | None] = mapped_column(Text, nullable=True)
     reminder_sent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
@@ -153,15 +153,3 @@ class BidFollowUp(Base):
 
     bid: Mapped[Bid] = relationship("Bid", back_populates="follow_ups")
     payment: Mapped[BidPayment | None] = relationship("BidPayment")
-
-
-class MarketPrice(Base):
-    __tablename__ = "market_prices"
-
-    id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, primary_key=True, default=func.uuid_generate_v4())
-    tender_category: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
-    avg_estimated_value: Mapped[float] = mapped_column(Numeric(15, 2), nullable=False)
-    min_value: Mapped[float] = mapped_column(Numeric(15, 2), nullable=False)
-    max_value: Mapped[float] = mapped_column(Numeric(15, 2), nullable=False)
-    sample_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    last_refreshed: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
