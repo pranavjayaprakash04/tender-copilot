@@ -3,11 +3,9 @@
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
   "rewrites": [
-    { "source": "/api/:path*", "destination": "RENDER_BACKEND_URL/api/:path*" }
-  ],
-  "env": {
-    "NEXT_PUBLIC_API_URL": "@next_public_api_url",
-    "NEXT_PUBLIC_SUPABASE_URL": "@next_public_supabase_url",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@next_public_supabase_anon_key"
-  }
+    {
+      "source": "/api/:path*",
+      "destination": "https://tender-copilot.onrender.com/api/:path*"
+    }
+  ]
 }
