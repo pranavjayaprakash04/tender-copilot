@@ -55,20 +55,18 @@ async def get_async_session() -> AsyncSession:
             await session.close()
 
 async def init_db() -> None:
-    """Initialize database tables."""
+    """Initialize database - tables managed by Supabase migrations."""
     try:
-        async with engine.begin() as conn:
-            from app.contexts.tender_discovery.models import Tender  # noqa
-            from app.contexts.bid_generation.models import BidGeneration, BidTemplate, BidGenerationAnalytics  # noqa
-            from app.contexts.bid_lifecycle.models import Bid, BidOutcomeRecord, BidPayment, BidFollowUp  # noqa
-            from app.contexts.compliance_vault.models import VaultDocument, VaultDocumentMapping  # noqa
-            from app.contexts.company_profile.models import Company  # noqa
-            from app.contexts.user_management.models import User  # noqa
-            from app.contexts.alert_engine.models import Notification, NotificationTemplate, NotificationPreference  # noqa
-            from app.contexts.whatsapp_gateway.models import WhatsAppSession  # noqa
-            from app.contexts.partner_portal.models import CAPartner, CAManagedCompany  # noqa
-            await conn.run_sync(Base.metadata.create_all)
-            logger.info("database_initialized")
+        from app.contexts.tender_discovery.models import Tender  # noqa
+        from app.contexts.bid_generation.models import BidGeneration, BidTemplate, BidGenerationAnalytics  # noqa
+        from app.contexts.bid_lifecycle.models import Bid, BidOutcomeRecord, BidPayment, BidFollowUp  # noqa
+        from app.contexts.compliance_vault.models import VaultDocument, VaultDocumentMapping  # noqa
+        from app.contexts.company_profile.models import Company  # noqa
+        from app.contexts.user_management.models import User  # noqa
+        from app.contexts.alert_engine.models import Notification, NotificationTemplate, NotificationPreference  # noqa
+        from app.contexts.whatsapp_gateway.models import WhatsAppSession  # noqa
+        from app.contexts.partner_portal.models import CAPartner, CAManagedCompany  # noqa
+        logger.info("database_initialized")
     except Exception as e:
         logger.error("database_init_failed", error=str(e))
         raise
