@@ -64,7 +64,7 @@ async def init_db() -> None:
             from app.contexts.compliance_vault.models import VaultDocument, VaultDocumentMapping  # noqa
             from app.contexts.company_profile.models import Company  # noqa
             from app.contexts.user_management.models import User  # noqa
-            from app.contexts.alert_engine.models import AlertRule  # noqa
+            from app.contexts.alert_engine.models import Notification, NotificationTemplate, NotificationPreference  # noqa
             from app.contexts.whatsapp_gateway.models import WhatsAppSession  # noqa
             from app.contexts.partner_portal.models import CAPartner, CAManagedCompany  # noqa
             await conn.run_sync(Base.metadata.create_all)
