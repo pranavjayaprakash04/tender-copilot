@@ -32,11 +32,6 @@ from app.contexts.bid_lifecycle.schemas import (
     PaymentFollowUpResponse,
 )
 from app.contexts.bid_lifecycle.service import BidLifecycleService
-from app.contexts.bid_lifecycle.tasks import (
-    analyze_bid_loss_task,
-    create_payment_schedule_task,
-    process_payment_follow_ups_task,
-)
 from app.dependencies import (
     get_current_company_id,
     get_current_user_id,
@@ -72,7 +67,6 @@ def get_bid_lifecycle_service(
     )
 
 
-# Bid CRUD Operations
 @router.post("", response_model=BaseResponse[BidResponse])
 async def create_bid(
     bid_data: BidCreate,
@@ -186,7 +180,6 @@ async def delete_bid(
     return JSONResponse(content={"message": "Bid deleted successfully"}, status_code=200)
 
 
-# Status Transitions
 @router.post("/{bid_id}/transition", response_model=BaseResponse[dict])
 async def transition_bid_status(
     bid_id: UUID,
@@ -201,11 +194,9 @@ async def transition_bid_status(
     bid_response, outcome_response = await service.transition_bid_status(
         bid_id, company_id, status_transition, outcome_data, trace_id
     )
-
     response_data = {"bid": bid_response.model_dump()}
     if outcome_response:
         response_data["outcome"] = outcome_response.model_dump()
-
     return BaseResponse(data=response_data, trace_id=trace_id)
 
 
@@ -221,7 +212,6 @@ async def get_bid_stats(
     return BaseResponse(data=stats, trace_id=trace_id)
 
 
-# Bulk Operations
 @router.put("/bulk/update", response_model=BaseResponse[list[BidResponse]])
 async def bulk_update_bids(
     bulk_data: BidBulkUpdate,
@@ -248,7 +238,6 @@ async def bulk_transition_bids(
     return BaseResponse(data=bids, trace_id=trace_id)
 
 
-# Outcome Management
 @router.post("/outcomes", response_model=BaseResponse[BidOutcomeRecordResponse])
 async def create_outcome_record(
     outcome_data: BidOutcomeRecordCreate,
@@ -302,7 +291,6 @@ async def delete_outcome_record(
     return JSONResponse(content={"message": "Outcome record deleted successfully"}, status_code=200)
 
 
-# Payment Management
 @router.post("/payments", response_model=BaseResponse[BidPaymentResponse])
 async def create_payment(
     payment_data: BidPaymentCreate,
@@ -395,7 +383,6 @@ async def process_payment_follow_ups(
     return BaseResponse(data=result, trace_id=trace_id)
 
 
-# Follow-up Management
 @router.post("/follow-ups", response_model=BaseResponse[BidFollowUpResponse])
 async def create_follow_up(
     follow_up_data: BidFollowUpCreate,
@@ -474,7 +461,6 @@ async def get_overdue_follow_ups(
     return BaseResponse(data=follow_ups, trace_id=trace_id)
 
 
-# Analysis
 @router.post("/{bid_id}/analyze-loss", response_model=BaseResponse[LossAnalysisResponse])
 async def analyze_bid_loss(
     bid_id: UUID,
@@ -491,7 +477,6 @@ async def analyze_bid_loss(
     return BaseResponse(data=analysis, trace_id=trace_id)
 
 
-# Background Tasks
 @router.post("/{bid_id}/trigger-loss-analysis", response_model=BaseResponse[dict])
 async def trigger_loss_analysis_task(
     bid_id: UUID,
@@ -500,14 +485,10 @@ async def trigger_loss_analysis_task(
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[dict]:
     """Trigger loss analysis as background task."""
+    from app.contexts.bid_lifecycle.tasks import analyze_bid_loss_task
     task = analyze_bid_loss_task.delay(str(bid_id), str(company_id))
-
     return BaseResponse(
-        data={
-            "task_id": task.id,
-            "status": "queued",
-            "message": "Loss analysis task queued successfully"
-        },
+        data={"task_id": task.id, "status": "queued", "message": "Loss analysis task queued successfully"},
         trace_id=trace_id
     )
 
@@ -520,14 +501,10 @@ async def trigger_payment_schedule_task(
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[dict]:
     """Trigger payment schedule creation as background task."""
+    from app.contexts.bid_lifecycle.tasks import create_payment_schedule_task
     task = create_payment_schedule_task.delay(str(bid_id), str(company_id))
-
     return BaseResponse(
-        data={
-            "task_id": task.id,
-            "status": "queued",
-            "message": "Payment schedule creation task queued successfully"
-        },
+        data={"task_id": task.id, "status": "queued", "message": "Payment schedule creation task queued successfully"},
         trace_id=trace_id
     )
 
@@ -541,15 +518,11 @@ async def trigger_payment_follow_up_task(
     trace_id: str = Depends(get_trace_id)
 ) -> BaseResponse[dict]:
     """Trigger payment follow-up processing as background task."""
+    from app.contexts.bid_lifecycle.tasks import process_payment_follow_ups_task
     task = process_payment_follow_ups_task.delay(
         str(company_id), days_overdue, True, send_notifications
     )
-
     return BaseResponse(
-        data={
-            "task_id": task.id,
-            "status": "queued",
-            "message": "Payment follow-up processing task queued successfully"
-        },
+        data={"task_id": task.id, "status": "queued", "message": "Payment follow-up processing task queued successfully"},
         trace_id=trace_id
     )
