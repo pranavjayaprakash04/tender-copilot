@@ -59,8 +59,8 @@ async def init_db() -> None:
     try:
         async with engine.begin() as conn:
             from app.contexts.tender_discovery.models import Tender  # noqa
-            from app.contexts.bid_generation.models import BidGeneration  # noqa
-            from app.contexts.bid_lifecycle.models import BidOutcome, LossAnalysis  # noqa
+            from app.contexts.bid_generation.models import BidGeneration, BidTemplate, BidGenerationAnalytics  # noqa
+            from app.contexts.bid_lifecycle.models import Bid, BidOutcomeRecord, BidPayment, BidFollowUp  # noqa
             from app.contexts.compliance_vault.models import VaultDocument, VaultDocumentMapping  # noqa
             from app.contexts.company_profile.models import Company  # noqa
             from app.contexts.user_management.models import User, CAManagedCompany  # noqa
