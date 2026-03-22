@@ -1,53 +1,72 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tender-copilot.onrender.com';
 
+const getToken = () => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('auth_token');
+  }
+  return null;
+};
+
+const headers = (token?: string) => ({
+  'Content-Type': 'application/json',
+  ...(token || getToken() ? { Authorization: `Bearer ${token || getToken()}` } : {}),
+});
+
+const request = async (method: string, endpoint: string, data?: any, token?: string) => {
+  const res = await fetch(`${API_URL}${endpoint}`, {
+    method,
+    headers: headers(token),
+    ...(data ? { body: JSON.stringify(data) } : {}),
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+};
+
 export const api = {
-  get: async (endpoint: string, token?: string) => {
-    const res = await fetch(`${API_URL}${endpoint}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
-    });
-    if (!res.ok) throw new Error(`API error: ${res.status}`);
-    return res.json();
+  get: (endpoint: string, token?: string) => request('GET', endpoint, undefined, token),
+  post: (endpoint: string, data: any, token?: string) => request('POST', endpoint, data, token),
+  put: (endpoint: string, data: any, token?: string) => request('PUT', endpoint, data, token),
+  delete: (endpoint: string, token?: string) => request('DELETE', endpoint, undefined, token),
+
+  bids: {
+    get: (id: string) => request('GET', `/api/v1/bids/${id}`),
+    list: (params?: any) => request('GET', `/api/v1/bids?${new URLSearchParams(params)}`),
+    create: (data: any) => request('POST', '/api/v1/bids', data),
+    update: (id: string, data: any) => request('PUT', `/api/v1/bids/${id}`, data),
+    updateStatus: (id: string, status: string) => request('POST', `/api/v1/bids/${id}/transition`, { new_status: status }),
+    recordOutcome: (id: string, data: any) => request('POST', '/api/v1/outcomes', { bid_id: id, ...data }),
+    delete: (id: string) => request('DELETE', `/api/v1/bids/${id}`),
   },
 
-  post: async (endpoint: string, data: any, token?: string) => {
-    const res = await fetch(`${API_URL}${endpoint}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error(`API error: ${res.status}`);
-    return res.json();
+  tenders: {
+    get: (id: string) => request('GET', `/api/v1/tenders/${id}`),
+    list: (params?: any) => request('GET', `/api/v1/tenders?${new URLSearchParams(params)}`),
+    create: (data: any) => request('POST', '/api/v1/tenders', data),
+    update: (id: string, data: any) => request('PUT', `/api/v1/tenders/${id}`, data),
+    delete: (id: string) => request('DELETE', `/api/v1/tenders/${id}`),
   },
 
-  put: async (endpoint: string, data: any, token?: string) => {
-    const res = await fetch(`${API_URL}${endpoint}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error(`API error: ${res.status}`);
-    return res.json();
+  companies: {
+    get: (id: string) => request('GET', `/api/v1/companies/${id}`),
+    create: (data: any) => request('POST', '/api/v1/companies', data),
+    update: (id: string, data: any) => request('PUT', `/api/v1/companies/${id}`, data),
   },
 
-  delete: async (endpoint: string, token?: string) => {
-    const res = await fetch(`${API_URL}${endpoint}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
-    });
-    if (!res.ok) throw new Error(`API error: ${res.status}`);
-    return res.json();
+  auth: {
+    login: (data: any) => request('POST', '/api/v1/auth/login', data),
+    register: (data: any) => request('POST', '/api/v1/auth/register', data),
+    me: (token: string) => request('GET', '/api/v1/auth/me', undefined, token),
+  },
+
+  compliance: {
+    list: (params?: any) => request('GET', `/api/v1/vault?${new URLSearchParams(params)}`),
+    upload: (data: any) => request('POST', '/api/v1/vault', data),
+    delete: (id: string) => request('DELETE', `/api/v1/vault/${id}`),
+  },
+
+  alerts: {
+    list: () => request('GET', '/api/v1/notifications'),
+    markRead: (id: string) => request('PUT', `/api/v1/notifications/${id}`, { status: 'read' }),
   },
 };
 
