@@ -1,123 +1,176 @@
-import { createClient } from '@supabase/supabase-js';
+"use client";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tender-copilot.onrender.com';
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { api } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+interface Tender {
+  id: string;
+  title: string;
+  description: string;
+  organization: string;
+  deadline: string;
+  value?: string;
+  category: string;
+  status: 'active' | 'closed' | 'cancelled';
+  posted_date: string;
+  source_url: string;
+  department?: string;
+  state?: string;
+  match_score?: number;
+}
 
-const getToken = async (): Promise<string | null> => {
-  const { data: { session } } = await supabase.auth.getSession();
-  return session?.access_token || null;
-};
+interface TenderListParams {
+  category?: string;
+  state?: string;
+  deadline?: string;
+  search?: string;
+}
 
-const request = async (method: string, endpoint: string, data?: any) => {
-  const token = await getToken();
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
+interface TenderListResponse {
+  tenders: Tender[];
+  total: number;
+  page: number;
+  limit: number;
+}
 
-  const res = await fetch(`${API_URL}${endpoint}`, {
-    method,
-    headers,
-    ...(data ? { body: JSON.stringify(data) } : {}),
+export default function TendersPage() {
+  const [filters, setFilters] = useState<TenderListParams>({
+    category: "",
+    state: "",
+    deadline: "",
+    search: ""
   });
 
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
-  return res.json();
-};
+  const { data: tendersData, isLoading, error } = useQuery<TenderListResponse>({
+    queryKey: ["tenders", filters],
+    queryFn: () => api.tenders.search(filters)
+  });
 
-export const api = {
-  get: (endpoint: string) => request('GET', endpoint),
-  post: (endpoint: string, data: any) => request('POST', endpoint, data),
-  put: (endpoint: string, data: any) => request('PUT', endpoint, data),
-  delete: (endpoint: string) => request('DELETE', endpoint),
+  const getMatchScoreColor = (score: number) => {
+    if (score >= 80) return "bg-green-100 text-green-800";
+    if (score >= 60) return "bg-yellow-100 text-yellow-800";
+    if (score >= 40) return "bg-orange-100 text-orange-800";
+    return "bg-red-100 text-red-800";
+  };
 
-  bids: {
-    get: (id: string) => request('GET', `/api/v1/bids/${id}`),
-    list: (params?: any) => request('GET', `/api/v1/bids${params ? '?' + new URLSearchParams(params) : ''}`),
-    search: (params?: any) => request('GET', `/api/v1/bids${params ? '?' + new URLSearchParams(params) : ''}`),
-    create: (data: any) => request('POST', '/api/v1/bids', data),
-    update: (id: string, data: any) => request('PUT', `/api/v1/bids/${id}`, data),
-    updateStatus: (id: string, status: string) => request('POST', `/api/v1/bids/${id}/transition`, { new_status: status }),
-    recordOutcome: (id: string, data: any) => request('POST', '/api/v1/outcomes', { bid_id: id, ...data }),
-    delete: (id: string) => request('DELETE', `/api/v1/bids/${id}`),
-    generate: (id: string, lang?: string) => request('POST', `/api/v1/bids/${id}/generate`, { lang }),
-    generateContent: (id: string, data?: any) => request('POST', `/api/v1/bids/${id}/generate`, data),
-    getStatus: (taskId: string) => request('GET', `/api/v1/bids/status/${taskId}`),
-    getAnalytics: (id: string) => request('GET', `/api/v1/bids/${id}/analytics`),
-    export: (id: string, format?: string) => request('GET', `/api/v1/bids/${id}/export${format ? '?format=' + format : ''}`),
-    getPreview: (id: string) => request('GET', `/api/v1/bids/${id}/preview`),
-    saveSection: (id: string, section: string, data: any) => request('PUT', `/api/v1/bids/${id}/sections/${section}`, data),
-  },
+  const getDeadlineColor = (deadline: string) => {
+    const days = Math.ceil((new Date(deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+    if (days <= 3) return "text-red-600";
+    if (days <= 7) return "text-orange-600";
+    return "text-green-600";
+  };
 
-  tenders: {
-    get: (id: string) => request('GET', `/api/v1/tenders/${id}`),
-    list: (params?: any) => request('GET', `/api/v1/tenders${params ? '?' + new URLSearchParams(params) : ''}`),
-    search: (params?: any) => request('GET', `/api/v1/tenders${params ? '?' + new URLSearchParams(params) : ''}`),
-    create: (data: any) => request('POST', '/api/v1/tenders', data),
-    update: (id: string, data: any) => request('PUT', `/api/v1/tenders/${id}`, data),
-    delete: (id: string) => request('DELETE', `/api/v1/tenders/${id}`),
-    getMatches: (params?: any) => request('GET', `/api/v1/tenders/matches${params ? '?' + new URLSearchParams(params) : ''}`),
-    getSimilar: (id: string) => request('GET', `/api/v1/tenders/${id}/similar`),
-  },
+  const SkeletonCard = () => (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 animate-pulse">
+      <div className="h-6 bg-gray-200 rounded mb-4 w-3/4"></div>
+      <div className="h-4 bg-gray-200 rounded mb-2 w-1/2"></div>
+      <div className="h-4 bg-gray-200 rounded mb-4 w-1/3"></div>
+      <div className="flex justify-between items-center">
+        <div className="h-8 bg-gray-200 rounded w-20"></div>
+        <div className="h-8 bg-gray-200 rounded w-24"></div>
+      </div>
+    </div>
+  );
 
-  companies: {
-    get: (id: string) => request('GET', `/api/v1/companies/${id}`),
-    getProfile: () => request('GET', '/api/v1/companies/profile'),
-    create: (data: any) => request('POST', '/api/v1/companies', data),
-    update: (id: string, data: any) => request('PUT', `/api/v1/companies/${id}`, data),
-    updateProfile: (data: any) => request('PUT', '/api/v1/companies/profile', data),
-  },
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-6">Tenders</h1>
 
-  auth: {
-    login: (data: any) => request('POST', '/api/v1/auth/login', data),
-    register: (data: any) => request('POST', '/api/v1/auth/register', data),
-    me: () => request('GET', '/api/v1/auth/me'),
-    logout: () => request('POST', '/api/v1/auth/logout'),
-  },
+        {/* Filters */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+            <input
+              type="text"
+              placeholder="Search tenders..."
+              value={filters.search}
+              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <select
+              value={filters.category}
+              onChange={(e) => setFilters({ ...filters, category: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Categories</option>
+              <option value="construction">Construction</option>
+              <option value="it">IT</option>
+              <option value="transport">Transport</option>
+            </select>
+            <select
+              value={filters.state}
+              onChange={(e) => setFilters({ ...filters, state: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All States</option>
+              <option value="tamil-nadu">Tamil Nadu</option>
+              <option value="karnataka">Karnataka</option>
+              <option value="maharashtra">Maharashtra</option>
+            </select>
+            <select
+              value={filters.deadline}
+              onChange={(e) => setFilters({ ...filters, deadline: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Deadlines</option>
+              <option value="3">Next 3 Days</option>
+              <option value="7">Next 7 Days</option>
+              <option value="30">Next 30 Days</option>
+            </select>
+          </div>
+          <Button onClick={() => setFilters({ search: "", category: "", state: "", deadline: "" })}>
+            Clear Filters
+          </Button>
+        </div>
 
-  compliance: {
-    list: (params?: any) => request('GET', `/api/v1/vault${params ? '?' + new URLSearchParams(params) : ''}`),
-    get: (id: string) => request('GET', `/api/v1/vault/${id}`),
-    getDocuments: (params?: any) => request('GET', `/api/v1/vault${params ? '?' + new URLSearchParams(params) : ''}`),
-    upload: (data: any) => request('POST', '/api/v1/vault', data),
-    uploadDocument: (data: any) => request('POST', '/api/v1/vault', data),
-    update: (id: string, data: any) => request('PUT', `/api/v1/vault/${id}`, data),
-    delete: (id: string) => request('DELETE', `/api/v1/vault/${id}`),
-    deleteDocument: (id: string) => request('DELETE', `/api/v1/vault/${id}`),
-    getCategories: () => request('GET', '/api/v1/vault/categories'),
-    download: (id: string) => request('GET', `/api/v1/vault/${id}/download`),
-  },
-
-  alerts: {
-    list: () => request('GET', '/api/v1/notifications'),
-    getActive: () => request('GET', '/api/v1/notifications?status=pending'),
-    markRead: (id: string) => request('PUT', `/api/v1/notifications/${id}`, { status: 'read' }),
-    markAllRead: () => request('PUT', '/api/v1/notifications/mark-all-read', {}),
-    delete: (id: string) => request('DELETE', `/api/v1/notifications/${id}`),
-    getPreferences: () => request('GET', '/api/v1/notifications/preferences'),
-    updatePreferences: (data: any) => request('PUT', '/api/v1/notifications/preferences', data),
-  },
-
-  profile: {
-    get: () => request('GET', '/api/v1/profile'),
-    update: (data: any) => request('PUT', '/api/v1/profile', data),
-    uploadAvatar: (data: any) => request('POST', '/api/v1/profile/avatar', data),
-  },
-
-  partner: {
-    getClients: () => request('GET', '/api/v1/ca/clients'),
-    getClient: (id: string) => request('GET', `/api/v1/ca/clients/${id}`),
-    addClient: (data: any) => request('POST', '/api/v1/ca/clients', data),
-    updateClient: (id: string, data: any) => request('PUT', `/api/v1/ca/clients/${id}`, data),
-    removeClient: (id: string) => request('DELETE', `/api/v1/ca/clients/${id}`),
-    getDashboard: () => request('GET', '/api/v1/ca/dashboard'),
-  },
-};
-
-export default api;
+        {/* Tender Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {isLoading ? (
+            Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)
+          ) : error ? (
+            <div className="col-span-full text-center py-12">
+              <p className="text-red-600 mb-4">Error loading tenders</p>
+              <Button onClick={() => window.location.reload()}>Retry</Button>
+            </div>
+          ) : tendersData?.tenders && tendersData.tenders.length === 0 ? (
+            <div className="col-span-full text-center py-12">
+              <p className="text-gray-600">No tenders found</p>
+            </div>
+          ) : (
+            tendersData?.tenders.map((tender) => (
+              <div key={tender.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">{tender.title}</h3>
+                <p className="text-gray-600 mb-2">{tender.department || tender.organization}</p>
+                <p className="text-lg font-medium text-gray-900 mb-4">
+                  {tender.value ? `₹${parseInt(tender.value).toLocaleString("en-IN")}` : 'Value not specified'}
+                </p>
+                <div className="flex justify-between items-center mb-4">
+                  <span className={cn(
+                    "px-2 py-1 rounded-full text-xs font-medium",
+                    getMatchScoreColor(tender.match_score || 0)
+                  )}>
+                    Match: {tender.match_score || 0}%
+                  </span>
+                  <span className={cn("text-sm font-medium", getDeadlineColor(tender.deadline))}>
+                    {new Date(tender.deadline).toLocaleDateString("en-IN")}
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={() => window.location.href = `/tenders/${tender.id}`}>
+                    View Details
+                  </Button>
+                  <Button size="sm" variant="outline">
+                    Set Alert
+                  </Button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
