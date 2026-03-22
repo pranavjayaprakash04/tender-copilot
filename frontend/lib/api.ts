@@ -7,7 +7,7 @@ const getToken = () => {
   return null;
 };
 
-const headers = (token?: string) => ({
+const headers = (token?: string): Record<string, string> => ({
   'Content-Type': 'application/json',
   ...(token || getToken() ? { Authorization: `Bearer ${token || getToken()}` } : {}),
 });
@@ -30,7 +30,8 @@ export const api = {
 
   bids: {
     get: (id: string) => request('GET', `/api/v1/bids/${id}`),
-    list: (params?: any) => request('GET', `/api/v1/bids?${new URLSearchParams(params)}`),
+    list: (params?: any) => request('GET', `/api/v1/bids${params ? '?' + new URLSearchParams(params) : ''}`),
+    search: (params?: any) => request('GET', `/api/v1/bids${params ? '?' + new URLSearchParams(params) : ''}`),
     create: (data: any) => request('POST', '/api/v1/bids', data),
     update: (id: string, data: any) => request('PUT', `/api/v1/bids/${id}`, data),
     updateStatus: (id: string, status: string) => request('POST', `/api/v1/bids/${id}/transition`, { new_status: status }),
@@ -40,7 +41,8 @@ export const api = {
 
   tenders: {
     get: (id: string) => request('GET', `/api/v1/tenders/${id}`),
-    list: (params?: any) => request('GET', `/api/v1/tenders?${new URLSearchParams(params)}`),
+    list: (params?: any) => request('GET', `/api/v1/tenders${params ? '?' + new URLSearchParams(params) : ''}`),
+    search: (params?: any) => request('GET', `/api/v1/tenders${params ? '?' + new URLSearchParams(params) : ''}`),
     create: (data: any) => request('POST', '/api/v1/tenders', data),
     update: (id: string, data: any) => request('PUT', `/api/v1/tenders/${id}`, data),
     delete: (id: string) => request('DELETE', `/api/v1/tenders/${id}`),
@@ -59,7 +61,7 @@ export const api = {
   },
 
   compliance: {
-    list: (params?: any) => request('GET', `/api/v1/vault?${new URLSearchParams(params)}`),
+    list: (params?: any) => request('GET', `/api/v1/vault${params ? '?' + new URLSearchParams(params) : ''}`),
     upload: (data: any) => request('POST', '/api/v1/vault', data),
     delete: (id: string) => request('DELETE', `/api/v1/vault/${id}`),
   },
