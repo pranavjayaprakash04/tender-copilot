@@ -1,4 +1,4 @@
-"use client";
+import React from "react";
 
 export default function DashboardLayout({
   children,
@@ -21,15 +21,16 @@ export default function DashboardLayout({
                 <a href="/bids" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
                   Bids
                 </a>
+                <a href="/vault" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                  Vault
+                </a>
                 <a href="/alerts" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
                   Alerts
                 </a>
+                <a href="/profile" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                  Profile
+                </a>
               </div>
-            </div>
-            <div className="flex items-center">
-              <button className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium">
-                Sign Out
-              </button>
             </div>
           </div>
         </div>
