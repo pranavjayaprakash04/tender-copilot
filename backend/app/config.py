@@ -3,7 +3,6 @@ from typing import Literal, Optional
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file='.env',
@@ -59,7 +58,13 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ORIGINS: list[str] = Field(
-        default=["http://localhost:3000", "http://localhost:3001", "https://nivedha.ai", "https://www.nivedha.ai"],
+        default=[
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "https://nivedha.ai",
+            "https://www.nivedha.ai",
+            "https://tender-copilot.vercel.app",
+        ],
         description="Allowed CORS origins"
     )
 
@@ -74,6 +79,5 @@ class Settings(BaseSettings):
     # Rate limiting
     RATE_LIMIT_REQUESTS: int = Field(default=100, description="Requests per minute")
     RATE_LIMIT_WINDOW: int = Field(default=60, description="Rate limit window in seconds")
-
 
 settings = Settings()
