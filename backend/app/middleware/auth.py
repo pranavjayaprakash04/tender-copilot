@@ -1,10 +1,8 @@
 from __future__ import annotations
-
 import jwt
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-
 from app.config import settings
 from app.shared.logger import get_logger
 
@@ -17,6 +15,10 @@ SKIP_PATHS = {
 
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        # Always allow OPTIONS preflight requests through for CORS
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
         if request.url.path in SKIP_PATHS or request.url.path.startswith("/docs"):
             return await call_next(request)
 
