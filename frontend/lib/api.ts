@@ -41,6 +41,9 @@ export const api = {
     generateContent: (id: string, data?: any) => request('POST', `/api/v1/bids/${id}/generate`, data),
     getStatus: (taskId: string) => request('GET', `/api/v1/bids/status/${taskId}`),
     getAnalytics: (id: string) => request('GET', `/api/v1/bids/${id}/analytics`),
+    export: (id: string, format?: string) => request('GET', `/api/v1/bids/${id}/export${format ? '?format=' + format : ''}`),
+    getPreview: (id: string) => request('GET', `/api/v1/bids/${id}/preview`),
+    saveSection: (id: string, section: string, data: any) => request('PUT', `/api/v1/bids/${id}/sections/${section}`, data),
   },
 
   tenders: {
