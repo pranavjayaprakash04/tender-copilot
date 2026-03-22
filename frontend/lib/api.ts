@@ -76,10 +76,14 @@ export const api = {
   compliance: {
     list: (params?: any) => request('GET', `/api/v1/vault${params ? '?' + new URLSearchParams(params) : ''}`),
     get: (id: string) => request('GET', `/api/v1/vault/${id}`),
+    getDocuments: (params?: any) => request('GET', `/api/v1/vault${params ? '?' + new URLSearchParams(params) : ''}`),
     upload: (data: any) => request('POST', '/api/v1/vault', data),
+    uploadDocument: (data: any) => request('POST', '/api/v1/vault', data),
     update: (id: string, data: any) => request('PUT', `/api/v1/vault/${id}`, data),
     delete: (id: string) => request('DELETE', `/api/v1/vault/${id}`),
+    deleteDocument: (id: string) => request('DELETE', `/api/v1/vault/${id}`),
     getCategories: () => request('GET', '/api/v1/vault/categories'),
+    download: (id: string) => request('GET', `/api/v1/vault/${id}/download`),
   },
 
   alerts: {
