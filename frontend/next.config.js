@@ -6,9 +6,6 @@ const nextConfig = {
   output: 'standalone',
   experimental: {
     webpackBuildWorker: true,
-    outputFileTracingIncludes: {
-      '/*': ['./app/**/*'],
-    },
   },
   webpack: (config) => {
     config.externals = [...(config.externals || []), { canvas: 'canvas' }];
