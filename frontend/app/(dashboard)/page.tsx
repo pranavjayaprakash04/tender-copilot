@@ -4,6 +4,21 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "next-i18next";
 import { api } from "@/lib/api";
 
+interface Tender {
+  id: string;
+  title: string;
+  organization: string;
+  value?: string;
+  deadline: string;
+}
+
+interface Alert {
+  id?: string;
+  message?: string;
+  subject?: string;
+  created_at?: string;
+}
+
 export default function DashboardPage() {
   const { t } = useTranslation("common");
 
@@ -109,7 +124,7 @@ export default function DashboardPage() {
                 </div>
               ) : tendersData?.tenders && tendersData.tenders.length > 0 ? (
                 <div className="space-y-4">
-                  {tendersData.tenders.slice(0, 5).map((tender) => (
+                  {tendersData.tenders.slice(0, 5).map((tender: Tender) => (
                     <div key={tender.id} className="flex items-center justify-between p-3 bg-gray-50 rounded">
                       <div>
                         <h4 className="text-sm font-medium text-gray-900">{tender.title}</h4>
@@ -149,8 +164,8 @@ export default function DashboardPage() {
                 </div>
               ) : alertsData && alertsData.length > 0 ? (
                 <div className="space-y-4">
-                  {alertsData.slice(0, 5).map((alert, index) => (
-                    <div key={index} className="flex items-center p-3 bg-yellow-50 rounded">
+                  {alertsData.slice(0, 5).map((alert: Alert, index: number) => (
+                    <div key={alert.id || index} className="flex items-center p-3 bg-yellow-50 rounded">
                       <div className="flex-shrink-0">
                         <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
@@ -158,10 +173,10 @@ export default function DashboardPage() {
                       </div>
                       <div className="ml-3">
                         <p className="text-sm font-medium text-gray-900">
-                          {typeof alert === 'string' ? alert : 'New alert'}
+                          {alert.subject || alert.message || 'New alert'}
                         </p>
                         <p className="text-xs text-gray-500">
-                          {new Date().toLocaleDateString()}
+                          {alert.created_at ? new Date(alert.created_at).toLocaleDateString() : new Date().toLocaleDateString()}
                         </p>
                       </div>
                     </div>
