@@ -62,7 +62,12 @@ def create_app() -> FastAPI:
         redoc_url="/redoc" if settings.ENVIRONMENT == "development" else None,
     )
 
-    # Add CORS middleware
+    # Middleware runs in REVERSE order of registration.
+    # TenantMiddleware added first → runs last (innermost)
+    # CORSMiddleware added last → runs first (outermost) — must be outermost to handle preflight
+    app.add_middleware(TenantMiddleware)
+    app.add_middleware(AuthMiddleware)
+    app.middleware("http")(logging_middleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.CORS_ORIGINS,
@@ -70,11 +75,6 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-
-    # Add custom middleware
-    app.middleware("http")(logging_middleware)
-    app.add_middleware(AuthMiddleware)
-    app.add_middleware(TenantMiddleware)
 
     # Add exception handler
     app.add_exception_handler(AppException, global_exception_handler)
@@ -84,7 +84,7 @@ def create_app() -> FastAPI:
     async def health_check():
         return {"status": "ok", "version": "1.5.0"}
 
-    # Register routers (will be uncommented as contexts are implemented)
+    # Register routers
     app.include_router(tender_discovery_router, prefix="/api/v1")
     app.include_router(tender_intelligence_router, prefix="/api/v1")
     app.include_router(tender_matching_router, prefix="/api/v1")
