@@ -37,7 +37,9 @@ export const api = {
     updateStatus: (id: string, status: string) => request('POST', `/api/v1/bids/${id}/transition`, { new_status: status }),
     recordOutcome: (id: string, data: any) => request('POST', '/api/v1/outcomes', { bid_id: id, ...data }),
     delete: (id: string) => request('DELETE', `/api/v1/bids/${id}`),
+    generate: (id: string, lang?: string) => request('POST', `/api/v1/bids/${id}/generate`, { lang }),
     generateContent: (id: string, data?: any) => request('POST', `/api/v1/bids/${id}/generate`, data),
+    getStatus: (taskId: string) => request('GET', `/api/v1/bids/status/${taskId}`),
     getAnalytics: (id: string) => request('GET', `/api/v1/bids/${id}/analytics`),
   },
 
