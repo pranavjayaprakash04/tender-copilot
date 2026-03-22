@@ -44,9 +44,14 @@ export default function TendersPage() {
     search: ""
   });
 
-  const { data: tendersData, isLoading, error } = useQuery<TenderListResponse>({
-    queryKey: ["tenders", filters],
-    queryFn: () => api.tenders.search(filters)
+  // Strip empty string values before sending to API
+  const activeFilters = Object.fromEntries(
+    Object.entries(filters).filter(([_, v]) => v !== "")
+  );
+
+  const { data: tendersData, isLoading, error, refetch } = useQuery<TenderListResponse>({
+    queryKey: ["tenders", activeFilters],
+    queryFn: () => api.tenders.search(activeFilters)
   });
 
   const getMatchScoreColor = (score: number) => {
@@ -97,8 +102,19 @@ export default function TendersPage() {
             >
               <option value="">All Categories</option>
               <option value="construction">Construction</option>
-              <option value="it">IT</option>
-              <option value="transport">Transport</option>
+              <option value="services">Services</option>
+              <option value="supply">Supply</option>
+              <option value="it_software">IT / Software</option>
+              <option value="manufacturing">Manufacturing</option>
+              <option value="consulting">Consulting</option>
+              <option value="healthcare">Healthcare</option>
+              <option value="education">Education</option>
+              <option value="transportation">Transportation</option>
+              <option value="energy">Energy</option>
+              <option value="telecom">Telecom</option>
+              <option value="agriculture">Agriculture</option>
+              <option value="defense">Defense</option>
+              <option value="other">Other</option>
             </select>
             <select
               value={filters.state}
@@ -133,11 +149,11 @@ export default function TendersPage() {
           ) : error ? (
             <div className="col-span-full text-center py-12">
               <p className="text-red-600 mb-4">Error loading tenders</p>
-              <Button onClick={() => window.location.reload()}>Retry</Button>
+              <Button onClick={() => refetch()}>Retry</Button>
             </div>
           ) : tendersData?.tenders && tendersData.tenders.length === 0 ? (
             <div className="col-span-full text-center py-12">
-              <p className="text-gray-600">No tenders found</p>
+              <p className="text-gray-600">No tenders found matching your filters</p>
             </div>
           ) : (
             tendersData?.tenders.map((tender) => (
