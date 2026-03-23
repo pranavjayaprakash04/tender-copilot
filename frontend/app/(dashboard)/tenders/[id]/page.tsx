@@ -9,24 +9,29 @@ interface TenderDetail {
   id: string;
   tender_id: string;
   title: string;
-  organization: string;       // was: organisation
-  state: string | null;       // was: location
+  organization: string;
+  state: string | null;
   category: string | null;
-  value: string | null;       // was: estimated_value (backend returns string)
+  value: string | null;
   deadline: string | null;
   posted_date: string | null;
   description: string | null;
   source_url: string | null;
   status: string | null;
-  emd_amount: string | null;  // was: number (backend returns string)
+  emd_amount: string | null;
   document_fee: string | null;
 }
 
 export default function TenderDetailPage({ params }: { params: { id: string } }) {
-  const { data: tender, isLoading, error, refetch } = useQuery<TenderDetail>({
+  const { data: rawData, isLoading, error, refetch } = useQuery({
     queryKey: ["tender", params.id],
     queryFn: () => api.tenders.get(params.id),
   });
+
+  // Defensively unwrap: handles both { data: {...} } and the object directly
+  const tender: TenderDetail | null = rawData
+    ? ((rawData as any).data ?? rawData) as TenderDetail
+    : null;
 
   const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return "—";
@@ -36,7 +41,7 @@ export default function TenderDetailPage({ params }: { params: { id: string } })
   };
 
   const formatCurrency = (value: string | number | null | undefined) => {
-    if (!value) return "—";
+    if (value === null || value === undefined || value === "") return "—";
     const num = typeof value === "string" ? parseFloat(value) : value;
     if (isNaN(num)) return "—";
     return new Intl.NumberFormat("en-IN", {
@@ -148,12 +153,10 @@ export default function TenderDetailPage({ params }: { params: { id: string } })
               <p className="text-gray-500">Estimated Value</p>
               <p className="font-medium text-gray-900">{formatCurrency(tender.value)}</p>
             </div>
-            {tender.emd_amount && (
-              <div>
-                <p className="text-gray-500">EMD Amount</p>
-                <p className="font-medium text-gray-900">{formatCurrency(tender.emd_amount)}</p>
-              </div>
-            )}
+            <div>
+              <p className="text-gray-500">EMD Amount</p>
+              <p className="font-medium text-gray-900">{formatCurrency(tender.emd_amount)}</p>
+            </div>
             {tender.document_fee && (
               <div>
                 <p className="text-gray-500">Document Fee</p>
