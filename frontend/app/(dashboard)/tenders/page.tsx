@@ -29,13 +29,6 @@ interface TenderListParams {
   search?: string;
 }
 
-interface TenderListResponse {
-  tenders: Tender[];
-  total: number;
-  page: number;
-  limit: number;
-}
-
 export default function TendersPage() {
   const [filters, setFilters] = useState<TenderListParams>({
     category: "",
@@ -49,7 +42,7 @@ export default function TendersPage() {
     Object.entries(filters).filter(([_, v]) => v !== "")
   );
 
-  const { data: tendersData, isLoading, error, refetch } = useQuery<TenderListResponse>({
+  const { data: tenders, isLoading, error, refetch } = useQuery<Tender[]>({
     queryKey: ["tenders", activeFilters],
     queryFn: () => api.tenders.search(activeFilters)
   });
@@ -151,12 +144,12 @@ export default function TendersPage() {
               <p className="text-red-600 mb-4">Error loading tenders</p>
               <Button onClick={() => refetch()}>Retry</Button>
             </div>
-          ) : tendersData?.tenders && tendersData.tenders.length === 0 ? (
+          ) : tenders && tenders.length === 0 ? (
             <div className="col-span-full text-center py-12">
               <p className="text-gray-600">No tenders found matching your filters</p>
             </div>
           ) : (
-            tendersData?.tenders.map((tender) => (
+            tenders?.map((tender) => (
               <div key={tender.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">{tender.title}</h3>
                 <p className="text-gray-600 mb-2">{tender.department || tender.organization}</p>
