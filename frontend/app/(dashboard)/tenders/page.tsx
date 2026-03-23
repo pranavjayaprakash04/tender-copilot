@@ -122,27 +122,16 @@ export default function TendersPage() {
               onChange={(e) => setFilters({ ...filters, search: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            {/* Category values must match TenderCategory enum exactly (lowercase) */}
+            {/* Category values match exactly what's stored in the DB */}
             <select
               value={filters.category}
               onChange={(e) => setFilters({ ...filters, category: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Categories</option>
-              <option value="construction">Construction</option>
-              <option value="services">Services</option>
-              <option value="supply">Supply</option>
-              <option value="it_software">IT / Software</option>
-              <option value="manufacturing">Manufacturing</option>
-              <option value="consulting">Consulting</option>
-              <option value="healthcare">Healthcare</option>
-              <option value="education">Education</option>
-              <option value="transportation">Transportation</option>
-              <option value="energy">Energy</option>
-              <option value="telecom">Telecom</option>
-              <option value="agriculture">Agriculture</option>
-              <option value="defense">Defense</option>
-              <option value="other">Other</option>
+              <option value="Works">Works</option>
+              <option value="Goods">Goods</option>
+              <option value="Services">Services</option>
             </select>
             <select
               value={filters.state}
@@ -172,6 +161,7 @@ export default function TendersPage() {
               <option value="Himachal Pradesh">Himachal Pradesh</option>
               <option value="Uttarakhand">Uttarakhand</option>
               <option value="Goa">Goa</option>
+              <option value="Jammu and Kashmir">Jammu and Kashmir</option>
             </select>
             {/* deadline value is sent as deadline_days (number of days) via api.ts mapper */}
             <select
