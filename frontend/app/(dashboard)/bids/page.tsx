@@ -35,7 +35,6 @@ const statusColors = {
 export default function BidsPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
-  // Only pass status param when a real filter is selected
   const params = statusFilter === "all" ? {} : { status: statusFilter };
 
   const { data: bidsData, isLoading, error, refetch } = useQuery<BidListResponse>({
@@ -93,14 +92,16 @@ export default function BidsPage() {
                   <p className="text-gray-600 mb-4">
                     {statusFilter === "all" ? "No bids found" : "No bids with this status"}
                   </p>
-                  <Button onClick={() => window.location.href = "/tenders"}>View Tenders</Button>
+                  <Button onClick={() => { window.location.href = "/tenders"; }}>
+                    View Tenders
+                  </Button>
                 </div>
               ) : (
                 bids.map((bid) => (
                   <div
                     key={bid.id}
                     className="p-6 hover:bg-gray-50 transition-colors cursor-pointer"
-                    onClick={() => window.location.href = `/bids/${bid.id}`}
+                    onClick={() => { window.location.href = `/bids/${bid.id}`; }}
                   >
                     <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                       <div className="flex-1">
@@ -114,7 +115,14 @@ export default function BidsPage() {
                         <span className={cn("px-3 py-1 rounded-full text-sm font-medium", statusColors[bid.status])}>
                           {getStatusText(bid.status)}
                         </span>
-                        <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); window.location.href = `/bids/${bid.id}`; }}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e: React.MouseEvent) => {
+                            e.stopPropagation();
+                            window.location.href = `/bids/${bid.id}`;
+                          }}
+                        >
                           View
                         </Button>
                       </div>
