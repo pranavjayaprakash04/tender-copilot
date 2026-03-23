@@ -7,18 +7,20 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
+// Matches backend TenderResponse field names exactly
 interface Tender {
   id: string;
+  tender_id: string;
   title: string;
   description: string;
-  organization: string;
-  deadline: string | null;
-  value?: string | null;
+  procuring_entity: string;         // was: organization
+  bid_submission_deadline: string | null; // was: deadline
+  estimated_value?: number | null;  // was: value (and is number, not string)
+  emd_amount?: number | null;
   category: string | null;
-  status: 'active' | 'closed' | 'cancelled';
-  posted_date: string | null;
+  status: string;
+  published_date: string | null;    // was: posted_date
   source_url: string | null;
-  department?: string | null;
   state?: string | null;
   match_score?: number | null;
 }
@@ -26,11 +28,11 @@ interface Tender {
 interface TenderListParams {
   category?: string;
   state?: string;
-  deadline?: string;
-  search?: string;
+  deadline?: string;   // mapped to deadline_days in api.ts
+  search?: string;     // mapped to search_query in api.ts
 }
 
-// FIX 5: SkeletonCard outside component — not recreated on every render
+// Outside component — not recreated on every render
 const SkeletonCard = () => (
   <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 animate-pulse">
     <div className="h-6 bg-gray-200 rounded mb-4 w-3/4"></div>
@@ -43,7 +45,6 @@ const SkeletonCard = () => (
   </div>
 );
 
-// FIX 1 & 2: All deadline helpers are null-safe
 const getDeadlineColor = (deadline: string | null | undefined) => {
   if (!deadline) return "text-gray-400";
   const d = new Date(deadline);
@@ -61,11 +62,9 @@ const formatDeadline = (deadline: string | null | undefined) => {
   return d.toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric" });
 };
 
-const formatValue = (value: string | null | undefined) => {
-  if (!value) return "Value not specified";
-  const num = parseFloat(value);
-  if (isNaN(num)) return "Value not specified";
-  return `₹${num.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+const formatValue = (value: number | null | undefined) => {
+  if (value === null || value === undefined) return "Value not specified";
+  return `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 };
 
 const getMatchScoreColor = (score: number) => {
@@ -76,34 +75,31 @@ const getMatchScoreColor = (score: number) => {
 };
 
 export default function TendersPage() {
-  const router = useRouter(); // FIX 4: Next.js router
+  const router = useRouter();
 
   const [filters, setFilters] = useState<TenderListParams>({
     category: "",
     state: "",
     deadline: "",
-    search: ""
+    search: "",
   });
 
-  // FIX 3: Debounced search — only fires API call 400ms after user stops typing
+  // Debounced search — only fires API call 400ms after user stops typing
   const [debouncedSearch, setDebouncedSearch] = useState("");
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(filters.search || ""), 400);
     return () => clearTimeout(timer);
   }, [filters.search]);
 
-  // Strip empty string values before sending to API
+  // Strip empty values; use debounced search
   const activeFilters = Object.fromEntries(
-    Object.entries({
-      ...filters,
-      search: debouncedSearch,
-    }).filter(([_, v]) => v !== "")
+    Object.entries({ ...filters, search: debouncedSearch }).filter(([_, v]) => v !== "")
   );
 
   const { data: tenders, isLoading, error, refetch } = useQuery<Tender[]>({
     queryKey: ["tenders", activeFilters],
     queryFn: () => api.tenders.search(activeFilters),
-    staleTime: 60_000, // FIX 6: cache for 1 min, no refetch on window focus
+    staleTime: 60_000,
   });
 
   const clearFilters = useCallback(() => {
@@ -126,26 +122,27 @@ export default function TendersPage() {
               onChange={(e) => setFilters({ ...filters, search: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+            {/* Category values must match TenderCategory enum exactly (lowercase) */}
             <select
               value={filters.category}
               onChange={(e) => setFilters({ ...filters, category: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Categories</option>
-              <option value="Construction">Construction</option>
-              <option value="Services">Services</option>
-              <option value="Supply">Supply</option>
-              <option value="IT / Software">IT / Software</option>
-              <option value="Manufacturing">Manufacturing</option>
-              <option value="Consulting">Consulting</option>
-              <option value="Healthcare">Healthcare</option>
-              <option value="Education">Education</option>
-              <option value="Transportation">Transportation</option>
-              <option value="Energy">Energy</option>
-              <option value="Telecom">Telecom</option>
-              <option value="Agriculture">Agriculture</option>
-              <option value="Defense">Defense</option>
-              <option value="Other">Other</option>
+              <option value="construction">Construction</option>
+              <option value="services">Services</option>
+              <option value="supply">Supply</option>
+              <option value="it_software">IT / Software</option>
+              <option value="manufacturing">Manufacturing</option>
+              <option value="consulting">Consulting</option>
+              <option value="healthcare">Healthcare</option>
+              <option value="education">Education</option>
+              <option value="transportation">Transportation</option>
+              <option value="energy">Energy</option>
+              <option value="telecom">Telecom</option>
+              <option value="agriculture">Agriculture</option>
+              <option value="defense">Defense</option>
+              <option value="other">Other</option>
             </select>
             <select
               value={filters.state}
@@ -176,6 +173,7 @@ export default function TendersPage() {
               <option value="Uttarakhand">Uttarakhand</option>
               <option value="Goa">Goa</option>
             </select>
+            {/* deadline value is sent as deadline_days (number of days) via api.ts mapper */}
             <select
               value={filters.deadline}
               onChange={(e) => setFilters({ ...filters, deadline: e.target.value })}
@@ -187,9 +185,7 @@ export default function TendersPage() {
               <option value="30">Next 30 Days</option>
             </select>
           </div>
-          <Button onClick={clearFilters}>
-            Clear Filters
-          </Button>
+          <Button onClick={clearFilters}>Clear Filters</Button>
         </div>
 
         {/* Tender Cards */}
@@ -214,11 +210,11 @@ export default function TendersPage() {
                 <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
                   {tender.title}
                 </h3>
-                <p className="text-gray-600 mb-2 truncate">
-                  {tender.department || tender.organization}
-                </p>
+                {/* procuring_entity replaces organization */}
+                <p className="text-gray-600 mb-2 truncate">{tender.procuring_entity}</p>
+                {/* estimated_value is now a number */}
                 <p className="text-lg font-medium text-gray-900 mb-4">
-                  {formatValue(tender.value)}
+                  {formatValue(tender.estimated_value)}
                 </p>
                 <div className="flex justify-between items-center mb-4">
                   <span className={cn(
@@ -227,13 +223,12 @@ export default function TendersPage() {
                   )}>
                     Match: {tender.match_score || 0}%
                   </span>
-                  {/* FIX 1 & 2: null-safe deadline display */}
-                  <span className={cn("text-sm font-medium", getDeadlineColor(tender.deadline))}>
-                    {formatDeadline(tender.deadline)}
+                  {/* bid_submission_deadline replaces deadline */}
+                  <span className={cn("text-sm font-medium", getDeadlineColor(tender.bid_submission_deadline))}>
+                    {formatDeadline(tender.bid_submission_deadline)}
                   </span>
                 </div>
                 <div className="flex gap-2">
-                  {/* FIX 4: Next.js router.push — no full page reload */}
                   <Button size="sm" onClick={() => router.push(`/tenders/${tender.id}`)}>
                     View Details
                   </Button>
