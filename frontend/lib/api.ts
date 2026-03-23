@@ -57,8 +57,8 @@ export const api = {
 
   tenders: {
     get: (id: string) => request('GET', `/api/v1/tenders/${id}`).then((res: any) => res.data),
-    list: (params?: any) => request('GET', `/api/v1/tenders${params ? '?' + new URLSearchParams(params) : ''}`).then((res: any) => res.data),
-    search: (params?: any) => request('GET', `/api/v1/tenders${params ? '?' + new URLSearchParams(params) : ''}`).then((res: any) => res.data),
+    list: (params?: any) => request('GET', `/api/v1/tenders${params ? '?' + new URLSearchParams(params) : ''}`).then((res: any) => res.tenders ?? res.data ?? res),
+    search: (params?: any) => request('GET', `/api/v1/tenders${params ? '?' + new URLSearchParams(params) : ''}`).then((res: any) => res.tenders ?? res.data ?? res),
     create: (data: any) => request('POST', '/api/v1/tenders', data),
     update: (id: string, data: any) => request('PUT', `/api/v1/tenders/${id}`, data),
     delete: (id: string) => request('DELETE', `/api/v1/tenders/${id}`),
