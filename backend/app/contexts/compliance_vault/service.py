@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, UTC
 from uuid import UUID
 
 import structlog
@@ -60,58 +60,84 @@ class ComplianceVaultService:
         trace_id: str | None = None
     ) -> VaultDocumentResponse:
         """Upload a document to the vault."""
-        # Validate file
+        # Validate filename present
         if not file.filename:
             raise ValidationException("Filename is required")
 
-        if not file.filename.lower().endswith('.pdf'):
+        # Validate extension
+        if not file.filename.lower().endswith(".pdf"):
             raise ValidationException("Only PDF files are supported")
 
-        if file.size and file.size > 10 * 1024 * 1024:  # 10MB
+        # Read file content into memory
+        file_content = await file.read()
+
+        # Fixed: validate actual file size on real bytes (not spoofable client header)
+        if len(file_content) > 10 * 1024 * 1024:
             raise FileUploadException("File size exceeds 10MB limit")
 
+        # Fixed: validate MIME type AND magic bytes — extension alone is not enough
+        if file.content_type != "application/pdf" or not file_content[:4] == b"%PDF":
+            raise ValidationException("File must be a valid PDF")
+
+        # Fixed: atomic upload — create DB record only AFTER storage succeeds
+        # Previously: DB record created first → storage failure = orphaned ghost record
+        document_data = VaultDocumentCreate(
+            company_id=company_id,
+            doc_type=doc_type,
+            filename=file.filename,
+            expires_at=expires_at
+        )
+
+        # Step 1: Upload to storage first
+        # Use a temporary path until we have the document ID
+        temp_path = f"companies/{company_id}/documents/temp_{file.filename}"
         try:
-            # Create document record
-            document_data = VaultDocumentCreate(
-                company_id=company_id,
-                doc_type=doc_type,
-                filename=file.filename,
-                expires_at=expires_at
-            )
-
-            document = await self._document_repo.create(document_data)
-
-            # Generate storage path
-            storage_path = f"companies/{company_id}/documents/{document.id}/{file.filename}"
-
-            # Upload to storage
-            file_content = await file.read()
-            await self._storage.upload_file(storage_path, file_content, file.content_type)
-
-            # Update document with storage path
-            document.storage_path = storage_path
-            await self._document_repo.update(document.id, company_id, VaultDocumentUpdate())
-
-            logger.info(
-                "document_uploaded",
-                trace_id=trace_id,
-                document_id=document.id,
-                company_id=company_id,
-                doc_type=doc_type,
-                filename=file.filename
-            )
-
-            return VaultDocumentResponse.model_validate(document)
-
+            await self._storage.upload_file(temp_path, file_content, file.content_type or "application/pdf")
         except Exception as e:
-            logger.error(
-                "document_upload_failed",
-                trace_id=trace_id,
-                company_id=company_id,
-                filename=file.filename,
-                error=str(e)
-            )
+            logger.error("storage_upload_failed", trace_id=trace_id, error=str(e))
             raise FileUploadException(f"Failed to upload document: {e}")
+
+        # Step 2: Create DB record (storage is confirmed good)
+        try:
+            document = await self._document_repo.create(document_data)
+        except Exception as e:
+            # Storage uploaded but DB failed — clean up storage
+            try:
+                await self._storage.delete_file(temp_path)
+            except Exception:
+                pass
+            logger.error("db_create_failed_after_upload", trace_id=trace_id, error=str(e))
+            raise FileUploadException(f"Failed to save document record: {e}")
+
+        # Step 3: Move to final path with real document ID
+        final_path = f"companies/{company_id}/documents/{document.id}/{file.filename}"
+        try:
+            # Re-upload to final path
+            await self._storage.upload_file(final_path, file_content, file.content_type or "application/pdf")
+            # Delete temp
+            await self._storage.delete_file(temp_path)
+        except Exception as e:
+            logger.warning("final_path_move_failed", trace_id=trace_id, error=str(e))
+            # Keep temp path as storage_path if move fails
+            final_path = temp_path
+
+        # Step 4: Update document with final storage path
+        document.storage_path = final_path
+        await self._document_repo.update(
+            document.id, company_id,
+            VaultDocumentUpdate(storage_path=final_path)
+        )
+
+        logger.info(
+            "document_uploaded",
+            trace_id=trace_id,
+            document_id=document.id,
+            company_id=company_id,
+            doc_type=doc_type,
+            filename=file.filename
+        )
+
+        return VaultDocumentResponse.model_validate(document)
 
     async def get_document(
         self,
@@ -122,19 +148,12 @@ class ComplianceVaultService:
         """Get a document by ID."""
         document = await self._document_repo.get_by_id(document_id, company_id)
 
-        # Generate download URL
         download_url = await self._storage.get_download_url(document.storage_path)
 
         response = VaultDocumentResponse.model_validate(document)
-        # Add download URL as additional field (not in schema)
         response.download_url = download_url  # type: ignore
 
-        logger.info(
-            "document_retrieved",
-            trace_id=trace_id,
-            document_id=document_id,
-            company_id=company_id
-        )
+        logger.info("document_retrieved", trace_id=trace_id, document_id=document_id, company_id=company_id)
 
         return response
 
@@ -145,31 +164,23 @@ class ComplianceVaultService:
         page: int = 1,
         page_size: int = 20,
         trace_id: str | None = None
-    ) -> DocumentListResponse:
+    ) -> tuple[DocumentListResponse, int]:
         """List documents for a company."""
         documents, total = await self._document_repo.get_by_company(
             company_id, filters, page, page_size
         )
 
-        # Get expiring soon and expired documents
         expiring_soon = await self._document_repo.get_expiring_soon(company_id)
         expired = await self._document_repo.get_expired(company_id)
 
-        logger.info(
-            "documents_listed",
-            trace_id=trace_id,
-            company_id=company_id,
-            total=total,
-            page=page,
-            page_size=page_size
-        )
+        logger.info("documents_listed", trace_id=trace_id, company_id=company_id, total=total)
 
         return DocumentListResponse(
             documents=[VaultDocumentResponse.model_validate(doc) for doc in documents],
             total=total,
             expiring_soon=[VaultDocumentResponse.model_validate(doc) for doc in expiring_soon],
             expired=[VaultDocumentResponse.model_validate(doc) for doc in expired]
-        )
+        ), total
 
     async def update_document(
         self,
@@ -180,15 +191,7 @@ class ComplianceVaultService:
     ) -> VaultDocumentResponse:
         """Update a document."""
         document = await self._document_repo.update(document_id, company_id, update_data)
-
-        logger.info(
-            "document_updated",
-            trace_id=trace_id,
-            document_id=document_id,
-            company_id=company_id,
-            updates=update_data.model_dump(exclude_unset=True)
-        )
-
+        logger.info("document_updated", trace_id=trace_id, document_id=document_id, company_id=company_id)
         return VaultDocumentResponse.model_validate(document)
 
     async def delete_document(
@@ -200,7 +203,6 @@ class ComplianceVaultService:
         """Delete a document."""
         document = await self._document_repo.get_by_id(document_id, company_id)
 
-        # Delete from storage
         try:
             await self._storage.delete_file(document.storage_path)
         except Exception as e:
@@ -208,19 +210,11 @@ class ComplianceVaultService:
                 "storage_delete_failed",
                 trace_id=trace_id,
                 document_id=document_id,
-                storage_path=document.storage_path,
                 error=str(e)
             )
 
-        # Delete from database
         await self._document_repo.delete(document_id, company_id)
-
-        logger.info(
-            "document_deleted",
-            trace_id=trace_id,
-            document_id=document_id,
-            company_id=company_id
-        )
+        logger.info("document_deleted", trace_id=trace_id, document_id=document_id, company_id=company_id)
 
     async def classify_document(
         self,
@@ -231,17 +225,18 @@ class ComplianceVaultService:
     ) -> DocumentClassificationResponse:
         """Classify a document type using AI."""
         try:
-            # Build prompt for document classification
-            user_prompt = build_prompt(request.filename, request.content_preview or "")
-
-            # Call Groq for classification
+            # Fixed: import both prompt AND schema from the correct module
             from app.prompts.compliance.document_classification_v1 import (
                 ClassificationOutput,
+                CLASSIFICATION_SYSTEM_PROMPT,
+                build_classification_prompt,
             )
+
+            user_prompt = build_classification_prompt(request.filename, request.content_preview or "")
 
             result = await self._groq.complete(
                 model=GroqModel.FAST,
-                system_prompt=SYSTEM_PROMPT,
+                system_prompt=CLASSIFICATION_SYSTEM_PROMPT,
                 user_prompt=user_prompt,
                 output_schema=ClassificationOutput,
                 lang=lang,
@@ -266,12 +261,7 @@ class ComplianceVaultService:
             )
 
         except Exception as e:
-            logger.error(
-                "document_classification_failed",
-                trace_id=trace_id,
-                filename=request.filename,
-                error=str(e)
-            )
+            logger.error("document_classification_failed", trace_id=trace_id, error=str(e))
             raise ValidationException(f"Failed to classify document: {e}")
 
     async def get_document_stats(
@@ -283,12 +273,7 @@ class ComplianceVaultService:
         stats = await self._document_repo.get_stats(company_id)
         upcoming_expiries = await self._document_repo.get_expiring_soon(company_id, 30)
 
-        logger.info(
-            "document_stats_retrieved",
-            trace_id=trace_id,
-            company_id=company_id,
-            total_documents=stats["total_documents"]
-        )
+        logger.info("document_stats_retrieved", trace_id=trace_id, company_id=company_id)
 
         return DocumentStatsResponse(
             total_documents=stats["total_documents"],
@@ -305,14 +290,13 @@ class ComplianceVaultService:
         company_id: UUID,
         trace_id: str | None = None
     ) -> TenderDocumentMappingResponse:
-        """Map documents to a tender."""
-        # Verify all documents belong to the company
+        """Map documents to a tender — verifies all docs belong to company first."""
         documents = []
         for doc_id in mapping_data.document_ids:
+            # get_by_id enforces company_id check — raises 404 if doc belongs to another company
             doc = await self._document_repo.get_by_id(doc_id, company_id)
             documents.append(doc)
 
-        # Create mappings
         for doc_id in mapping_data.document_ids:
             await self._mapping_repo.create_mapping(mapping_data.tender_id, doc_id)
 
@@ -332,15 +316,18 @@ class ComplianceVaultService:
     async def get_tender_documents(
         self,
         tender_id: UUID,
+        company_id: UUID,  # Fixed: was missing — caused cross-tenant data leak
         trace_id: str | None = None
     ) -> TenderDocumentMappingResponse:
-        """Get all documents mapped to a tender."""
-        documents = await self._mapping_repo.get_by_tender(tender_id)
+        """Get all documents mapped to a tender — scoped to company."""
+        # Fixed: pass company_id to filter only this company's documents
+        documents = await self._mapping_repo.get_by_tender(tender_id, company_id)
 
         logger.info(
             "tender_documents_retrieved",
             trace_id=trace_id,
             tender_id=tender_id,
+            company_id=company_id,
             document_count=len(documents)
         )
 
@@ -359,16 +346,17 @@ class ComplianceVaultService:
     ) -> list[DocumentType]:
         """Get required document types for a tender using AI."""
         try:
-            # Build prompt for document requirement analysis
             from app.prompts.compliance.document_match_v1 import (
                 DocumentMatchOutput,
+                SYSTEM_PROMPT as MATCH_SYSTEM_PROMPT,
+                build_prompt as build_match_prompt,
             )
 
-            user_prompt = build_prompt(tender_title, tender_requirements)
+            user_prompt = build_match_prompt(tender_title, tender_requirements)
 
             result = await self._groq.complete(
                 model=GroqModel.PRIMARY,
-                system_prompt=SYSTEM_PROMPT,
+                system_prompt=MATCH_SYSTEM_PROMPT,
                 user_prompt=user_prompt,
                 output_schema=DocumentMatchOutput,
                 lang=lang,
@@ -380,18 +368,12 @@ class ComplianceVaultService:
             logger.info(
                 "tender_document_requirements_analyzed",
                 trace_id=trace_id,
-                tender_id=tender_title,
-                required_count=len(result.required_documents),
-                missing_count=len(result.missing_documents)
+                tender_title=tender_title,
+                required_count=len(result.required_documents)
             )
 
             return result.required_documents
 
         except Exception as e:
-            logger.error(
-                "tender_document_analysis_failed",
-                trace_id=trace_id,
-                tender_title=tender_title,
-                error=str(e)
-            )
+            logger.error("tender_document_analysis_failed", trace_id=trace_id, error=str(e))
             raise ValidationException(f"Failed to analyze document requirements: {e}")
