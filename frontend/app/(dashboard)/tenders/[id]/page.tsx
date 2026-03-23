@@ -74,9 +74,9 @@ export default function TenderDetailPage({ params }: { params: { id: string } })
         <div className="text-center">
           <p className="text-red-600 mb-4">Failed to load tender</p>
           <Button onClick={() => refetch()}>Retry</Button>
-          <Button variant="outline" className="ml-2" onClick={() => window.history.back()}>
+          <button onClick={() => window.history.back()} className="ml-2 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
             Go Back
-          </Button>
+          </button>
         </div>
       </div>
     );
