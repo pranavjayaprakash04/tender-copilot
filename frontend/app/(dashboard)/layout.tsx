@@ -1,6 +1,6 @@
 "use client";
-
 import React from "react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const navLinks = [
@@ -31,7 +31,8 @@ export default function DashboardLayout({
                 {navLinks.map(({ href, label }) => {
                   const isActive = pathname === href || pathname.startsWith(href + "/");
                   return (
-                    <a
+                    // Fixed: use Next.js Link instead of <a> to prevent full page reloads
+                    <Link
                       key={href}
                       href={href}
                       className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors ${
@@ -41,7 +42,7 @@ export default function DashboardLayout({
                       }`}
                     >
                       {label}
-                    </a>
+                    </Link>
                   );
                 })}
               </div>
