@@ -9,17 +9,17 @@ interface TenderDetail {
   id: string;
   tender_id: string;
   title: string;
-  organisation: string;
-  location: string | null;
+  organization: string;       // was: organisation
+  state: string | null;       // was: location
   category: string | null;
-  estimated_value: number | null;
+  value: string | null;       // was: estimated_value (backend returns string)
   deadline: string | null;
   posted_date: string | null;
   description: string | null;
   source_url: string | null;
   status: string | null;
-  emd_amount: number | null;
-  document_fee: number | null;
+  emd_amount: string | null;  // was: number (backend returns string)
+  document_fee: string | null;
 }
 
 export default function TenderDetailPage({ params }: { params: { id: string } }) {
@@ -35,13 +35,15 @@ export default function TenderDetailPage({ params }: { params: { id: string } })
     return d.toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric" });
   };
 
-  const formatCurrency = (value: number | null | undefined) => {
+  const formatCurrency = (value: string | number | null | undefined) => {
     if (!value) return "—";
+    const num = typeof value === "string" ? parseFloat(value) : value;
+    if (isNaN(num)) return "—";
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",
       maximumFractionDigits: 0,
-    }).format(value);
+    }).format(num);
   };
 
   const getDeadlineColor = (deadline: string | null) => {
@@ -99,13 +101,13 @@ export default function TenderDetailPage({ params }: { params: { id: string } })
           <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-4">
             <div className="flex-1">
               <h1 className="text-2xl font-bold text-gray-900 mb-2">{tender.title}</h1>
-              <p className="text-gray-600 text-lg mb-1">{tender.organisation}</p>
-              {tender.location && (
-                <p className="text-gray-500 text-sm">📍 {tender.location}</p>
+              <p className="text-gray-600 text-lg mb-1">{tender.organization}</p>
+              {tender.state && (
+                <p className="text-gray-500 text-sm">📍 {tender.state}</p>
               )}
             </div>
             <div className="shrink-0 text-right">
-              <p className="text-2xl font-bold text-gray-900">{formatCurrency(tender.estimated_value)}</p>
+              <p className="text-2xl font-bold text-gray-900">{formatCurrency(tender.value)}</p>
               {tender.deadline && (
                 <p className={cn("text-sm font-medium mt-1", getDeadlineColor(tender.deadline))}>
                   {getDaysLeft(tender.deadline)}
@@ -144,7 +146,7 @@ export default function TenderDetailPage({ params }: { params: { id: string } })
             </div>
             <div>
               <p className="text-gray-500">Estimated Value</p>
-              <p className="font-medium text-gray-900">{formatCurrency(tender.estimated_value)}</p>
+              <p className="font-medium text-gray-900">{formatCurrency(tender.value)}</p>
             </div>
             {tender.emd_amount && (
               <div>
