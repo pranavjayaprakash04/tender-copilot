@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import httpx
 import structlog
 from supabase import Client, create_client
@@ -8,6 +10,14 @@ from app.config import settings
 from app.shared.exceptions import ExternalServiceException
 
 logger = structlog.get_logger()
+
+# PDF magic bytes — first 4 bytes of every valid PDF file
+_PDF_MAGIC = b"%PDF"
+
+
+def _validate_pdf_bytes(data: bytes) -> bool:
+    """Check actual file bytes start with PDF magic number."""
+    return data[:4] == _PDF_MAGIC
 
 
 class StorageClient:
@@ -18,7 +28,7 @@ class StorageClient:
         self._bucket_name = "vault-documents"
 
     def _get_client(self) -> Client:
-        """Get Supabase client."""
+        """Get Supabase client (lazy init)."""
         if not self._client:
             self._client = create_client(
                 settings.SUPABASE_URL,
@@ -31,34 +41,24 @@ class StorageClient:
         try:
             client = self._get_client()
 
-            # Create signed URL for upload
-            response = client.storage.from_(self._bucket_name).create_signed_upload_url(
-                path=storage_path,
-                options={
-                    'contentType': content_type,
-                    'upsert': True
-                }
+            # Fixed: run sync Supabase SDK call in threadpool to avoid blocking event loop
+            response = await asyncio.to_thread(
+                lambda: client.storage.from_(self._bucket_name).create_signed_upload_url(
+                    path=storage_path,
+                    options={"contentType": content_type}
+                    # Fixed: removed upsert=True to prevent overwriting other companies' files
+                )
             )
 
-            if response.get('error'):
-                raise ExternalServiceException("Supabase Storage", response['error']['message'])
+            if response.get("error"):
+                raise ExternalServiceException("Supabase Storage", response["error"]["message"])
 
-            signed_url = response['signedUrl']
+            return response["signedUrl"]
 
-            logger.info(
-                "upload_url_generated",
-                storage_path=storage_path,
-                content_type=content_type
-            )
-
-            return signed_url
-
+        except ExternalServiceException:
+            raise
         except Exception as e:
-            logger.error(
-                "upload_url_generation_failed",
-                storage_path=storage_path,
-                error=str(e)
-            )
+            logger.error("upload_url_generation_failed", storage_path=storage_path, error=str(e))
             raise ExternalServiceException("Supabase Storage", f"Failed to generate upload URL: {e}")
 
     async def get_download_url(self, storage_path: str, expires_in: int = 3600) -> str:
@@ -66,104 +66,81 @@ class StorageClient:
         try:
             client = self._get_client()
 
-            # Create signed URL for download
-            response = client.storage.from_(self._bucket_name).create_signed_url(
-                path=storage_path,
-                expires_in=expires_in
+            # Fixed: run sync SDK call in threadpool
+            response = await asyncio.to_thread(
+                lambda: client.storage.from_(self._bucket_name).create_signed_url(
+                    path=storage_path,
+                    expires_in=expires_in
+                )
             )
 
-            if response.get('error'):
-                raise ExternalServiceException("Supabase Storage", response['error']['message'])
+            if response.get("error"):
+                raise ExternalServiceException("Supabase Storage", response["error"]["message"])
 
-            signed_url = response['signedUrl']
+            return response["signedUrl"]
 
-            logger.info(
-                "download_url_generated",
-                storage_path=storage_path,
-                expires_in=expires_in
-            )
-
-            return signed_url
-
+        except ExternalServiceException:
+            raise
         except Exception as e:
-            logger.error(
-                "download_url_generation_failed",
-                storage_path=storage_path,
-                error=str(e)
-            )
+            logger.error("download_url_generation_failed", storage_path=storage_path, error=str(e))
             raise ExternalServiceException("Supabase Storage", f"Failed to generate download URL: {e}")
 
     async def download_file(self, storage_path: str) -> bytes:
         """Download file bytes from storage."""
         try:
-            # Get download URL
             download_url = await self.get_download_url(storage_path, expires_in=3600)
 
-            # Download file using httpx
             async with httpx.AsyncClient() as client:
                 response = await client.get(download_url)
                 response.raise_for_status()
-
-                file_bytes = response.content
-
-                logger.info(
-                    "file_downloaded",
-                    storage_path=storage_path,
-                    size=len(file_bytes)
-                )
-
-                return file_bytes
+                return response.content
 
         except httpx.HTTPError as e:
-            logger.error(
-                "file_download_http_error",
-                storage_path=storage_path,
-                status_code=e.response.status_code if e.response else None,
-                error=str(e)
-            )
+            logger.error("file_download_http_error", storage_path=storage_path, error=str(e))
             raise ExternalServiceException("Supabase Storage", f"Failed to download file: {e}")
+        except ExternalServiceException:
+            raise
         except Exception as e:
-            logger.error(
-                "file_download_failed",
-                storage_path=storage_path,
-                error=str(e)
-            )
+            logger.error("file_download_failed", storage_path=storage_path, error=str(e))
             raise ExternalServiceException("Supabase Storage", f"Failed to download file: {e}")
 
     async def upload_file(self, storage_path: str, file_data: bytes, content_type: str) -> str:
-        """Upload a file directly to storage."""
+        """Upload a file directly to storage with validation."""
+        # Fixed: validate actual file content, not just extension/content_type header
+        if content_type != "application/pdf" or not _validate_pdf_bytes(file_data):
+            raise ExternalServiceException(
+                "Storage", "Only valid PDF files are accepted"
+            )
+
+        # Fixed: actual size check on real bytes (not spoofable client header)
+        if len(file_data) > settings.MAX_FILE_SIZE:
+            raise ExternalServiceException(
+                "Storage", f"File exceeds maximum size of {settings.MAX_FILE_SIZE // (1024*1024)}MB"
+            )
+
         try:
             client = self._get_client()
 
-            # Upload file
-            response = client.storage.from_(self._bucket_name).upload(
-                path=storage_path,
-                file=file_data,
-                file_options={
-                    'contentType': content_type,
-                    'upsert': True
-                }
+            # Fixed: run sync SDK call in threadpool + removed upsert
+            response = await asyncio.to_thread(
+                lambda: client.storage.from_(self._bucket_name).upload(
+                    path=storage_path,
+                    file=file_data,
+                    file_options={"contentType": content_type}
+                    # Fixed: no upsert=True — prevents overwriting existing files
+                )
             )
 
-            if response.get('error'):
-                raise ExternalServiceException("Supabase Storage", response['error']['message'])
+            if hasattr(response, "error") and response.error:
+                raise ExternalServiceException("Supabase Storage", str(response.error))
 
-            logger.info(
-                "file_uploaded",
-                storage_path=storage_path,
-                size=len(file_data),
-                content_type=content_type
-            )
-
-            # Return download URL
+            logger.info("file_uploaded", storage_path=storage_path, size=len(file_data))
             return await self.get_download_url(storage_path)
 
+        except ExternalServiceException:
+            raise
         except Exception as e:
-            logger.error(
-                "file_upload_failed",
-                storage_path=storage_path,
-                error=str(e)
-            )
+            logger.error("file_upload_failed", storage_path=storage_path, error=str(e))
             raise ExternalServiceException("Supabase Storage", f"Failed to upload file: {e}")
 
     async def delete_file(self, storage_path: str) -> None:
@@ -171,23 +148,20 @@ class StorageClient:
         try:
             client = self._get_client()
 
-            # Delete file
-            response = client.storage.from_(self._bucket_name).remove([storage_path])
-
-            if response.get('error'):
-                raise ExternalServiceException("Supabase Storage", response['error']['message'])
-
-            logger.info(
-                "file_deleted",
-                storage_path=storage_path
+            # Fixed: run sync SDK call in threadpool
+            response = await asyncio.to_thread(
+                lambda: client.storage.from_(self._bucket_name).remove([storage_path])
             )
 
+            if isinstance(response, dict) and response.get("error"):
+                raise ExternalServiceException("Supabase Storage", response["error"]["message"])
+
+            logger.info("file_deleted", storage_path=storage_path)
+
+        except ExternalServiceException:
+            raise
         except Exception as e:
-            logger.error(
-                "file_deletion_failed",
-                storage_path=storage_path,
-                error=str(e)
-            )
+            logger.error("file_deletion_failed", storage_path=storage_path, error=str(e))
             raise ExternalServiceException("Supabase Storage", f"Failed to delete file: {e}")
 
     async def list_files(self, prefix: str) -> list[dict]:
@@ -195,54 +169,17 @@ class StorageClient:
         try:
             client = self._get_client()
 
-            # List files
-            response = client.storage.from_(self._bucket_name).list(path=prefix)
-
-            if response.get('error'):
-                raise ExternalServiceException("Supabase Storage", response['error']['message'])
-
-            files = response.get('data', [])
-
-            logger.info(
-                "files_listed",
-                prefix=prefix,
-                count=len(files)
+            response = await asyncio.to_thread(
+                lambda: client.storage.from_(self._bucket_name).list(path=prefix)
             )
 
-            return files
+            if isinstance(response, dict) and response.get("error"):
+                raise ExternalServiceException("Supabase Storage", response["error"]["message"])
 
+            return response if isinstance(response, list) else response.get("data", [])
+
+        except ExternalServiceException:
+            raise
         except Exception as e:
-            logger.error(
-                "file_listing_failed",
-                prefix=prefix,
-                error=str(e)
-            )
+            logger.error("file_listing_failed", prefix=prefix, error=str(e))
             raise ExternalServiceException("Supabase Storage", f"Failed to list files: {e}")
-
-    async def get_file_info(self, storage_path: str) -> dict:
-        """Get file metadata."""
-        try:
-            client = self._get_client()
-
-            # Get file info
-            response = client.storage.from_(self._bucket_name).get_metadata(storage_path)
-
-            if response.get('error'):
-                raise ExternalServiceException("Supabase Storage", response['error']['message'])
-
-            metadata = response.get('data', {})
-
-            logger.info(
-                "file_info_retrieved",
-                storage_path=storage_path
-            )
-
-            return metadata
-
-        except Exception as e:
-            logger.error(
-                "file_info_retrieval_failed",
-                storage_path=storage_path,
-                error=str(e)
-            )
-            raise ExternalServiceException("Supabase Storage", f"Failed to get file info: {e}")
