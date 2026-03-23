@@ -45,20 +45,20 @@ def _build_where(search, category, state, deadline):
 
 
 TENDER_SELECT = """
-    id::text            AS id,
+    id::text                        AS id,
     tender_id,
     title,
-    organization,
-    portal              AS source,
-    COALESCE(url, detail_url) AS source_url,
+    organization                    AS procuring_entity,
+    portal                          AS source,
+    COALESCE(url, detail_url)       AS source_url,
     apply_url,
     category,
     status,
-    location            AS state,
-    bid_end_date::text  AS deadline,
-    estimated_value::text AS value,
-    emd_amount::text    AS emd_amount,
-    scraped_at::text    AS posted_date,
+    location                        AS state,
+    bid_end_date::text              AS bid_submission_deadline,
+    estimated_value                 AS estimated_value,
+    emd_amount                      AS emd_amount,
+    scraped_at::text                AS published_date,
     required_documents,
     details
 """
