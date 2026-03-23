@@ -1,4 +1,4 @@
-import { createServerClient } from '@supabase/ssr'
+import { createClient } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
 
 const PUBLIC_PATHS = ['/', '/login', '/signup', '/auth/callback', '/auth/confirm']
@@ -11,50 +11,64 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  let response = NextResponse.next({ request })
+  // Get token from cookie — Supabase stores it as sb-<project>-auth-token
+  const cookieHeader = request.headers.get('cookie') || ''
+  const tokenMatch = cookieHeader.match(/sb-[^=]+-auth-token=([^;]+)/)
+  let accessToken: string | null = null
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-          response = NextResponse.next({ request })
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
-          )
-        },
-      },
+  if (tokenMatch) {
+    try {
+      const decoded = decodeURIComponent(tokenMatch[1])
+      const parsed = JSON.parse(decoded)
+      accessToken = parsed?.access_token ?? null
+    } catch {
+      accessToken = null
     }
-  )
+  }
 
-  // Refresh session — required for Server Components to stay in sync
-  const { data: { user }, error } = await supabase.auth.getUser()
+  // Fallback: check Authorization header
+  if (!accessToken) {
+    const authHeader = request.headers.get('authorization') || ''
+    if (authHeader.startsWith('Bearer ')) {
+      accessToken = authHeader.slice(7)
+    }
+  }
 
-  // Not authenticated → redirect to login
-  if (error || !user) {
+  // No token — redirect to login
+  if (!accessToken) {
     const loginUrl = request.nextUrl.clone()
     loginUrl.pathname = '/login'
     loginUrl.searchParams.set('redirectTo', pathname)
     return NextResponse.redirect(loginUrl)
   }
 
-  return response
+  // Verify token with Supabase
+  try {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
+
+    const { data: { user }, error } = await supabase.auth.getUser(accessToken)
+
+    if (error || !user) {
+      const loginUrl = request.nextUrl.clone()
+      loginUrl.pathname = '/login'
+      loginUrl.searchParams.set('redirectTo', pathname)
+      return NextResponse.redirect(loginUrl)
+    }
+  } catch {
+    const loginUrl = request.nextUrl.clone()
+    loginUrl.pathname = '/login'
+    loginUrl.searchParams.set('redirectTo', pathname)
+    return NextResponse.redirect(loginUrl)
+  }
+
+  return NextResponse.next()
 }
 
 export const config = {
   matcher: [
-    /*
-     * Match all paths EXCEPT:
-     * - _next/static (static files)
-     * - _next/image (image optimization)
-     * - favicon.ico
-     * - public files (images, fonts etc.)
-     */
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
