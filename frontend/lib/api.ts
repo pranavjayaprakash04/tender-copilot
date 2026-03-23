@@ -31,6 +31,25 @@ const request = async (method: string, endpoint: string, data?: any) => {
   return res.json();
 };
 
+/**
+ * Maps frontend filter keys to backend query param names for the tenders API.
+ * Frontend uses short friendly names; backend expects TenderSearchFilters field names.
+ */
+const mapTenderParams = (params?: Record<string, any>): Record<string, any> => {
+  if (!params) return {};
+  const mapped: Record<string, any> = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (value === '' || value === null || value === undefined) continue;
+    switch (key) {
+      case 'search':       mapped['search_query'] = value; break;
+      case 'deadline':     mapped['deadline_days'] = value; break;
+      // category, state, source, status pass through unchanged
+      default:             mapped[key] = value;
+    }
+  }
+  return mapped;
+};
+
 export const api = {
   get: (endpoint: string) => request('GET', endpoint),
   post: (endpoint: string, data: any) => request('POST', endpoint, data),
@@ -56,9 +75,17 @@ export const api = {
   },
 
   tenders: {
-    get: (id: string) => request('GET', `/api/v1/tenders/${id}`).then((res: any) => res.data),
-    list: (params?: any) => request('GET', `/api/v1/tenders${params ? '?' + new URLSearchParams(params) : ''}`).then((res: any) => res.tenders ?? res.data ?? res),
-    search: (params?: any) => request('GET', `/api/v1/tenders${params ? '?' + new URLSearchParams(params) : ''}`).then((res: any) => res.tenders ?? res.data ?? res),
+    get: (id: string) => request('GET', `/api/v1/tenders/${id}`).then((res: any) => res.data ?? res),
+    list: (params?: any) => {
+      const mapped = mapTenderParams(params);
+      const qs = Object.keys(mapped).length ? '?' + new URLSearchParams(mapped) : '';
+      return request('GET', `/api/v1/tenders${qs}`).then((res: any) => res.tenders ?? res.data ?? res);
+    },
+    search: (params?: any) => {
+      const mapped = mapTenderParams(params);
+      const qs = Object.keys(mapped).length ? '?' + new URLSearchParams(mapped) : '';
+      return request('GET', `/api/v1/tenders${qs}`).then((res: any) => res.tenders ?? res.data ?? res);
+    },
     create: (data: any) => request('POST', '/api/v1/tenders', data),
     update: (id: string, data: any) => request('PUT', `/api/v1/tenders/${id}`, data),
     delete: (id: string) => request('DELETE', `/api/v1/tenders/${id}`),
