@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
@@ -34,6 +34,7 @@ const statusColors = {
 
 export default function BidsPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const navigatingRef = useRef<string | null>(null);
 
   const params = statusFilter === "all" ? {} : { status: statusFilter };
 
@@ -101,7 +102,11 @@ export default function BidsPage() {
                   <div
                     key={bid.id}
                     className="p-6 hover:bg-gray-50 transition-colors cursor-pointer"
-                    onClick={() => { window.location.href = `/bids/${bid.id}`; }}
+                    onClick={() => {
+                      if (navigatingRef.current !== bid.id) {
+                        window.location.href = `/bids/${bid.id}`;
+                      }
+                    }}
                   >
                     <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                       <div className="flex-1">
@@ -115,16 +120,16 @@ export default function BidsPage() {
                         <span className={cn("px-3 py-1 rounded-full text-sm font-medium", statusColors[bid.status])}>
                           {getStatusText(bid.status)}
                         </span>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={(e: React.MouseEvent) => {
+                        <button
+                          className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                          onClick={(e) => {
                             e.stopPropagation();
+                            navigatingRef.current = bid.id;
                             window.location.href = `/bids/${bid.id}`;
                           }}
                         >
                           View
-                        </Button>
+                        </button>
                       </div>
                     </div>
                   </div>
