@@ -1,10 +1,23 @@
+"use client";
+
 import React from "react";
+import { usePathname } from "next/navigation";
+
+const navLinks = [
+  { href: "/tenders", label: "Tenders" },
+  { href: "/bids", label: "Bids" },
+  { href: "/vault", label: "Vault" },
+  { href: "/alerts", label: "Alerts" },
+  { href: "/profile", label: "Profile" },
+];
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
+
   return (
     <div className="min-h-screen bg-gray-50">
       <nav className="bg-white shadow-sm border-b border-gray-200">
@@ -15,21 +28,22 @@ export default function DashboardLayout({
                 <h1 className="text-xl font-semibold text-gray-900">Tender Copilot</h1>
               </div>
               <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                <a href="/tenders" className="border-indigo-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                  Tenders
-                </a>
-                <a href="/bids" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                  Bids
-                </a>
-                <a href="/vault" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                  Vault
-                </a>
-                <a href="/alerts" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                  Alerts
-                </a>
-                <a href="/profile" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                  Profile
-                </a>
+                {navLinks.map(({ href, label }) => {
+                  const isActive = pathname === href || pathname.startsWith(href + "/");
+                  return (
+                    <a
+                      key={href}
+                      href={href}
+                      className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors ${
+                        isActive
+                          ? "border-indigo-500 text-gray-900"
+                          : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
+                      }`}
+                    >
+                      {label}
+                    </a>
+                  );
+                })}
               </div>
             </div>
           </div>
