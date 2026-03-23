@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from uuid import UUID
 
 from sqlalchemy import and_, desc, func, or_, select
@@ -28,7 +28,6 @@ class VaultDocumentRepository:
 
     async def create(self, document_data: VaultDocumentCreate) -> VaultDocument:
         """Create a new vault document."""
-        # Check if document with same type and filename exists for this company
         existing = await self._session.execute(
             select(VaultDocument).where(
                 and_(
@@ -42,7 +41,6 @@ class VaultDocumentRepository:
         existing_doc = existing.scalar_one_or_none()
 
         if existing_doc:
-            # Mark existing as not current and create new version
             existing_doc.is_current = False
             new_version = existing_doc.version + 1
         else:
@@ -52,7 +50,7 @@ class VaultDocumentRepository:
             company_id=document_data.company_id,
             doc_type=document_data.doc_type,
             filename=document_data.filename,
-            storage_path="",  # Will be set after upload
+            storage_path="",  # Set after upload
             version=new_version,
             expires_at=document_data.expires_at,
             is_current=True
@@ -64,12 +62,12 @@ class VaultDocumentRepository:
         return document
 
     async def get_by_id(self, document_id: UUID, company_id: UUID) -> VaultDocument:
-        """Get a document by ID for a specific company."""
+        """Get a document by ID — scoped to company (prevents cross-tenant access)."""
         result = await self._session.execute(
             select(VaultDocument).where(
                 and_(
                     VaultDocument.id == document_id,
-                    VaultDocument.company_id == company_id
+                    VaultDocument.company_id == company_id  # enforces tenant isolation
                 )
             )
         )
@@ -88,9 +86,11 @@ class VaultDocumentRepository:
         page_size: int = 20
     ) -> tuple[list[VaultDocument], int]:
         """Get documents for a company with optional filters."""
+        # Fixed: use datetime.now(UTC) instead of deprecated datetime.utcnow()
+        now = datetime.now(UTC)
+
         query = select(VaultDocument).where(VaultDocument.company_id == company_id)
 
-        # Apply filters
         if filters:
             if filters.doc_types:
                 query = query.where(VaultDocument.doc_type.in_(filters.doc_types))
@@ -101,35 +101,26 @@ class VaultDocumentRepository:
             if filters.is_expired is not None:
                 if filters.is_expired:
                     query = query.where(
-                        and_(
-                            VaultDocument.expires_at.is_not(None),
-                            VaultDocument.expires_at < datetime.utcnow()
-                        )
+                        and_(VaultDocument.expires_at.is_not(None), VaultDocument.expires_at < now)
                     )
                 else:
                     query = query.where(
-                        or_(
-                            VaultDocument.expires_at.is_(None),
-                            VaultDocument.expires_at >= datetime.utcnow()
-                        )
+                        or_(VaultDocument.expires_at.is_(None), VaultDocument.expires_at >= now)
                     )
 
             if filters.is_expiring_soon is not None:
-                expiry_threshold = datetime.utcnow() + timedelta(days=30)
+                expiry_threshold = now + timedelta(days=30)
                 if filters.is_expiring_soon:
                     query = query.where(
                         and_(
                             VaultDocument.expires_at.is_not(None),
                             VaultDocument.expires_at <= expiry_threshold,
-                            VaultDocument.expires_at >= datetime.utcnow()
+                            VaultDocument.expires_at >= now
                         )
                     )
                 else:
                     query = query.where(
-                        or_(
-                            VaultDocument.expires_at.is_(None),
-                            VaultDocument.expires_at > expiry_threshold
-                        )
+                        or_(VaultDocument.expires_at.is_(None), VaultDocument.expires_at > expiry_threshold)
                     )
 
             if filters.date_from:
@@ -138,19 +129,15 @@ class VaultDocumentRepository:
             if filters.date_to:
                 query = query.where(VaultDocument.uploaded_at <= filters.date_to)
 
-        # Get total count
         count_query = select(func.count()).select_from(query.subquery())
         total_result = await self._session.execute(count_query)
         total = total_result.scalar()
 
-        # Apply pagination and ordering
         query = query.order_by(desc(VaultDocument.uploaded_at))
         query = query.offset((page - 1) * page_size).limit(page_size)
 
         result = await self._session.execute(query)
-        documents = result.scalars().all()
-
-        return list(documents), total
+        return list(result.scalars().all()), total
 
     async def update(
         self,
@@ -176,7 +163,8 @@ class VaultDocumentRepository:
 
     async def get_expiring_soon(self, company_id: UUID, days: int = 30) -> list[VaultDocument]:
         """Get documents expiring within specified days."""
-        expiry_threshold = datetime.utcnow() + timedelta(days=days)
+        now = datetime.now(UTC)
+        expiry_threshold = now + timedelta(days=days)
 
         result = await self._session.execute(
             select(VaultDocument).where(
@@ -184,7 +172,7 @@ class VaultDocumentRepository:
                     VaultDocument.company_id == company_id,
                     VaultDocument.expires_at.is_not(None),
                     VaultDocument.expires_at <= expiry_threshold,
-                    VaultDocument.expires_at >= datetime.utcnow(),
+                    VaultDocument.expires_at >= now,
                     VaultDocument.is_current
                 )
             ).order_by(VaultDocument.expires_at)
@@ -194,12 +182,14 @@ class VaultDocumentRepository:
 
     async def get_expired(self, company_id: UUID) -> list[VaultDocument]:
         """Get expired documents."""
+        now = datetime.now(UTC)
+
         result = await self._session.execute(
             select(VaultDocument).where(
                 and_(
                     VaultDocument.company_id == company_id,
                     VaultDocument.expires_at.is_not(None),
-                    VaultDocument.expires_at < datetime.utcnow(),
+                    VaultDocument.expires_at < now,
                     VaultDocument.is_current
                 )
             ).order_by(desc(VaultDocument.expires_at))
@@ -218,54 +208,46 @@ class VaultDocumentRepository:
                 )
             ).order_by(desc(VaultDocument.uploaded_at))
         )
-
         return list(result.scalars().all())
 
     async def get_stats(self, company_id: UUID) -> dict:
         """Get document statistics for a company."""
-        # Total documents
-        total_result = await self._session.execute(
-            select(func.count(VaultDocument.id)).where(VaultDocument.company_id == company_id)
-        )
-        total = total_result.scalar()
+        now = datetime.now(UTC)
+        expiry_threshold = now + timedelta(days=30)
 
-        # Current documents
-        current_result = await self._session.execute(
+        total = (await self._session.execute(
+            select(func.count(VaultDocument.id)).where(VaultDocument.company_id == company_id)
+        )).scalar()
+
+        current = (await self._session.execute(
             select(func.count(VaultDocument.id)).where(
                 and_(VaultDocument.company_id == company_id, VaultDocument.is_current)
             )
-        )
-        current = current_result.scalar()
+        )).scalar()
 
-        # Expired documents
-        expired_result = await self._session.execute(
+        expired = (await self._session.execute(
             select(func.count(VaultDocument.id)).where(
                 and_(
                     VaultDocument.company_id == company_id,
                     VaultDocument.expires_at.is_not(None),
-                    VaultDocument.expires_at < datetime.utcnow(),
+                    VaultDocument.expires_at < now,
                     VaultDocument.is_current
                 )
             )
-        )
-        expired = expired_result.scalar()
+        )).scalar()
 
-        # Expiring soon (30 days)
-        expiry_threshold = datetime.utcnow() + timedelta(days=30)
-        expiring_soon_result = await self._session.execute(
+        expiring_soon = (await self._session.execute(
             select(func.count(VaultDocument.id)).where(
                 and_(
                     VaultDocument.company_id == company_id,
                     VaultDocument.expires_at.is_not(None),
                     VaultDocument.expires_at <= expiry_threshold,
-                    VaultDocument.expires_at >= datetime.utcnow(),
+                    VaultDocument.expires_at >= now,
                     VaultDocument.is_current
                 )
             )
-        )
-        expiring_soon = expiring_soon_result.scalar()
+        )).scalar()
 
-        # By type
         by_type_result = await self._session.execute(
             select(VaultDocument.doc_type, func.count(VaultDocument.id))
             .where(and_(VaultDocument.company_id == company_id, VaultDocument.is_current))
@@ -290,25 +272,25 @@ class VaultDocumentMappingRepository:
 
     async def create_mapping(self, tender_id: UUID, document_id: UUID) -> VaultDocumentMapping:
         """Create a mapping between tender and document."""
-        mapping = VaultDocumentMapping(
-            tender_id=tender_id,
-            vault_doc_id=document_id
-        )
-
+        mapping = VaultDocumentMapping(tender_id=tender_id, vault_doc_id=document_id)
         self._session.add(mapping)
         await self._session.flush()
         await self._session.refresh(mapping)
         return mapping
 
-    async def get_by_tender(self, tender_id: UUID) -> list[VaultDocument]:
-        """Get all documents mapped to a tender."""
+    async def get_by_tender(self, tender_id: UUID, company_id: UUID) -> list[VaultDocument]:
+        """Get all documents mapped to a tender — scoped to company to prevent cross-tenant leak."""
+        # Fixed: added company_id filter — previously returned ANY company's docs for a tender
         result = await self._session.execute(
             select(VaultDocument)
-            .join(VaultDocumentMapping)
-            .where(VaultDocumentMapping.tender_id == tender_id)
-            .options(selectinload(VaultDocument.company))
+            .join(VaultDocumentMapping, VaultDocumentMapping.vault_doc_id == VaultDocument.id)
+            .where(
+                and_(
+                    VaultDocumentMapping.tender_id == tender_id,
+                    VaultDocument.company_id == company_id  # tenant isolation enforced
+                )
+            )
         )
-
         return list(result.scalars().all())
 
     async def get_by_document(self, document_id: UUID) -> list[UUID]:
@@ -317,7 +299,6 @@ class VaultDocumentMappingRepository:
             select(VaultDocumentMapping.tender_id)
             .where(VaultDocumentMapping.vault_doc_id == document_id)
         )
-
         return [row.tender_id for row in result.all()]
 
     async def remove_mapping(self, tender_id: UUID, document_id: UUID) -> None:
@@ -331,6 +312,5 @@ class VaultDocumentMappingRepository:
             )
         )
         mapping = result.scalar_one_or_none()
-
         if mapping:
             await self._session.delete(mapping)
