@@ -1,6 +1,7 @@
 "use client";
 
-import { createClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
 export default function LoginPage() {
@@ -8,17 +9,19 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get('redirectTo') || '/tenders';
 
-  const getSupabase = () => createClient(
+  const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
   const handleGoogleLogin = async () => {
-    const supabase = getSupabase();
     await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/callback` }
+      options: { redirectTo: `${window.location.origin}/auth/callback?redirectTo=${redirectTo}` }
     });
   };
 
@@ -27,10 +30,10 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const supabase = getSupabase();
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      window.location.href = '/tenders';
+      router.push(redirectTo);
+      router.refresh();
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {
