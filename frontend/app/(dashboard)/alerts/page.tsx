@@ -9,20 +9,29 @@ type Alert = {
   id: string;
   title: string;
   message: string;
-  type: "expiry" | "bid" | "tender" | "system" | string;
-  status: "pending" | "read" | string;
+  notification_type?: string;
+  type?: string;
+  status: "pending" | "read" | "sent" | string;
   created_at: string;
 };
 
 const TYPE_META: Record<string, { label: string; icon: string; color: string; bg: string }> = {
-  expiry:  { label: "Expiry",  icon: "⏰", color: "text-amber-700",  bg: "bg-amber-50 border-amber-200"  },
-  bid:     { label: "Bid",     icon: "📋", color: "text-blue-700",   bg: "bg-blue-50 border-blue-200"    },
-  tender:  { label: "Tender",  icon: "📢", color: "text-violet-700", bg: "bg-violet-50 border-violet-200"},
-  system:  { label: "System",  icon: "🔔", color: "text-gray-700",   bg: "bg-gray-50 border-gray-200"    },
+  expiry:  { label: "Expiry",  icon: "⏰", color: "text-amber-700",  bg: "bg-amber-50 border-amber-200"   },
+  bid:     { label: "Bid",     icon: "📋", color: "text-blue-700",   bg: "bg-blue-50 border-blue-200"     },
+  tender:  { label: "Tender",  icon: "📢", color: "text-violet-700", bg: "bg-violet-50 border-violet-200" },
+  system:  { label: "System",  icon: "🔔", color: "text-gray-700",   bg: "bg-gray-50 border-gray-200"     },
 };
 
-function getMeta(type: string) {
-  return TYPE_META[type] ?? TYPE_META.system;
+function getMeta(alert: Alert) {
+  const key = alert.notification_type ?? alert.type ?? "system";
+  if (key.includes("expiry") || key.includes("compliance")) return TYPE_META.expiry;
+  if (key.includes("bid"))    return TYPE_META.bid;
+  if (key.includes("tender")) return TYPE_META.tender;
+  return TYPE_META[key] ?? TYPE_META.system;
+}
+
+function isUnread(alert: Alert) {
+  return alert.status === "pending" || alert.status === "sent";
 }
 
 function timeAgo(iso: string) {
@@ -42,8 +51,9 @@ export default function AlertsPage() {
   const { data: alerts = [], isLoading, isError } = useQuery<Alert[]>({
     queryKey: ["alerts"],
     queryFn: async () => {
+      // api.alerts.list() already unwraps res.data via .then()
       const res = await api.alerts.list();
-      return Array.isArray(res) ? res : res.notifications ?? res.data ?? [];
+      return Array.isArray(res) ? res : [];
     },
     retry: 1,
   });
@@ -54,7 +64,11 @@ export default function AlertsPage() {
   });
 
   const markAllRead = useMutation({
-    mutationFn: () => api.alerts.markAllRead(),
+    mutationFn: async () => {
+      // No bulk endpoint — fire per-item in parallel
+      const unread = alerts.filter(isUnread);
+      await Promise.allSettled(unread.map((a) => api.alerts.markRead(a.id)));
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["alerts"] }),
   });
 
@@ -63,8 +77,8 @@ export default function AlertsPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["alerts"] }),
   });
 
-  const unreadCount = alerts.filter((a) => a.status === "pending").length;
-  const filtered = filter === "unread" ? alerts.filter((a) => a.status === "pending") : alerts;
+  const unreadCount = alerts.filter(isUnread).length;
+  const filtered = filter === "unread" ? alerts.filter(isUnread) : alerts;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -86,7 +100,7 @@ export default function AlertsPage() {
               disabled={markAllRead.isPending}
               className="text-sm font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50"
             >
-              Mark all read
+              {markAllRead.isPending ? "Marking…" : "Mark all read"}
             </button>
           )}
         </div>
@@ -145,28 +159,25 @@ export default function AlertsPage() {
         ) : (
           <div className="space-y-2">
             {filtered.map((alert) => {
-              const meta = getMeta(alert.type);
-              const isUnread = alert.status === "pending";
+              const meta = getMeta(alert);
+              const unread = isUnread(alert);
               return (
                 <div
                   key={alert.id}
                   className={`relative bg-white border rounded-xl p-4 transition-all group ${
-                    isUnread ? "border-blue-200 shadow-sm shadow-blue-50" : "border-gray-200"
+                    unread ? "border-blue-200 shadow-sm shadow-blue-50" : "border-gray-200"
                   }`}
                 >
-                  {isUnread && (
+                  {unread && (
                     <span className="absolute top-4 right-4 w-2 h-2 rounded-full bg-blue-500" />
                   )}
                   <div className="flex gap-3 pr-6">
-                    {/* Icon */}
                     <div className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-base border ${meta.bg}`}>
                       {meta.icon}
                     </div>
-
-                    {/* Body */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start gap-2 flex-wrap">
-                        <p className={`text-sm font-semibold ${isUnread ? "text-gray-900" : "text-gray-700"}`}>
+                        <p className={`text-sm font-semibold ${unread ? "text-gray-900" : "text-gray-700"}`}>
                           {alert.title}
                         </p>
                         <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${meta.bg} ${meta.color}`}>
@@ -176,7 +187,7 @@ export default function AlertsPage() {
                       <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">{alert.message}</p>
                       <div className="flex items-center gap-3 mt-2">
                         <span className="text-xs text-gray-400">{timeAgo(alert.created_at)}</span>
-                        {isUnread && (
+                        {unread && (
                           <button
                             onClick={() => markRead.mutate(alert.id)}
                             className="text-xs text-blue-600 hover:text-blue-700 font-medium"
