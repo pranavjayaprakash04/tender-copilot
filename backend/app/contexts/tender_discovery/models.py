@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import (
@@ -25,13 +26,13 @@ from app.database import Base
 
 class TenderSource(StrEnum):
     """Tender source portals."""
-    CPPP = "cppp"  # Central Public Procurement Portal
-    EPROCURE = "eprocure"  # eProcure Government
-    GEM = "gem"  # Government e-Marketplace
-    MSTC = "mstc"  # MSTC e-Procurement
-    RAILWAYS = "railways"  # Indian Railways
-    STATE_PORTAL = "state_portal"  # State-specific portals
-    PSU = "psu"  # Public Sector Undertakings
+    CPPP = "cppp"
+    EPROCURE = "eprocure"
+    GEM = "gem"
+    MSTC = "mstc"
+    RAILWAYS = "railways"
+    STATE_PORTAL = "state_portal"
+    PSU = "psu"
     OTHER = "other"
 
 
@@ -81,7 +82,7 @@ class Tender(Base):
     company_id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
 
     # Basic tender information
-    tender_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)  # Original tender ID from source
+    tender_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
 
@@ -97,7 +98,7 @@ class Tender(Base):
 
     # Financial information
     estimated_value: Mapped[float | None] = mapped_column(Numeric(15, 2), nullable=True)
-    emd_amount: Mapped[float | None] = mapped_column(Numeric(15, 2), nullable=True)  # Earnest Money Deposit
+    emd_amount: Mapped[float | None] = mapped_column(Numeric(15, 2), nullable=True)
     processing_fee: Mapped[float | None] = mapped_column(Numeric(15, 2), nullable=True)
 
     # Timeline
@@ -105,7 +106,7 @@ class Tender(Base):
     bid_submission_deadline: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     bid_opening_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     tender_validity: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    completion_period: Mapped[int | None] = mapped_column(Integer, nullable=True)  # In days
+    completion_period: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Status and metadata
     status: Mapped[TenderStatus] = mapped_column(String(50), nullable=False, default=TenderStatus.PUBLISHED)
@@ -119,7 +120,7 @@ class Tender(Base):
 
     # Organization information
     procuring_entity: Mapped[str] = mapped_column(String(500), nullable=False)
-    procuring_entity_type: Mapped[str] = mapped_column(String(100), nullable=True)  # Central/State/PSU
+    procuring_entity_type: Mapped[str] = mapped_column(String(100), nullable=True)
 
     # Additional details
     eligibility_criteria: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -132,38 +133,32 @@ class Tender(Base):
     # Scraping metadata
     scraped_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     last_updated: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    raw_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # Original scraped data
+    raw_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     # Relationships
     tender_matches: Mapped[list[Any]] = relationship("TenderMatch", back_populates="tender")
     embedding: Mapped[Any] = relationship("TenderEmbedding", back_populates="tender", uselist=False)
-    # document_mappings: Mapped[list["VaultDocumentMapping"]] = relationship("VaultDocumentMapping", back_populates="tender")
-    # alerts: Mapped[list["TenderAlert"]] = relationship("TenderAlert", back_populates="tender")
 
     def __repr__(self) -> str:
         return f"Tender(id={self.id}, tender_id={self.tender_id}, title={self.title[:50]}...)"
 
     @property
     def is_bid_submission_open(self) -> bool:
-        """Check if bid submission is still open."""
         return datetime.utcnow() < self.bid_submission_deadline and self.status in [
             TenderStatus.PUBLISHED, TenderStatus.BID_SUBMISSION_OPEN
         ]
 
     @property
     def days_until_deadline(self) -> int:
-        """Get days until bid submission deadline."""
         delta = self.bid_submission_deadline - datetime.utcnow()
         return max(0, delta.days)
 
     @property
     def is_urgent(self) -> bool:
-        """Check if tender is urgent (less than 7 days to deadline)."""
         return self.days_until_deadline <= 7 and self.is_bid_submission_open
 
     @property
     def is_closing_soon(self) -> bool:
-        """Check if tender is closing soon (less than 3 days to deadline)."""
         return self.days_until_deadline <= 3 and self.is_bid_submission_open
 
 
@@ -174,7 +169,6 @@ class TenderSearch(Base):
     id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, primary_key=True, default=func.uuid_generate_v4())
     company_id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
 
-    # Search parameters
     search_query: Mapped[str] = mapped_column(String(500), nullable=True)
     category: Mapped[TenderCategory | None] = mapped_column(String(50), nullable=True)
     min_value: Mapped[float | None] = mapped_column(Numeric(15, 2), nullable=True)
@@ -182,12 +176,10 @@ class TenderSearch(Base):
     state: Mapped[str | None] = mapped_column(String(100), nullable=True)
     source: Mapped[TenderSource | None] = mapped_column(String(50), nullable=True)
 
-    # Search metadata
     is_saved_search: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     search_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     alert_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
-    # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     last_run: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     run_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -202,21 +194,18 @@ class TenderAlert(Base):
 
     id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, primary_key=True, default=func.uuid_generate_v4())
     company_id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
-    tender_id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, ForeignKey("tenders.id", ondelete="CASCADE"), nullable=False)
+    # FK removed — tenders.id in Supabase is bigint, not UUID; stored as plain column
+    tender_id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, nullable=False, index=True)
 
-    # Alert information
-    alert_type: Mapped[str] = mapped_column(String(50), nullable=False)  # new_tender, deadline_reminder, update
+    alert_type: Mapped[str] = mapped_column(String(50), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
 
-    # Status
     is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_sent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
-    # Channels
     sent_via_email: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     sent_via_whatsapp: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
-    # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
