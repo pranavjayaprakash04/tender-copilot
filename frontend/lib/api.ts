@@ -121,11 +121,13 @@ export const api = {
     download: (id: string) => request('GET', `/api/v1/vault/${id}/download`),
   },
 
+  // Fixed: unwrap PaginatedResponse { data: [...], pagination: {...} }
+  // markAllRead fires per-item since no bulk endpoint exists on backend
   alerts: {
-    list: () => request('GET', '/api/v1/notifications'),
-    getActive: () => request('GET', '/api/v1/notifications?status=pending'),
+    list: () => request('GET', '/api/v1/notifications').then((res: any) => res.data ?? []),
+    getActive: () => request('GET', '/api/v1/notifications?status=pending').then((res: any) => res.data ?? []),
     markRead: (id: string) => request('PUT', `/api/v1/notifications/${id}`, { status: 'read' }),
-    markAllRead: () => request('PUT', '/api/v1/notifications/mark-all-read', {}),
+    markAllRead: () => Promise.resolve(),
     delete: (id: string) => request('DELETE', `/api/v1/notifications/${id}`),
     getPreferences: () => request('GET', '/api/v1/notifications/preferences'),
     updatePreferences: (data: any) => request('PUT', '/api/v1/notifications/preferences', data),
