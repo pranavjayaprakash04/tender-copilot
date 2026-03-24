@@ -1,10 +1,8 @@
 from __future__ import annotations
-
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
 from uuid import UUID
-
 from sqlalchemy import (
     JSON,
     Boolean,
@@ -17,7 +15,6 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
 from app.database import Base
 
 
@@ -67,6 +64,7 @@ class Company(Base):
     # Relationships
     tender_matches: Mapped[list[Any]] = relationship("TenderMatch", back_populates="company")
     embedding: Mapped[Any] = relationship("CompanyEmbedding", back_populates="company", uselist=False)
+    vault_documents: Mapped[list[Any]] = relationship("VaultDocument", back_populates="company", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"Company(id={self.id}, name={self.name}, industry={self.industry})"
