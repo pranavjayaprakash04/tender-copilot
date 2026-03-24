@@ -1,812 +1,107 @@
-"use client";
+from __future__ import annotations
 
-import { useState, useRef, useCallback } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
-import { api } from "@/lib/api";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+from datetime import datetime, timedelta, UTC
+from enum import StrEnum
+from uuid import UUID
 
-// ─── Types ──────────────────────────────────────────────────────────────────
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import UUID as SQLUUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.sql import func
 
-type DocumentType =
-  | "gst"
-  | "pan"
-  | "iso"
-  | "udyam"
-  | "trade_license"
-  | "bank_guarantee"
-  | "experience_certificate"
-  | "financial_statement"
-  | "tax_clearance"
-  | "emolument_certificate"
-  | "other";
+from app.database import Base
 
-interface VaultDocument {
-  id: string;
-  doc_type: DocumentType;
-  filename: string;
-  storage_path: string;
-  version: number;
-  expires_at: string | null;
-  is_current: boolean;
-  uploaded_at: string;
-  is_expired: boolean;
-  days_until_expiry: number | null;
-  is_expiring_soon: boolean;
-}
 
-// ─── Constants ───────────────────────────────────────────────────────────────
+class DocumentType(StrEnum):
+    GST = "gst"
+    PAN = "pan"
+    ISO = "iso"
+    UDYAM = "udyam"
+    TRADE_LICENSE = "trade_license"
+    BANK_GUARANTEE = "bank_guarantee"
+    EXPERIENCE_CERTIFICATE = "experience_certificate"
+    FINANCIAL_STATEMENT = "financial_statement"
+    TAX_CLEARANCE = "tax_clearance"
+    EMOLUMENT_CERTIFICATE = "emolument_certificate"
+    OTHER = "other"
 
-const DOC_TYPE_META: Record<
-  DocumentType,
-  { label: string; abbr: string; color: string; hasExpiry: boolean }
-> = {
-  gst: { label: "GST Certificate", abbr: "GST", color: "#3B82F6", hasExpiry: true },
-  pan: { label: "PAN Card", abbr: "PAN", color: "#8B5CF6", hasExpiry: false },
-  iso: { label: "ISO / Quality Certificate", abbr: "ISO", color: "#10B981", hasExpiry: true },
-  udyam: { label: "MSME / Udyam Certificate", abbr: "MSME", color: "#F59E0B", hasExpiry: true },
-  trade_license: { label: "Trade License", abbr: "TL", color: "#EF4444", hasExpiry: true },
-  bank_guarantee: { label: "Bank Guarantee", abbr: "BG", color: "#06B6D4", hasExpiry: true },
-  experience_certificate: { label: "Work Experience / Past Orders", abbr: "EXP", color: "#EC4899", hasExpiry: false },
-  financial_statement: { label: "Audited Balance Sheet / ITR", abbr: "FIN", color: "#84CC16", hasExpiry: true },
-  tax_clearance: { label: "Tax Clearance Certificate", abbr: "TAX", color: "#F97316", hasExpiry: true },
-  emolument_certificate: { label: "Emolument Certificate", abbr: "EMO", color: "#A78BFA", hasExpiry: true },
-  other: { label: "Other Document", abbr: "OTH", color: "#6B7280", hasExpiry: false },
-};
 
-const DOC_TYPES = Object.entries(DOC_TYPE_META) as [DocumentType, typeof DOC_TYPE_META[DocumentType]][];
+class VaultDocument(Base):
+    """Compliance vault document model."""
+    __tablename__ = "vault_documents"
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+    id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, server_default=func.uuid_generate_v4())
+    company_id: Mapped[UUID] = mapped_column(
+        SQLUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    doc_type: Mapped[DocumentType] = mapped_column(String(50), nullable=False)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    storage_path: Mapped[str] = mapped_column(Text, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now()
+    )
 
-function formatDate(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
+    company: Mapped["Company"] = relationship("Company", back_populates="vault_documents", lazy="select")  # type: ignore[name-defined]
 
-function getExpiryBadge(doc: VaultDocument): {
-  label: string;
-  cls: string;
-} {
-  if (!doc.expires_at) return { label: "No Expiry", cls: "badge-neutral" };
-  if (doc.is_expired) return { label: "Expired", cls: "badge-red" };
-  if (doc.is_expiring_soon)
-    return {
-      label: `${doc.days_until_expiry}d left`,
-      cls: "badge-amber",
-    };
-  return { label: `${doc.days_until_expiry}d left`, cls: "badge-green" };
-}
+    tender_mappings: Mapped[list[VaultDocumentMapping]] = relationship(
+        "VaultDocumentMapping",
+        back_populates="document",
+        cascade="all, delete-orphan"
+    )
 
-// ─── Upload Modal ─────────────────────────────────────────────────────────────
+    def __repr__(self) -> str:
+        return f"VaultDocument(id={self.id}, company_id={self.company_id}, doc_type={self.doc_type})"
 
-function UploadModal({
-  onClose,
-  onSuccess,
-}: {
-  onClose: () => void;
-  onSuccess: () => void;
-}) {
-  const [docType, setDocType] = useState<DocumentType>("gst");
-  const [file, setFile] = useState<File | null>(null);
-  const [expiresAt, setExpiresAt] = useState("");
-  const [dragOver, setDragOver] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const queryClient = useQueryClient();
+    @property
+    def is_expired(self) -> bool:
+        if not self.expires_at:
+            return False
+        return datetime.now(UTC) > self.expires_at
 
-  const meta = DOC_TYPE_META[docType];
+    @property
+    def days_until_expiry(self) -> int | None:
+        if not self.expires_at:
+            return None
+        delta = self.expires_at - datetime.now(UTC)
+        return delta.days if delta.days > 0 else 0
 
-  const upload = useMutation({
-    mutationFn: async () => {
-      if (!file) throw new Error("No file selected");
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("doc_type", docType);
-      if (expiresAt) formData.append("expires_at", new Date(expiresAt).toISOString());
-      return api.vault.upload(formData);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["vault"] });
-      onSuccess();
-      onClose();
-    },
-  });
+    @property
+    def is_expiring_soon(self) -> bool:
+        if not self.expires_at:
+            return False
+        expiry_threshold = datetime.now(UTC) + timedelta(days=30)
+        return self.expires_at <= expiry_threshold
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    const dropped = e.dataTransfer.files[0];
-    if (dropped) setFile(dropped);
-  }, []);
 
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2 className="modal-title">Upload Document</h2>
-          <button className="modal-close" onClick={onClose}>✕</button>
-        </div>
+class VaultDocumentMapping(Base):
+    """Mapping between vault documents and tenders."""
+    __tablename__ = "vault_document_mappings"
 
-        <div className="modal-body">
-          {/* Doc type */}
-          <div className="field">
-            <label className="field-label">Document Type</label>
-            <div className="doc-type-grid">
-              {DOC_TYPES.map(([key, m]) => (
-                <button
-                  key={key}
-                  className={cn("doc-type-btn", docType === key && "doc-type-btn--active")}
-                  style={docType === key ? { borderColor: m.color, background: m.color + "18" } : {}}
-                  onClick={() => setDocType(key)}
-                >
-                  <span className="doc-type-abbr" style={{ color: m.color }}>{m.abbr}</span>
-                  <span className="doc-type-name">{m.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+    vault_doc_id: Mapped[UUID] = mapped_column(
+        SQLUUID(as_uuid=True),
+        ForeignKey("vault_documents.id", ondelete="CASCADE"),
+        primary_key=True
+    )
+    tender_id: Mapped[UUID] = mapped_column(
+        SQLUUID(as_uuid=True),
+        ForeignKey("tenders.id", ondelete="CASCADE"),
+        primary_key=True
+    )
+    used_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now()
+    )
 
-          {/* File drop zone */}
-          <div className="field">
-            <label className="field-label">File</label>
-            <div
-              className={cn("dropzone", dragOver && "dropzone--over", file && "dropzone--filled")}
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={handleDrop}
-              onClick={() => fileRef.current?.click()}
-            >
-              <input
-                ref={fileRef}
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                style={{ display: "none" }}
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
-              />
-              {file ? (
-                <div className="dropzone-file">
-                  <span className="dropzone-icon">📄</span>
-                  <span className="dropzone-filename">{file.name}</span>
-                  <span className="dropzone-size">{(file.size / 1024).toFixed(0)} KB</span>
-                </div>
-              ) : (
-                <div className="dropzone-empty">
-                  <span className="dropzone-icon">⬆</span>
-                  <span>Drop file here or click to browse</span>
-                  <span className="dropzone-hint">PDF, JPG, PNG, DOC up to 10MB</span>
-                </div>
-              )}
-            </div>
-          </div>
+    document: Mapped[VaultDocument] = relationship("VaultDocument", back_populates="tender_mappings")
 
-          {/* Expiry date (conditional) */}
-          {meta.hasExpiry && (
-            <div className="field">
-              <label className="field-label">Expiry Date <span className="field-optional">(optional)</span></label>
-              <input
-                type="date"
-                className="field-input"
-                value={expiresAt}
-                min={new Date().toISOString().split("T")[0]}
-                onChange={(e) => setExpiresAt(e.target.value)}
-              />
-            </div>
-          )}
-
-          {upload.isError && (
-            <div className="error-banner">
-              Upload failed. Please try again.
-            </div>
-          )}
-        </div>
-
-        <div className="modal-footer">
-          <Button variant="outline" onClick={onClose} disabled={upload.isPending}>
-            Cancel
-          </Button>
-          <Button
-            onClick={() => upload.mutate()}
-            disabled={!file || upload.isPending}
-            style={{ background: meta.color }}
-          >
-            {upload.isPending ? "Uploading…" : "Upload Document"}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Document Card ────────────────────────────────────────────────────────────
-
-function DocCard({
-  doc,
-  onDelete,
-  onDownload,
-}: {
-  doc: VaultDocument;
-  onDelete: (id: string) => void;
-  onDownload: (id: string, filename: string) => void;
-}) {
-  const meta = DOC_TYPE_META[doc.doc_type];
-  const expiry = getExpiryBadge(doc);
-
-  return (
-    <div className={cn("doc-card", doc.is_expired && "doc-card--expired")}>
-      <div className="doc-card-accent" style={{ background: meta.color }} />
-      <div className="doc-card-inner">
-        <div className="doc-card-header">
-          <div className="doc-abbr" style={{ background: meta.color + "22", color: meta.color }}>
-            {meta.abbr}
-          </div>
-          <div className="doc-info">
-            <span className="doc-type-label">{meta.label}</span>
-            <span className="doc-filename" title={doc.filename}>{doc.filename}</span>
-          </div>
-          <span className={cn("badge", expiry.cls)}>{expiry.label}</span>
-        </div>
-
-        <div className="doc-card-meta">
-          <div className="doc-meta-item">
-            <span className="meta-key">Uploaded</span>
-            <span className="meta-val">{formatDate(doc.uploaded_at)}</span>
-          </div>
-          <div className="doc-meta-item">
-            <span className="meta-key">Expires</span>
-            <span className="meta-val">{formatDate(doc.expires_at)}</span>
-          </div>
-          <div className="doc-meta-item">
-            <span className="meta-key">Version</span>
-            <span className="meta-val">v{doc.version}</span>
-          </div>
-        </div>
-
-        <div className="doc-card-actions">
-          <button
-            className="action-btn action-btn--download"
-            onClick={() => onDownload(doc.id, doc.filename)}
-          >
-            ↓ Download
-          </button>
-          <button
-            className="action-btn action-btn--delete"
-            onClick={() => onDelete(doc.id)}
-          >
-            Delete
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Stats Bar ────────────────────────────────────────────────────────────────
-
-function StatsBar({ docs }: { docs: VaultDocument[] }) {
-  const total = docs.length;
-  const expired = docs.filter((d) => d.is_expired).length;
-  const expiringSoon = docs.filter((d) => d.is_expiring_soon && !d.is_expired).length;
-  const valid = total - expired - expiringSoon;
-
-  return (
-    <div className="stats-bar">
-      <div className="stat">
-        <span className="stat-num">{total}</span>
-        <span className="stat-label">Total Documents</span>
-      </div>
-      <div className="stat-divider" />
-      <div className="stat">
-        <span className="stat-num stat-num--green">{valid}</span>
-        <span className="stat-label">Valid</span>
-      </div>
-      <div className="stat-divider" />
-      <div className="stat">
-        <span className="stat-num stat-num--amber">{expiringSoon}</span>
-        <span className="stat-label">Expiring Soon</span>
-      </div>
-      <div className="stat-divider" />
-      <div className="stat">
-        <span className="stat-num stat-num--red">{expired}</span>
-        <span className="stat-label">Expired</span>
-      </div>
-    </div>
-  );
-}
-
-// ─── Empty State ──────────────────────────────────────────────────────────────
-
-function EmptyState({ onUpload }: { onUpload: () => void }) {
-  return (
-    <div className="empty-state">
-      <div className="empty-icon">🗂️</div>
-      <h3 className="empty-title">No documents yet</h3>
-      <p className="empty-desc">
-        Upload your compliance documents once and reuse them across all tender applications.
-      </p>
-      <Button onClick={onUpload}>Upload your first document</Button>
-    </div>
-  );
-}
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
-
-export default function VaultPage() {
-  const [showUpload, setShowUpload] = useState(false);
-  const [filterType, setFilterType] = useState<DocumentType | "all">("all");
-  const [filterStatus, setFilterStatus] = useState<"all" | "valid" | "expiring" | "expired">("all");
-  const queryClient = useQueryClient();
-  const router = useRouter();
-
-  const { data: docs = [], isLoading } = useQuery<VaultDocument[]>({
-    queryKey: ["vault"],
-    queryFn: () => api.vault.list(),
-    staleTime: 60_000,
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.vault.delete(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["vault"] }),
-  });
-
-  const handleDownload = async (id: string, filename: string) => {
-    try {
-      const { url } = await api.vault.download(id);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      a.click();
-    } catch {
-      // handle silently
-    }
-  };
-
-  const filtered = docs.filter((d) => {
-    if (filterType !== "all" && d.doc_type !== filterType) return false;
-    if (filterStatus === "valid" && (d.is_expired || d.is_expiring_soon)) return false;
-    if (filterStatus === "expiring" && !d.is_expiring_soon) return false;
-    if (filterStatus === "expired" && !d.is_expired) return false;
-    return true;
-  });
-
-  return (
-    <>
-      <style>{`
-        /* ── Base ── */
-        .vault-page {
-          min-height: 100vh;
-          background: #0F1117;
-          color: #E2E8F0;
-          font-family: 'DM Sans', 'Segoe UI', sans-serif;
-          padding: 32px 24px 64px;
-          max-width: 1200px;
-          margin: 0 auto;
-        }
-
-        /* ── Header ── */
-        .vault-header {
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          margin-bottom: 32px;
-          gap: 16px;
-        }
-        .vault-header-left {}
-        .vault-title {
-          font-size: 28px;
-          font-weight: 700;
-          letter-spacing: -0.5px;
-          color: #F1F5F9;
-          margin: 0 0 4px;
-        }
-        .vault-subtitle {
-          font-size: 14px;
-          color: #64748B;
-        }
-
-        /* ── Stats ── */
-        .stats-bar {
-          display: flex;
-          align-items: center;
-          gap: 0;
-          background: #1E2130;
-          border: 1px solid #2D3148;
-          border-radius: 12px;
-          padding: 16px 24px;
-          margin-bottom: 24px;
-        }
-        .stat { flex: 1; text-align: center; }
-        .stat-divider {
-          width: 1px;
-          height: 36px;
-          background: #2D3148;
-          margin: 0 8px;
-        }
-        .stat-num { display: block; font-size: 26px; font-weight: 700; color: #F1F5F9; }
-        .stat-num--green { color: #10B981; }
-        .stat-num--amber { color: #F59E0B; }
-        .stat-num--red { color: #EF4444; }
-        .stat-label { font-size: 11px; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px; }
-
-        /* ── Filters ── */
-        .filters-row {
-          display: flex;
-          gap: 8px;
-          margin-bottom: 24px;
-          flex-wrap: wrap;
-          align-items: center;
-        }
-        .filter-chip {
-          padding: 6px 14px;
-          border-radius: 20px;
-          border: 1px solid #2D3148;
-          background: transparent;
-          color: #94A3B8;
-          font-size: 13px;
-          cursor: pointer;
-          transition: all 0.15s;
-          white-space: nowrap;
-        }
-        .filter-chip:hover { border-color: #4F5E8A; color: #E2E8F0; }
-        .filter-chip--active {
-          background: #3B82F6;
-          border-color: #3B82F6;
-          color: #fff;
-        }
-        .filter-sep { width: 1px; height: 24px; background: #2D3148; margin: 0 4px; }
-
-        /* ── Doc Grid ── */
-        .doc-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-          gap: 16px;
-        }
-
-        /* ── Doc Card ── */
-        .doc-card {
-          background: #1E2130;
-          border: 1px solid #2D3148;
-          border-radius: 12px;
-          overflow: hidden;
-          transition: border-color 0.2s, transform 0.2s;
-          position: relative;
-          display: flex;
-        }
-        .doc-card:hover { border-color: #4F5E8A; transform: translateY(-2px); }
-        .doc-card--expired { opacity: 0.7; }
-        .doc-card-accent { width: 4px; flex-shrink: 0; }
-        .doc-card-inner { flex: 1; padding: 16px; }
-        .doc-card-header {
-          display: flex;
-          align-items: flex-start;
-          gap: 12px;
-          margin-bottom: 12px;
-        }
-        .doc-abbr {
-          width: 40px;
-          height: 40px;
-          border-radius: 8px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 10px;
-          font-weight: 700;
-          flex-shrink: 0;
-          letter-spacing: 0.3px;
-        }
-        .doc-info { flex: 1; min-width: 0; }
-        .doc-type-label { display: block; font-size: 13px; font-weight: 600; color: #E2E8F0; }
-        .doc-filename {
-          display: block;
-          font-size: 11px;
-          color: #64748B;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          margin-top: 2px;
-        }
-
-        /* ── Badges ── */
-        .badge {
-          padding: 3px 8px;
-          border-radius: 20px;
-          font-size: 11px;
-          font-weight: 600;
-          flex-shrink: 0;
-        }
-        .badge-neutral { background: #2D3148; color: #94A3B8; }
-        .badge-green { background: #10B98122; color: #10B981; }
-        .badge-amber { background: #F59E0B22; color: #F59E0B; }
-        .badge-red { background: #EF444422; color: #EF4444; }
-
-        /* ── Card meta ── */
-        .doc-card-meta {
-          display: flex;
-          gap: 16px;
-          margin-bottom: 14px;
-        }
-        .doc-meta-item { display: flex; flex-direction: column; gap: 2px; }
-        .meta-key { font-size: 10px; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; }
-        .meta-val { font-size: 12px; color: #94A3B8; }
-
-        /* ── Card actions ── */
-        .doc-card-actions { display: flex; gap: 8px; }
-        .action-btn {
-          flex: 1;
-          padding: 7px 0;
-          border-radius: 7px;
-          font-size: 12px;
-          font-weight: 500;
-          cursor: pointer;
-          border: 1px solid #2D3148;
-          background: transparent;
-          transition: all 0.15s;
-        }
-        .action-btn--download { color: #60A5FA; }
-        .action-btn--download:hover { background: #3B82F620; border-color: #3B82F6; }
-        .action-btn--delete { color: #F87171; }
-        .action-btn--delete:hover { background: #EF444420; border-color: #EF4444; }
-
-        /* ── Empty state ── */
-        .empty-state {
-          text-align: center;
-          padding: 80px 24px;
-          background: #1E2130;
-          border: 1px dashed #2D3148;
-          border-radius: 16px;
-          grid-column: 1 / -1;
-        }
-        .empty-icon { font-size: 48px; margin-bottom: 16px; }
-        .empty-title { font-size: 18px; font-weight: 600; color: #E2E8F0; margin: 0 0 8px; }
-        .empty-desc { font-size: 14px; color: #64748B; max-width: 400px; margin: 0 auto 24px; }
-
-        /* ── Skeleton ── */
-        .skeleton-card {
-          background: #1E2130;
-          border: 1px solid #2D3148;
-          border-radius: 12px;
-          height: 160px;
-          animation: pulse 1.5s ease-in-out infinite;
-        }
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.4; }
-        }
-
-        /* ── Modal ── */
-        .modal-overlay {
-          position: fixed;
-          inset: 0;
-          background: rgba(0,0,0,0.7);
-          backdrop-filter: blur(4px);
-          z-index: 50;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 24px;
-        }
-        .modal-card {
-          background: #1E2130;
-          border: 1px solid #2D3148;
-          border-radius: 16px;
-          width: 100%;
-          max-width: 580px;
-          max-height: 85vh;
-          overflow-y: auto;
-          box-shadow: 0 25px 60px rgba(0,0,0,0.5);
-        }
-        .modal-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 20px 24px 0;
-        }
-        .modal-title { font-size: 18px; font-weight: 700; color: #F1F5F9; }
-        .modal-close {
-          background: none;
-          border: none;
-          color: #64748B;
-          cursor: pointer;
-          font-size: 18px;
-          padding: 4px;
-        }
-        .modal-close:hover { color: #E2E8F0; }
-        .modal-body { padding: 20px 24px; }
-        .modal-footer {
-          display: flex;
-          gap: 10px;
-          justify-content: flex-end;
-          padding: 0 24px 20px;
-        }
-
-        /* ── Fields ── */
-        .field { margin-bottom: 20px; }
-        .field-label {
-          display: block;
-          font-size: 12px;
-          font-weight: 600;
-          color: #94A3B8;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          margin-bottom: 8px;
-        }
-        .field-optional { font-weight: 400; color: #475569; text-transform: none; }
-        .field-input {
-          width: 100%;
-          padding: 10px 12px;
-          background: #0F1117;
-          border: 1px solid #2D3148;
-          border-radius: 8px;
-          color: #E2E8F0;
-          font-size: 14px;
-          outline: none;
-          box-sizing: border-box;
-        }
-        .field-input:focus { border-color: #3B82F6; }
-
-        /* ── Doc type grid ── */
-        .doc-type-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-          gap: 8px;
-        }
-        .doc-type-btn {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-          padding: 10px 12px;
-          background: #0F1117;
-          border: 1px solid #2D3148;
-          border-radius: 8px;
-          cursor: pointer;
-          transition: all 0.15s;
-          text-align: left;
-        }
-        .doc-type-btn:hover { border-color: #4F5E8A; }
-        .doc-type-abbr { font-size: 11px; font-weight: 700; }
-        .doc-type-name { font-size: 11px; color: #94A3B8; line-height: 1.3; }
-
-        /* ── Dropzone ── */
-        .dropzone {
-          border: 2px dashed #2D3148;
-          border-radius: 10px;
-          padding: 28px;
-          text-align: center;
-          cursor: pointer;
-          transition: all 0.15s;
-          color: #64748B;
-          font-size: 13px;
-        }
-        .dropzone:hover, .dropzone--over { border-color: #3B82F6; background: #3B82F608; }
-        .dropzone--filled { border-style: solid; border-color: #10B981; background: #10B98108; }
-        .dropzone-icon { display: block; font-size: 24px; margin-bottom: 8px; }
-        .dropzone-hint { display: block; font-size: 11px; color: #475569; margin-top: 4px; }
-        .dropzone-file { display: flex; align-items: center; gap: 10px; justify-content: center; }
-        .dropzone-filename { color: #E2E8F0; font-weight: 500; }
-        .dropzone-size { color: #64748B; }
-        .dropzone-empty { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-
-        /* ── Error ── */
-        .error-banner {
-          background: #EF444420;
-          border: 1px solid #EF4444;
-          color: #FCA5A5;
-          padding: 10px 14px;
-          border-radius: 8px;
-          font-size: 13px;
-          margin-top: 8px;
-        }
-
-        /* ── Upload success toast ── */
-        .toast {
-          position: fixed;
-          bottom: 32px;
-          right: 32px;
-          background: #10B981;
-          color: #fff;
-          padding: 12px 20px;
-          border-radius: 10px;
-          font-size: 14px;
-          font-weight: 500;
-          z-index: 100;
-          animation: slideUp 0.3s ease;
-        }
-        @keyframes slideUp {
-          from { opacity: 0; transform: translateY(12px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
-
-      <div className="vault-page">
-        {/* Header */}
-        <div className="vault-header">
-          <div className="vault-header-left">
-            <h1 className="vault-title">Compliance Vault</h1>
-            <p className="vault-subtitle">
-              Store and manage your documents for instant use in tender applications.
-            </p>
-          </div>
-          <Button onClick={() => setShowUpload(true)}>+ Upload Document</Button>
-        </div>
-
-        {/* Stats */}
-        {!isLoading && docs.length > 0 && <StatsBar docs={docs} />}
-
-        {/* Filters */}
-        {docs.length > 0 && (
-          <div className="filters-row">
-            {/* Status filters */}
-            {(["all", "valid", "expiring", "expired"] as const).map((s) => (
-              <button
-                key={s}
-                className={cn("filter-chip", filterStatus === s && "filter-chip--active")}
-                onClick={() => setFilterStatus(s)}
-              >
-                {s === "all" ? "All Status" : s.charAt(0).toUpperCase() + s.slice(1)}
-              </button>
-            ))}
-
-            <div className="filter-sep" />
-
-            {/* Type filters */}
-            <button
-              className={cn("filter-chip", filterType === "all" && "filter-chip--active")}
-              onClick={() => setFilterType("all")}
-            >
-              All Types
-            </button>
-            {DOC_TYPES.map(([key, m]) => (
-              <button
-                key={key}
-                className={cn("filter-chip", filterType === key && "filter-chip--active")}
-                style={filterType === key ? { background: m.color, borderColor: m.color } : {}}
-                onClick={() => setFilterType(key)}
-              >
-                {m.abbr}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Grid */}
-        <div className="doc-grid">
-          {isLoading ? (
-            Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="skeleton-card" />
-            ))
-          ) : filtered.length === 0 && docs.length === 0 ? (
-            <EmptyState onUpload={() => setShowUpload(true)} />
-          ) : filtered.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-icon">🔍</div>
-              <h3 className="empty-title">No documents match filters</h3>
-              <p className="empty-desc">Try adjusting the status or type filter above.</p>
-            </div>
-          ) : (
-            filtered.map((doc) => (
-              <DocCard
-                key={doc.id}
-                doc={doc}
-                onDelete={(id) => {
-                  if (confirm("Delete this document?")) deleteMutation.mutate(id);
-                }}
-                onDownload={handleDownload}
-              />
-            ))
-          )}
-        </div>
-      </div>
-
-      {/* Upload Modal */}
-      {showUpload && (
-        <UploadModal
-          onClose={() => setShowUpload(false)}
-          onSuccess={() => {}}
-        />
-      )}
-    </>
-  );
-}
+    def __repr__(self) -> str:
+        return f"VaultDocumentMapping(vault_doc_id={self.vault_doc_id}, tender_id={self.tender_id})"
