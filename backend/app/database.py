@@ -7,6 +7,7 @@ from app.config import settings
 
 logger = structlog.get_logger()
 
+
 class Base(DeclarativeBase):
     """Base model class for all SQLAlchemy models."""
     metadata = MetaData(
@@ -19,6 +20,7 @@ class Base(DeclarativeBase):
         }
     )
 
+
 def _get_async_db_url(url: str) -> str:
     """Ensure the database URL uses the asyncpg driver."""
     if url.startswith("postgresql://"):
@@ -26,6 +28,7 @@ def _get_async_db_url(url: str) -> str:
     if url.startswith("postgres://"):
         return url.replace("postgres://", "postgresql+asyncpg://", 1)
     return url
+
 
 engine = create_async_engine(
     _get_async_db_url(settings.DATABASE_URL),
@@ -42,6 +45,7 @@ AsyncSessionFactory = async_sessionmaker(
     expire_on_commit=False,
 )
 
+
 async def get_async_session() -> AsyncSession:
     """Dependency to get async database session."""
     async with AsyncSessionFactory() as session:
@@ -54,9 +58,11 @@ async def get_async_session() -> AsyncSession:
         finally:
             await session.close()
 
+
 async def init_db() -> None:
-    """Initialize database - tables managed by Supabase migrations."""
+    """Initialize database - create all tables that don't exist yet."""
     try:
+        # Import all models so they register with Base.metadata
         from app.contexts.tender_discovery.models import Tender  # noqa
         from app.contexts.bid_generation.models import BidGeneration, BidTemplate, BidGenerationAnalytics  # noqa
         from app.contexts.bid_lifecycle.models import Bid, BidOutcomeRecord, BidPayment, BidFollowUp  # noqa
@@ -66,10 +72,16 @@ async def init_db() -> None:
         from app.contexts.alert_engine.models import Notification, NotificationTemplate, NotificationPreference  # noqa
         from app.contexts.whatsapp_gateway.models import WhatsAppSession  # noqa
         from app.contexts.partner_portal.models import CAPartner, CAManagedCompany  # noqa
+
+        # Create any tables that don't exist yet (safe to run on every startup)
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all, checkfirst=True)
+
         logger.info("database_initialized")
     except Exception as e:
         logger.error("database_init_failed", error=str(e))
         raise
+
 
 async def close_db() -> None:
     """Close database connections."""
