@@ -39,15 +39,35 @@ def get_alert_engine_service(
     session=Depends(get_db_session),
 ) -> AlertEngineService:
     """Dependency to get alert engine service."""
+    from app.config import settings
     from app.infrastructure.resend_client import ResendClient
     from app.infrastructure.whatsapp_client import WhatsAppClient
+
+    # Safely instantiate ResendClient — skip if API key is missing
+    try:
+        resend = ResendClient() if getattr(settings, "RESEND_API_KEY", None) else None
+    except Exception:
+        resend = None
+
+    # Safely instantiate WhatsAppClient — skip if credentials are missing
+    try:
+        whatsapp = (
+            WhatsAppClient()
+            if (
+                getattr(settings, "WHATSAPP_PHONE_NUMBER_ID", None)
+                and getattr(settings, "WHATSAPP_ACCESS_TOKEN", None)
+            )
+            else None
+        )
+    except Exception:
+        whatsapp = None
 
     return AlertEngineService(
         notification_repo=NotificationRepository(session),
         template_repo=NotificationTemplateRepository(session),
         preference_repo=NotificationPreferenceRepository(session),
-        resend_client=ResendClient(),       # was: email_client=EmailClient()
-        whatsapp_client=WhatsAppClient(),
+        resend_client=resend,
+        whatsapp_client=whatsapp,
     )
 
 
