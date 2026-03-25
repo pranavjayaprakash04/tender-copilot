@@ -5,7 +5,7 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy import UUID as SQLAlchemyUUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -40,7 +40,9 @@ class TenderDocument(Base):
 
     id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, primary_key=True, default=func.uuid_generate_v4())
     company_id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
-    tender_id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, ForeignKey("tenders.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    # FIX: tenders.id is bigint (scraper table), not UUID — removed FK constraint
+    tender_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
 
     # Document details
     document_type: Mapped[DocumentType] = mapped_column(String(50), nullable=False)
@@ -70,8 +72,8 @@ class TenderDocument(Base):
     ai_evaluation_criteria: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     ai_risk_factors: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     ai_recommendations: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    ai_confidence_score: Mapped[float | None] = mapped_column(Integer, nullable=True)  # 0-100
-    ai_processing_time: Mapped[float | None] = mapped_column(Integer, nullable=True)  # milliseconds
+    ai_confidence_score: Mapped[float | None] = mapped_column(Integer, nullable=True)
+    ai_processing_time: Mapped[float | None] = mapped_column(Integer, nullable=True)
 
     # Document metadata
     document_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
@@ -88,17 +90,14 @@ class TenderDocument(Base):
 
     @property
     def can_retry(self) -> bool:
-        """Check if document processing can be retried."""
         return self.retry_count < self.max_retries and self.processing_status == ProcessingStatus.FAILED
 
     @property
     def is_processed(self) -> bool:
-        """Check if document has been processed successfully."""
         return self.processing_status == ProcessingStatus.COMPLETED
 
     @property
     def processing_duration(self) -> float | None:
-        """Get processing duration in seconds."""
         if self.processing_started_at and self.processing_completed_at:
             return (self.processing_completed_at - self.processing_started_at).total_seconds()
         return None
@@ -111,27 +110,23 @@ class DocumentChunk(Base):
     id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, primary_key=True, default=func.uuid_generate_v4())
     document_id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, ForeignKey("tender_documents.id", ondelete="CASCADE"), nullable=False, index=True)
 
-    # Chunk content
     chunk_text: Mapped[str] = mapped_column(Text, nullable=False)
-    chunk_type: Mapped[str] = mapped_column(String(50), nullable=False, default="text")  # text, table, image_caption
+    chunk_type: Mapped[str] = mapped_column(String(50), nullable=False, default="text")
     page_number: Mapped[int] = mapped_column(Integer, nullable=True)
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     word_count: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    # Embedding data
-    embedding_vector: Mapped[list[float] | None] = mapped_column(JSON, nullable=True)  # For vector search
+    embedding_vector: Mapped[list[float] | None] = mapped_column(JSON, nullable=True)
     embedding_model: Mapped[str | None] = mapped_column(String(50), nullable=True)
     embedding_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    # Search and classification
     keywords: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     category: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    importance_score: Mapped[float] = mapped_column(Integer, nullable=False, default=0.0)  # 0-1
+    importance_score: Mapped[float] = mapped_column(Integer, nullable=False, default=0.0)
     is_requirement: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_deadline: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_financial: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
-    # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
@@ -145,42 +140,37 @@ class TenderIntelligenceReport(Base):
 
     id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, primary_key=True, default=func.uuid_generate_v4())
     company_id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
-    tender_id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, ForeignKey("tenders.id", ondelete="CASCADE"), nullable=False, index=True)
 
-    # Report details
-    report_type: Mapped[str] = mapped_column(String(50), nullable=False)  # summary, analysis, recommendation
+    # FIX: tenders.id is bigint (scraper table), not UUID — removed FK constraint
+    tender_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+
+    report_type: Mapped[str] = mapped_column(String(50), nullable=False)
     language: Mapped[str] = mapped_column(String(10), nullable=False, default="en")
     report_version: Mapped[str] = mapped_column(String(20), nullable=False, default="1.0")
 
-    # AI processing info
     ai_model: Mapped[str] = mapped_column(String(50), nullable=False)
     ai_prompt_version: Mapped[str] = mapped_column(String(20), nullable=False)
     processing_time_ms: Mapped[int] = mapped_column(Integer, nullable=False)
-    confidence_score: Mapped[float] = mapped_column(Integer, nullable=False)  # 0-100
+    confidence_score: Mapped[float] = mapped_column(Integer, nullable=False)
 
-    # Report content
     executive_summary: Mapped[str] = mapped_column(Text, nullable=False)
     key_findings: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     risk_assessment: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     recommendations: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     next_steps: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=True)
 
-    # Source documents
     source_document_ids: Mapped[list[UUID]] = mapped_column(JSON, nullable=False)
     total_documents_analyzed: Mapped[int] = mapped_column(Integer, nullable=False)
     total_pages_processed: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    # Quality metrics
-    completeness_score: Mapped[float] = mapped_column(Integer, nullable=False)  # 0-100
-    accuracy_score: Mapped[float] = mapped_column(Integer, nullable=False)  # 0-100
-    relevance_score: Mapped[float] = mapped_column(Integer, nullable=False)  # 0-100
+    completeness_score: Mapped[float] = mapped_column(Integer, nullable=False)
+    accuracy_score: Mapped[float] = mapped_column(Integer, nullable=False)
+    relevance_score: Mapped[float] = mapped_column(Integer, nullable=False)
 
-    # User feedback
-    user_rating: Mapped[int] = mapped_column(Integer, nullable=True)  # 1-5 stars
+    user_rating: Mapped[int] = mapped_column(Integer, nullable=True)
     user_feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_helpful: Mapped[bool] = mapped_column(Boolean, nullable=True)
 
-    # Timestamps
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
@@ -189,5 +179,4 @@ class TenderIntelligenceReport(Base):
 
     @property
     def average_quality_score(self) -> float:
-        """Calculate average quality score."""
         return (self.completeness_score + self.accuracy_score + self.relevance_score) / 3
