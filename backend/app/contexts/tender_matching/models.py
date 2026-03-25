@@ -5,9 +5,9 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
-from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     DateTime,
     Float,
@@ -34,24 +34,25 @@ class MatchStatus(StrEnum):
 
 
 class TenderMatch(Base):
-    """Tender-company matching model with pgvector embeddings."""
+    """Tender-company matching model."""
     __tablename__ = "tender_matches"
 
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, default=func.uuid_generate_v4())
     company_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
-    tender_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("tenders.id", ondelete="CASCADE"), nullable=False, index=True)
+    # tender_id stored as BigInteger — tenders table uses bigint PK (scraper-created)
+    tender_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
 
     # Matching results
-    match_score: Mapped[float] = mapped_column(Float, nullable=False, index=True)  # 0.0-1.0 cosine similarity
-    confidence_level: Mapped[str] = mapped_column(String(20), nullable=True)  # high, medium, low
-    match_reasons: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)  # Reasons for match
-    gap_analysis: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)  # Capability gaps
-    recommendations: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)  # Recommendations
+    match_score: Mapped[float] = mapped_column(Float, nullable=False, index=True)
+    confidence_level: Mapped[str] = mapped_column(String(20), nullable=True)
+    match_reasons: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    gap_analysis: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    recommendations: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
 
-    # Embedding data
-    company_embedding: Mapped[Vector] = mapped_column(Vector(384), nullable=False)  # Company capability embedding
-    tender_embedding: Mapped[Vector] = mapped_column(Vector(384), nullable=False)  # Tender requirement embedding
-    embedding_model: Mapped[str] = mapped_column(String(50), nullable=False, default="all-MiniLM-L6-v2")
+    # Embedding data stored as JSON (pgvector not available)
+    company_embedding: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    tender_embedding: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    embedding_model: Mapped[str] = mapped_column(String(50), nullable=False, default="tfidf-v1")
     embedding_version: Mapped[str] = mapped_column(String(20), nullable=False, default="v1")
 
     # Processing metadata
@@ -62,23 +63,23 @@ class TenderMatch(Base):
     processing_time_ms: Mapped[int] = mapped_column(Integer, nullable=True)
 
     # Matching criteria
-    industry_match: Mapped[float] = mapped_column(Float, nullable=True)  # Industry compatibility score
-    size_match: Mapped[float] = mapped_column(Float, nullable=True)  # Company size compatibility
-    location_match: Mapped[float] = mapped_column(Float, nullable=True)  # Geographic compatibility
-    value_match: Mapped[float] = mapped_column(Float, nullable=True)  # Tender value compatibility
-    experience_match: Mapped[float] = mapped_column(Float, nullable=True)  # Past experience score
+    industry_match: Mapped[float] = mapped_column(Float, nullable=True)
+    size_match: Mapped[float] = mapped_column(Float, nullable=True)
+    location_match: Mapped[float] = mapped_column(Float, nullable=True)
+    value_match: Mapped[float] = mapped_column(Float, nullable=True)
+    experience_match: Mapped[float] = mapped_column(Float, nullable=True)
 
     # Quality indicators
-    completeness_score: Mapped[float] = mapped_column(Float, nullable=True)  # Data completeness (0-1)
-    freshness_score: Mapped[float] = mapped_column(Float, nullable=True)  # How recent the data is (0-1)
-    accuracy_score: Mapped[float] = mapped_column(Float, nullable=True)  # Data accuracy confidence (0-1)
+    completeness_score: Mapped[float] = mapped_column(Float, nullable=True)
+    freshness_score: Mapped[float] = mapped_column(Float, nullable=True)
+    accuracy_score: Mapped[float] = mapped_column(Float, nullable=True)
 
     # User interaction
     is_viewed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_shortlisted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     shortlisted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    user_rating: Mapped[int] = mapped_column(Integer, nullable=True)  # 1-5 stars
+    user_rating: Mapped[int] = mapped_column(Integer, nullable=True)
     user_feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Timestamps
@@ -87,9 +88,7 @@ class TenderMatch(Base):
 
     # Relationships
     company: Mapped[Any] = relationship("Company", back_populates="tender_matches")
-    tender: Mapped[Any] = relationship("Tender", back_populates="tender_matches")
 
-    # Indexes for performance
     __table_args__ = (
         Index('idx_company_tender_match', 'company_id', 'tender_id'),
         Index('idx_match_score_desc', desc('match_score')),
@@ -103,52 +102,44 @@ class TenderMatch(Base):
 
     @property
     def is_high_match(self) -> bool:
-        """Check if this is a high-quality match."""
         return self.match_score >= 0.8 and self.confidence_level == "high"
 
     @property
     def processing_duration(self) -> float | None:
-        """Get processing duration in seconds."""
         if self.processing_started_at and self.processing_completed_at:
             return (self.processing_completed_at - self.processing_started_at).total_seconds()
         return None
 
     @property
     def age_hours(self) -> float:
-        """Get age of match in hours."""
         return (datetime.utcnow() - self.created_at).total_seconds() / 3600
 
 
 class CompanyEmbedding(Base):
-    """Company capability embeddings for faster matching."""
+    """Company capability embeddings."""
     __tablename__ = "company_embeddings"
 
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, default=func.uuid_generate_v4())
     company_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
 
-    # Embedding data
-    capabilities_embedding: Mapped[Vector] = mapped_column(Vector(384), nullable=False)
-    embedding_model: Mapped[str] = mapped_column(String(50), nullable=False, default="all-MiniLM-L6-v2")
+    # Embedding stored as JSON list of floats
+    capabilities_embedding: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    embedding_model: Mapped[str] = mapped_column(String(50), nullable=False, default="tfidf-v1")
     embedding_version: Mapped[str] = mapped_column(String(20), nullable=False, default="v1")
 
-    # Source data
-    capabilities_text: Mapped[str] = mapped_column(Text, nullable=False)  # Original text used for embedding
-    source_fields: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)  # Which fields contributed
+    capabilities_text: Mapped[str] = mapped_column(Text, nullable=False)
+    source_fields: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
-    # Quality metrics
     text_length: Mapped[int] = mapped_column(Integer, nullable=False)
     word_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    completeness_score: Mapped[float] = mapped_column(Float, nullable=True)  # 0-1
+    completeness_score: Mapped[float] = mapped_column(Float, nullable=True)
 
-    # Processing metadata
     last_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
     processing_time_ms: Mapped[int] = mapped_column(Integer, nullable=True)
     embedding_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
-    # Relationships
     company: Mapped[Any] = relationship("Company", back_populates="embedding")
 
     def __repr__(self) -> str:
@@ -156,36 +147,30 @@ class CompanyEmbedding(Base):
 
 
 class TenderEmbedding(Base):
-    """Tender requirement embeddings for faster matching."""
+    """Tender requirement embeddings."""
     __tablename__ = "tender_embeddings"
 
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, default=func.uuid_generate_v4())
-    tender_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("tenders.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    # tender_id stored as BigInteger — tenders table uses bigint PK
+    tender_id: Mapped[int] = mapped_column(BigInteger, nullable=False, unique=True, index=True)
 
-    # Embedding data
-    requirements_embedding: Mapped[Vector] = mapped_column(Vector(384), nullable=False)
-    embedding_model: Mapped[str] = mapped_column(String(50), nullable=False, default="all-MiniLM-L6-v2")
+    # Embedding stored as JSON list of floats
+    requirements_embedding: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    embedding_model: Mapped[str] = mapped_column(String(50), nullable=False, default="tfidf-v1")
     embedding_version: Mapped[str] = mapped_column(String(20), nullable=False, default="v1")
 
-    # Source data
-    requirements_text: Mapped[str] = mapped_column(Text, nullable=False)  # Original text used for embedding
-    source_fields: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)  # Which fields contributed
+    requirements_text: Mapped[str] = mapped_column(Text, nullable=False)
+    source_fields: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
-    # Quality metrics
     text_length: Mapped[int] = mapped_column(Integer, nullable=False)
     word_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    completeness_score: Mapped[float] = mapped_column(Float, nullable=True)  # 0-1
+    completeness_score: Mapped[float] = mapped_column(Float, nullable=True)
 
-    # Processing metadata
     last_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
     processing_time_ms: Mapped[int] = mapped_column(Integer, nullable=True)
     embedding_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
-
-    # Relationships
-    tender: Mapped[Any] = relationship("Tender", back_populates="embedding")
 
     def __repr__(self) -> str:
         return f"TenderEmbedding(tender_id={self.tender_id}, model={self.embedding_model})"
@@ -198,27 +183,22 @@ class MatchingAnalytics(Base):
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, default=func.uuid_generate_v4())
     company_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
 
-    # Analytics period
     period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    period_type: Mapped[str] = mapped_column(String(20), nullable=False)  # daily, weekly, monthly
+    period_type: Mapped[str] = mapped_column(String(20), nullable=False)
 
-    # Matching metrics
     total_matches: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    high_quality_matches: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # score >= 0.8
+    high_quality_matches: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     average_match_score: Mapped[float] = mapped_column(Float, nullable=True)
     average_processing_time_ms: Mapped[int] = mapped_column(Integer, nullable=True)
 
-    # Engagement metrics
     views_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     shortlists_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    conversion_rate: Mapped[float] = mapped_column(Float, nullable=True)  # shortlists/views
+    conversion_rate: Mapped[float] = mapped_column(Float, nullable=True)
 
-    # Quality metrics
     average_confidence: Mapped[float] = mapped_column(Float, nullable=True)
-    accuracy_score: Mapped[float] = mapped_column(Float, nullable=True)  # Based on user feedback
+    accuracy_score: Mapped[float] = mapped_column(Float, nullable=True)
 
-    # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
@@ -227,7 +207,6 @@ class MatchingAnalytics(Base):
 
     @property
     def high_quality_rate(self) -> float:
-        """Calculate high-quality match rate."""
         if self.total_matches == 0:
             return 0.0
         return self.high_quality_matches / self.total_matches
