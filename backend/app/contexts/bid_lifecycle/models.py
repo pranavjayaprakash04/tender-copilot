@@ -5,7 +5,7 @@ from enum import StrEnum
 from uuid import UUID
 
 from sqlalchemy import (
-    JSON, Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text,
+    JSON, BigInteger, Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text,
 )
 from sqlalchemy import UUID as SQLAlchemyUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -63,7 +63,7 @@ class Bid(Base):
 
     id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, primary_key=True, default=func.uuid_generate_v4())
     company_id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
-    tender_id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, ForeignKey("tenders.id", ondelete="CASCADE"), nullable=False, index=True)
+    tender_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)  # FK removed: tenders.id is bigint, not UUID
     bid_number: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
