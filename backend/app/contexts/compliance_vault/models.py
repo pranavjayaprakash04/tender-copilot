@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy import UUID as SQLUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -30,7 +30,11 @@ class VaultDocument(Base):
     """Compliance vault document model."""
     __tablename__ = "vault_documents"
 
-    id: Mapped[UUID] = mapped_column(SQLUUID(as_uuid=True), primary_key=True, server_default=func.uuid_generate_v4())
+    id: Mapped[UUID] = mapped_column(
+        SQLUUID(as_uuid=True),
+        primary_key=True,
+        server_default=func.uuid_generate_v4()
+    )
     company_id: Mapped[UUID] = mapped_column(
         SQLUUID(as_uuid=True),
         ForeignKey("companies.id", ondelete="CASCADE"),
@@ -50,7 +54,6 @@ class VaultDocument(Base):
     )
 
     company: Mapped["Company"] = relationship("Company", back_populates="vault_documents", lazy="select")  # type: ignore[name-defined]
-
     tender_mappings: Mapped[list[VaultDocumentMapping]] = relationship(
         "VaultDocumentMapping",
         back_populates="document",
@@ -90,9 +93,11 @@ class VaultDocumentMapping(Base):
         ForeignKey("vault_documents.id", ondelete="CASCADE"),
         primary_key=True
     )
-    tender_id: Mapped[UUID] = mapped_column(
-        SQLUUID(as_uuid=True),
-        ForeignKey("tenders.id", ondelete="CASCADE"),
+    # FIX: tenders.id is bigint in the scraper-created table, not UUID.
+    # Removed FK constraint to avoid type mismatch — stored as plain bigint reference.
+    tender_id: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
         primary_key=True
     )
     used_at: Mapped[datetime] = mapped_column(
