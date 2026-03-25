@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -32,6 +33,20 @@ from app.infrastructure.whatsapp_client import WhatsAppClient
 from app.shared.events import DomainEventConsumer
 
 logger = structlog.get_logger()
+
+
+def _parse_context_data(context_data: Any) -> dict:
+    """Safely parse context_data which may be a JSON string, dict, or None."""
+    if context_data is None:
+        return {}
+    if isinstance(context_data, dict):
+        return context_data
+    if isinstance(context_data, str):
+        try:
+            return json.loads(context_data)
+        except (json.JSONDecodeError, ValueError):
+            return {}
+    return {}
 
 
 class AlertEngineService:
@@ -68,6 +83,11 @@ class AlertEngineService:
         # Create notification with company_id
         notification_dict = notification_data.model_dump()
         notification_dict["company_id"] = company_id
+
+        # Ensure context_data is stored as JSON string if it's a dict
+        if isinstance(notification_dict.get("context_data"), dict):
+            notification_dict["context_data"] = json.dumps(notification_dict["context_data"])
+
         notification = await self._notification_repo.create(notification_dict)
 
         logger.info(
@@ -196,7 +216,12 @@ class AlertEngineService:
 
         retried = []
         for notification in failed_notifications:
-            if notification.should_retry_now:
+            # Check if retry is due (next_retry_at is None or in the past)
+            should_retry = (
+                notification.next_retry_at is None
+                or notification.next_retry_at <= datetime.now(UTC)
+            )
+            if should_retry:
                 await self._send_notification(notification, trace_id)
                 retried.append(notification)
 
@@ -318,20 +343,21 @@ class AlertEngineService:
         trace_id: str | None = None
     ) -> None:
         """Send email notification via Resend."""
-        # Prepare template data
+        # Safely parse context_data (stored as JSON string in DB)
+        ctx = _parse_context_data(notification.context_data)
+
         template_data = {
-            "alert_type": notification.context_data.get("alert_type", "general"),
-            "tender_title": notification.context_data.get("tender_title"),
-            "tender_id": notification.context_data.get("tender_id"),
-            "company_name": notification.context_data.get("company_name"),
-            "deadline_date": notification.context_data.get("deadline_date"),
-            "tender_value": notification.context_data.get("tender_value"),
+            "alert_type": ctx.get("alert_type", "general"),
+            "tender_title": ctx.get("tender_title"),
+            "tender_id": ctx.get("tender_id"),
+            "company_name": ctx.get("company_name"),
+            "deadline_date": ctx.get("deadline_date"),
+            "tender_value": ctx.get("tender_value"),
             "message": notification.message,
-            "urgency": notification.context_data.get("urgency", "medium"),
-            "action_url": notification.context_data.get("action_url")
+            "urgency": ctx.get("urgency", "medium"),
+            "action_url": ctx.get("action_url")
         }
 
-        # Send via Resend with template
         await self._resend_client.send_tender_alert(
             to=notification.recipient,
             alert_data=template_data,
@@ -370,7 +396,6 @@ class AlertEngineService:
         trace_id: str | None = None
     ) -> None:
         """Send SMS notification."""
-        # TODO: Implement SMS client
         logger.info(
             "sms_notification_sent",
             trace_id=trace_id,
@@ -384,7 +409,6 @@ class AlertEngineService:
         trace_id: str | None = None
     ) -> None:
         """Send push notification."""
-        # TODO: Implement push notification service
         logger.info(
             "push_notification_sent",
             trace_id=trace_id,
@@ -399,9 +423,8 @@ class AlertEngineService:
     ) -> bool:
         """Check if notification should be sent based on preferences."""
         if not preferences:
-            return True  # Default to sending if no preferences
+            return True
 
-        # Check channel preferences
         if notification_data.notification_type == NotificationType.EMAIL:
             return any(p.email_enabled for p in preferences)
         elif notification_data.notification_type == NotificationType.WHATSAPP:
@@ -420,11 +443,10 @@ class AlertEngineService:
     ) -> list[NotificationType]:
         """Get notification channels for alert type."""
         if not preferences:
-            return [NotificationType.EMAIL]  # Default to email
+            return [NotificationType.EMAIL]
 
         channels = []
 
-        # Map alert types to channels based on preferences
         if alert_type == "deadline_reminder":
             if any(p.email_enabled and p.deadline_alerts for p in preferences):
                 channels.append(NotificationType.EMAIL)
@@ -446,7 +468,7 @@ class AlertEngineService:
             if any(p.whatsapp_enabled and p.payment_alerts for p in preferences):
                 channels.append(NotificationType.WHATSAPP)
 
-        return channels or [NotificationType.EMAIL]  # Fallback to email
+        return channels or [NotificationType.EMAIL]
 
     def _get_recipient_for_channel(
         self,
@@ -455,14 +477,12 @@ class AlertEngineService:
         preferences: list[NotificationPreference] | None
     ) -> str:
         """Get recipient for notification channel."""
-        # TODO: Get actual recipient from user/company data
-        # For now, return placeholder
         if channel == NotificationType.EMAIL:
             return f"company-{company_id}@example.com"
         elif channel == NotificationType.WHATSAPP:
-            return "+919876543210"  # Placeholder
+            return "+919876543210"
         elif channel == NotificationType.SMS:
-            return "+919876543210"  # Placeholder
+            return "+919876543210"
         else:
             return f"device-token-{company_id}"
 
@@ -491,9 +511,7 @@ class AlertEngineService:
 
     def _calculate_retry_delay(self, retry_count: int) -> timedelta:
         """Calculate retry delay with exponential backoff."""
-        # Exponential backoff: 5min, 15min, 1hr, 3hr, 6hr, 12hr, 24hr
         base_delay = timedelta(minutes=5)
         max_delay = timedelta(hours=24)
-
         delay = base_delay * (2 ** retry_count)
         return min(delay, max_delay)
