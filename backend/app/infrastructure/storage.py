@@ -44,7 +44,7 @@ class StorageClient:
             response = await asyncio.to_thread(
                 lambda: client.storage.from_(self._bucket_name).create_signed_upload_url(
                     path=storage_path,
-                    options={"contentType": content_type}
+                    options={"contentType": "application/pdf"}
                 )
             )
 
@@ -103,7 +103,9 @@ class StorageClient:
 
     async def upload_file(self, storage_path: str, file_data: bytes, content_type: str) -> str:
         """Upload a file directly to storage with validation."""
-        if content_type != "application/pdf" or not _validate_pdf_bytes(file_data):
+        # Always validate by magic bytes — ignore whatever content_type was detected
+        # by the HTTP layer (browsers sometimes send text/plain for PDFs)
+        if not _validate_pdf_bytes(file_data):
             raise ExternalServiceException(
                 "Storage", "Only valid PDF files are accepted"
             )
@@ -120,7 +122,7 @@ class StorageClient:
                 lambda: client.storage.from_(self._bucket_name).upload(
                     path=storage_path,
                     file=file_data,
-                    file_options={"contentType": content_type}
+                    file_options={"contentType": "application/pdf"}  # always force PDF
                 )
             )
 
