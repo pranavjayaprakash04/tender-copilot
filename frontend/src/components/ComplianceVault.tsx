@@ -193,7 +193,7 @@ const ComplianceVault: React.FC = () => {
     setError(null);
     try {
       const data = await api.compliance.getDocuments();
-      const docs: Document[] = Array.isArray(data) ? data : (data?.documents ?? []);
+      const docs: Document[] = Array.isArray(data) ? data : Array.isArray(data?.documents) ? data.documents : Array.isArray(data?.data) ? data.data : [];
       setDocuments(docs);
       // Derive stats from the same payload — no second request, no race condition
       setStats(deriveStats(docs));
