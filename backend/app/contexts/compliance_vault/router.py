@@ -64,6 +64,10 @@ async def upload_document(
     """Upload a document to the compliance vault."""
     from datetime import datetime
 
+    # Chrome (and some other browsers) mis-label PDF parts in multipart forms
+    # as text/plain. Force the correct MIME type so Supabase Storage accepts it.
+    file.content_type = "application/pdf"
+
     expiry_date = None
     if expires_at:
         try:
