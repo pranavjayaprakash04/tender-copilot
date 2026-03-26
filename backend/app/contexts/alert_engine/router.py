@@ -43,13 +43,11 @@ def get_alert_engine_service(
     from app.infrastructure.resend_client import ResendClient
     from app.infrastructure.whatsapp_client import WhatsAppClient
 
-    # Safely instantiate ResendClient — skip if API key is missing
     try:
         resend = ResendClient() if getattr(settings, "RESEND_API_KEY", None) else None
     except Exception:
         resend = None
 
-    # Safely instantiate WhatsAppClient — skip if credentials are missing
     try:
         whatsapp = (
             WhatsAppClient()
@@ -71,7 +69,94 @@ def get_alert_engine_service(
     )
 
 
-# Notification CRUD
+# ── Static routes MUST come before /{notification_id} ──────────────────────
+
+# Statistics — /notifications/stats/overview
+@router.get("/stats/overview", response_model=BaseResponse[NotificationStats])
+async def get_notification_stats(
+    service: AlertEngineService = Depends(get_alert_engine_service),
+    company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
+    trace_id: str = Depends(get_trace_id),
+) -> BaseResponse[NotificationStats]:
+    """Get notification statistics."""
+    stats = await service.get_notification_stats(company_id, trace_id)
+    return BaseResponse(data=stats, trace_id=trace_id)
+
+
+# Retry — /notifications/retry-failed
+@router.post("/retry-failed", response_model=BaseResponse[dict])
+async def retry_failed_notifications(
+    service: AlertEngineService = Depends(get_alert_engine_service),
+    company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
+    trace_id: str = Depends(get_trace_id),
+) -> BaseResponse[dict]:
+    """Retry failed notifications."""
+    retried = await service.retry_failed_notifications(company_id, trace_id)
+    return BaseResponse(data={"retried_count": len(retried)}, trace_id=trace_id)
+
+
+# Templates — /notifications/templates
+@router.post("/templates", response_model=BaseResponse[NotificationTemplateResponse])
+async def create_template(
+    template_data: NotificationTemplateCreate,
+    service: AlertEngineService = Depends(get_alert_engine_service),
+    _user_id: str = Depends(get_current_user_id),
+    trace_id: str = Depends(get_trace_id),
+) -> BaseResponse[NotificationTemplateResponse]:
+    """Create a notification template."""
+    template = await service.create_template(template_data, trace_id)
+    return BaseResponse(data=NotificationTemplateResponse.model_validate(template), trace_id=trace_id)
+
+
+# Preferences — /notifications/preferences
+@router.post("/preferences", response_model=BaseResponse[NotificationPreferenceResponse])
+async def create_preference(
+    preference_data: NotificationPreferenceCreate,
+    service: AlertEngineService = Depends(get_alert_engine_service),
+    company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
+    trace_id: str = Depends(get_trace_id),
+) -> BaseResponse[NotificationPreferenceResponse]:
+    """Create notification preferences."""
+    preference = await service.create_preference(preference_data, company_id, trace_id)
+    return BaseResponse(data=NotificationPreferenceResponse.model_validate(preference), trace_id=trace_id)
+
+
+# Bulk — /notifications/bulk
+@router.post("/bulk", response_model=BaseResponse[BulkNotificationResponse])
+async def create_bulk_notifications(
+    bulk_data: BulkNotificationCreate,
+    service: AlertEngineService = Depends(get_alert_engine_service),
+    company_id: UUID = Depends(get_current_company_id),
+    _user_id: str = Depends(get_current_user_id),
+    trace_id: str = Depends(get_trace_id),
+) -> BaseResponse[BulkNotificationResponse]:
+    """Create multiple notifications."""
+    created = []
+    failed = []
+
+    for notification_data in bulk_data.notifications:
+        try:
+            notification = await service.create_notification(notification_data, company_id, trace_id)
+            if notification:
+                created.append(NotificationResponse.model_validate(notification))
+        except Exception as e:
+            failed.append({"error": str(e), "notification": notification_data.model_dump()})
+
+    response = BulkNotificationResponse(
+        created=created,
+        failed=failed,
+        total_requested=len(bulk_data.notifications),
+        total_created=len(created),
+        total_failed=len(failed),
+    )
+    return BaseResponse(data=response, trace_id=trace_id)
+
+
+# ── Collection routes ───────────────────────────────────────────────────────
+
 @router.post("", response_model=BaseResponse[NotificationResponse])
 async def create_notification(
     notification_data: NotificationCreate,
@@ -145,6 +230,8 @@ async def list_notifications(
     )
 
 
+# ── Dynamic routes — /{notification_id} MUST be last ───────────────────────
+
 @router.get("/{notification_id}", response_model=BaseResponse[NotificationResponse])
 async def get_notification(
     notification_id: UUID,
@@ -188,88 +275,3 @@ async def delete_notification(
         trace_id,
     )
     return JSONResponse(content={"message": "Notification deleted successfully"}, status_code=200)
-
-
-# Statistics
-@router.get("/stats/overview", response_model=BaseResponse[NotificationStats])
-async def get_notification_stats(
-    service: AlertEngineService = Depends(get_alert_engine_service),
-    company_id: UUID = Depends(get_current_company_id),
-    _user_id: str = Depends(get_current_user_id),
-    trace_id: str = Depends(get_trace_id),
-) -> BaseResponse[NotificationStats]:
-    """Get notification statistics."""
-    stats = await service.get_notification_stats(company_id, trace_id)
-    return BaseResponse(data=stats, trace_id=trace_id)
-
-
-# Retry failed notifications
-@router.post("/retry-failed", response_model=BaseResponse[dict])
-async def retry_failed_notifications(
-    service: AlertEngineService = Depends(get_alert_engine_service),
-    company_id: UUID = Depends(get_current_company_id),
-    _user_id: str = Depends(get_current_user_id),
-    trace_id: str = Depends(get_trace_id),
-) -> BaseResponse[dict]:
-    """Retry failed notifications."""
-    retried = await service.retry_failed_notifications(company_id, trace_id)
-    return BaseResponse(data={"retried_count": len(retried)}, trace_id=trace_id)
-
-
-# Templates
-@router.post("/templates", response_model=BaseResponse[NotificationTemplateResponse])
-async def create_template(
-    template_data: NotificationTemplateCreate,
-    service: AlertEngineService = Depends(get_alert_engine_service),
-    _user_id: str = Depends(get_current_user_id),
-    trace_id: str = Depends(get_trace_id),
-) -> BaseResponse[NotificationTemplateResponse]:
-    """Create a notification template."""
-    template = await service.create_template(template_data, trace_id)
-    return BaseResponse(data=NotificationTemplateResponse.model_validate(template), trace_id=trace_id)
-
-
-# Preferences
-@router.post("/preferences", response_model=BaseResponse[NotificationPreferenceResponse])
-async def create_preference(
-    preference_data: NotificationPreferenceCreate,
-    service: AlertEngineService = Depends(get_alert_engine_service),
-    company_id: UUID = Depends(get_current_company_id),
-    _user_id: str = Depends(get_current_user_id),
-    trace_id: str = Depends(get_trace_id),
-) -> BaseResponse[NotificationPreferenceResponse]:
-    """Create notification preferences."""
-    preference = await service.create_preference(preference_data, company_id, trace_id)
-    return BaseResponse(data=NotificationPreferenceResponse.model_validate(preference), trace_id=trace_id)
-
-
-# Bulk operations
-@router.post("/bulk", response_model=BaseResponse[BulkNotificationResponse])
-async def create_bulk_notifications(
-    bulk_data: BulkNotificationCreate,
-    service: AlertEngineService = Depends(get_alert_engine_service),
-    company_id: UUID = Depends(get_current_company_id),
-    _user_id: str = Depends(get_current_user_id),
-    trace_id: str = Depends(get_trace_id),
-) -> BaseResponse[BulkNotificationResponse]:
-    """Create multiple notifications."""
-    created = []
-    failed = []
-
-    for notification_data in bulk_data.notifications:
-        try:
-            notification = await service.create_notification(notification_data, company_id, trace_id)
-            if notification:
-                created.append(NotificationResponse.model_validate(notification))
-        except Exception as e:
-            failed.append({"error": str(e), "notification": notification_data.model_dump()})
-
-    response = BulkNotificationResponse(
-        created=created,
-        failed=failed,
-        total_requested=len(bulk_data.notifications),
-        total_created=len(created),
-        total_failed=len(failed),
-    )
-
-    return BaseResponse(data=response, trace_id=trace_id)
