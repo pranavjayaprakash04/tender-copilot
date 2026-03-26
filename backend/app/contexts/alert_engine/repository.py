@@ -6,7 +6,7 @@ from uuid import UUID
 
 import structlog
 from sqlalchemy import and_, func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.contexts.alert_engine.models import (
     Notification,
@@ -23,12 +23,11 @@ logger = structlog.get_logger()
 class NotificationRepository:
     """Repository for Notification model."""
 
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
     async def create(self, notification_data: Any) -> Notification:
         """Create a new notification."""
-        # Handle both dict and model inputs
         if hasattr(notification_data, 'model_dump'):
             data = notification_data.model_dump()
         else:
@@ -83,14 +82,19 @@ class NotificationRepository:
         offset = (page - 1) * page_size
         query = query.order_by(Notification.created_at.desc()).offset(offset).limit(page_size)
 
-        notifications = await self._session.execute(query)
-        return list(notifications.scalars().all()), total or 0
+        result = await self._session.execute(query)
+        return list(result.scalars().all()), total or 0
 
     async def update(self, notification_id: UUID, company_id: UUID, update_data: Any) -> Notification:
         """Update a notification."""
         notification = await self.get_by_id(notification_id, company_id)
 
-        for field, value in update_data.model_dump(exclude_unset=True).items():
+        if hasattr(update_data, 'model_dump'):
+            updates = update_data.model_dump(exclude_unset=True)
+        else:
+            updates = update_data if isinstance(update_data, dict) else {}
+
+        for field, value in updates.items():
             setattr(notification, field, value)
 
         notification.updated_at = datetime.utcnow()
@@ -123,53 +127,38 @@ class NotificationRepository:
 
     async def get_stats(self, company_id: UUID) -> dict[str, Any]:
         """Get notification statistics for a company."""
-        # Basic counts
         total_query = select(func.count(Notification.id)).where(Notification.company_id == company_id)
         total = await self._session.scalar(total_query) or 0
 
         sent_query = select(func.count(Notification.id)).where(
-            and_(
-                Notification.company_id == company_id,
-                Notification.status == NotificationStatus.SENT
-            )
+            and_(Notification.company_id == company_id, Notification.status == NotificationStatus.SENT)
         )
         sent = await self._session.scalar(sent_query) or 0
 
         failed_query = select(func.count(Notification.id)).where(
-            and_(
-                Notification.company_id == company_id,
-                Notification.status == NotificationStatus.FAILED
-            )
+            and_(Notification.company_id == company_id, Notification.status == NotificationStatus.FAILED)
         )
         failed = await self._session.scalar(failed_query) or 0
 
         pending_query = select(func.count(Notification.id)).where(
-            and_(
-                Notification.company_id == company_id,
-                Notification.status == NotificationStatus.PENDING
-            )
+            and_(Notification.company_id == company_id, Notification.status == NotificationStatus.PENDING)
         )
         pending = await self._session.scalar(pending_query) or 0
 
-        # By type
         type_query = select(
             Notification.notification_type,
             func.count(Notification.id)
         ).where(Notification.company_id == company_id).group_by(Notification.notification_type)
-
         type_result = await self._session.execute(type_query)
         notifications_by_type = {row[0]: row[1] for row in type_result}
 
-        # By priority
         priority_query = select(
             Notification.priority,
             func.count(Notification.id)
         ).where(Notification.company_id == company_id).group_by(Notification.priority)
-
         priority_result = await self._session.execute(priority_query)
         notifications_by_priority = {row[0]: row[1] for row in priority_result}
 
-        # Recent failures
         recent_failures_query = select(Notification).where(
             and_(
                 Notification.company_id == company_id,
@@ -177,7 +166,6 @@ class NotificationRepository:
                 Notification.failed_at >= datetime.utcnow() - timedelta(days=7)
             )
         ).order_by(Notification.failed_at.desc()).limit(5)
-
         recent_failures_result = await self._session.execute(recent_failures_query)
         recent_failures = list(recent_failures_result.scalars().all())
 
@@ -209,12 +197,16 @@ class NotificationRepository:
 class NotificationTemplateRepository:
     """Repository for NotificationTemplate model."""
 
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
     async def create(self, template_data: Any) -> NotificationTemplate:
         """Create a new notification template."""
-        template = NotificationTemplate(**template_data.model_dump())
+        if hasattr(template_data, 'model_dump'):
+            data = template_data.model_dump()
+        else:
+            data = template_data
+        template = NotificationTemplate(**data)
         self._session.add(template)
         await self._session.commit()
         await self._session.refresh(template)
@@ -248,7 +240,6 @@ class NotificationTemplateRepository:
                 NotificationTemplate.is_active
             )
         )
-
         result = await self._session.execute(query)
         return list(result.scalars().all())
 
@@ -256,7 +247,12 @@ class NotificationTemplateRepository:
         """Update a template."""
         template = await self.get_by_id(template_id)
 
-        for field, value in update_data.model_dump(exclude_unset=True).items():
+        if hasattr(update_data, 'model_dump'):
+            updates = update_data.model_dump(exclude_unset=True)
+        else:
+            updates = update_data if isinstance(update_data, dict) else {}
+
+        for field, value in updates.items():
             setattr(template, field, value)
 
         template.updated_at = datetime.utcnow()
@@ -274,12 +270,16 @@ class NotificationTemplateRepository:
 class NotificationPreferenceRepository:
     """Repository for NotificationPreference model."""
 
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
     async def create(self, preference_data: Any) -> NotificationPreference:
         """Create new notification preferences."""
-        preference = NotificationPreference(**preference_data.model_dump())
+        if hasattr(preference_data, 'model_dump'):
+            data = preference_data.model_dump()
+        else:
+            data = preference_data
+        preference = NotificationPreference(**data)
         self._session.add(preference)
         await self._session.commit()
         await self._session.refresh(preference)
@@ -293,7 +293,6 @@ class NotificationPreferenceRepository:
                 NotificationPreference.company_id == company_id
             )
         )
-
         result = await self._session.execute(query)
         preference = result.scalar_one_or_none()
 
@@ -312,7 +311,12 @@ class NotificationPreferenceRepository:
         """Update preferences."""
         preference = await self.get_by_user(user_id, company_id)
 
-        for field, value in update_data.model_dump(exclude_unset=True).items():
+        if hasattr(update_data, 'model_dump'):
+            updates = update_data.model_dump(exclude_unset=True)
+        else:
+            updates = update_data if isinstance(update_data, dict) else {}
+
+        for field, value in updates.items():
             setattr(preference, field, value)
 
         preference.updated_at = datetime.utcnow()
