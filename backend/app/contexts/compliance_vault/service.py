@@ -34,6 +34,8 @@ from app.shared.lang_context import LangContext
 
 logger = structlog.get_logger()
 
+_PDF_MAGIC = b"%PDF"
+
 
 class ComplianceVaultService:
     """Service for compliance vault operations."""
@@ -71,16 +73,16 @@ class ComplianceVaultService:
         # Read file content into memory
         file_content = await file.read()
 
-        # Fixed: validate actual file size on real bytes (not spoofable client header)
+        # Validate actual file size on real bytes (not spoofable client header)
         if len(file_content) > 10 * 1024 * 1024:
             raise FileUploadException("File size exceeds 10MB limit")
 
-        # Fixed: validate MIME type AND magic bytes — extension alone is not enough
-        if file.content_type != "application/pdf" or not file_content[:4] == b"%PDF":
+        # Validate by magic bytes only — browsers (especially Chrome) often send
+        # text/plain as the multipart Content-Type for PDFs, so we never trust
+        # file.content_type. Magic bytes are the only reliable check.
+        if not file_content[:4] == _PDF_MAGIC:
             raise ValidationException("File must be a valid PDF")
 
-        # Fixed: atomic upload — create DB record only AFTER storage succeeds
-        # Previously: DB record created first → storage failure = orphaned ghost record
         document_data = VaultDocumentCreate(
             company_id=company_id,
             doc_type=doc_type,
@@ -88,16 +90,15 @@ class ComplianceVaultService:
             expires_at=expires_at
         )
 
-        # Step 1: Upload to storage first
-        # Use a temporary path until we have the document ID
+        # Step 1: Upload to storage first (atomic — DB record created only after success)
         temp_path = f"companies/{company_id}/documents/temp_{file.filename}"
         try:
-            await self._storage.upload_file(temp_path, file_content, file.content_type or "application/pdf")
+            await self._storage.upload_file(temp_path, file_content, "application/pdf")
         except Exception as e:
             logger.error("storage_upload_failed", trace_id=trace_id, error=str(e))
             raise FileUploadException(f"Failed to upload document: {e}")
 
-        # Step 2: Create DB record (storage is confirmed good)
+        # Step 2: Create DB record (storage confirmed good)
         try:
             document = await self._document_repo.create(document_data)
         except Exception as e:
@@ -112,13 +113,10 @@ class ComplianceVaultService:
         # Step 3: Move to final path with real document ID
         final_path = f"companies/{company_id}/documents/{document.id}/{file.filename}"
         try:
-            # Re-upload to final path
-            await self._storage.upload_file(final_path, file_content, file.content_type or "application/pdf")
-            # Delete temp
+            await self._storage.upload_file(final_path, file_content, "application/pdf")
             await self._storage.delete_file(temp_path)
         except Exception as e:
             logger.warning("final_path_move_failed", trace_id=trace_id, error=str(e))
-            # Keep temp path as storage_path if move fails
             final_path = temp_path
 
         # Step 4: Update document with final storage path
@@ -225,7 +223,6 @@ class ComplianceVaultService:
     ) -> DocumentClassificationResponse:
         """Classify a document type using AI."""
         try:
-            # Fixed: import both prompt AND schema from the correct module
             from app.prompts.compliance.document_classification_v1 import (
                 ClassificationOutput,
                 CLASSIFICATION_SYSTEM_PROMPT,
@@ -293,7 +290,6 @@ class ComplianceVaultService:
         """Map documents to a tender — verifies all docs belong to company first."""
         documents = []
         for doc_id in mapping_data.document_ids:
-            # get_by_id enforces company_id check — raises 404 if doc belongs to another company
             doc = await self._document_repo.get_by_id(doc_id, company_id)
             documents.append(doc)
 
@@ -316,11 +312,10 @@ class ComplianceVaultService:
     async def get_tender_documents(
         self,
         tender_id: UUID,
-        company_id: UUID,  # Fixed: was missing — caused cross-tenant data leak
+        company_id: UUID,
         trace_id: str | None = None
     ) -> TenderDocumentMappingResponse:
         """Get all documents mapped to a tender — scoped to company."""
-        # Fixed: pass company_id to filter only this company's documents
         documents = await self._mapping_repo.get_by_tender(tender_id, company_id)
 
         logger.info(
