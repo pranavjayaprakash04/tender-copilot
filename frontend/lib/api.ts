@@ -32,6 +32,25 @@ const request = async (method: string, endpoint: string, data?: any) => {
 };
 
 /**
+ * Multipart file upload helper.
+ * Do NOT set Content-Type manually — the browser sets it with the correct boundary.
+ */
+const uploadFile = async (endpoint: string, formData: FormData) => {
+  const token = await getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const res = await fetch(`${API_URL}${endpoint}`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+};
+
+/**
  * Maps frontend filter keys to backend query param names for the tenders API.
  * Frontend uses short friendly names; backend expects TenderSearchFilters field names.
  */
@@ -109,20 +128,22 @@ export const api = {
   },
 
   compliance: {
-    list: (params?: any) => request('GET', `/api/v1/vault${params ? '?' + new URLSearchParams(params) : ''}`),
-    get: (id: string) => request('GET', `/api/v1/vault/${id}`),
-    getDocuments: (params?: any) => request('GET', `/api/v1/vault${params ? '?' + new URLSearchParams(params) : ''}`),
-    upload: (data: any) => request('POST', '/api/v1/vault', data),
-    uploadDocument: (data: any) => request('POST', '/api/v1/vault', data),
-    update: (id: string, data: any) => request('PUT', `/api/v1/vault/${id}`, data),
-    delete: (id: string) => request('DELETE', `/api/v1/vault/${id}`),
-    deleteDocument: (id: string) => request('DELETE', `/api/v1/vault/${id}`),
-    getCategories: () => request('GET', '/api/v1/vault/categories'),
-    download: (id: string) => request('GET', `/api/v1/vault/${id}/download`),
+    // GET /vault/documents — list all documents (was wrongly hitting bare /vault)
+    list:           (params?: any)            => request('GET', `/api/v1/vault/documents${params ? '?' + new URLSearchParams(params) : ''}`),
+    get:            (id: string)              => request('GET', `/api/v1/vault/${id}`),
+    getDocuments:   (params?: any)            => request('GET', `/api/v1/vault/documents${params ? '?' + new URLSearchParams(params) : ''}`),
+    // POST /vault/upload — multipart, must use uploadFile not request
+    upload:         (data: FormData)          => uploadFile('/api/v1/vault/upload', data),
+    uploadDocument: (data: FormData)          => uploadFile('/api/v1/vault/upload', data),
+    update:         (id: string, data: any)   => request('PUT', `/api/v1/vault/${id}`, data),
+    delete:         (id: string)              => request('DELETE', `/api/v1/vault/${id}`),
+    deleteDocument: (id: string)              => request('DELETE', `/api/v1/vault/${id}`),
+    getCategories:  ()                        => request('GET', '/api/v1/vault/categories'),
+    download:       (id: string)              => request('GET', `/api/v1/vault/${id}/download`),
+    getStats:       ()                        => request('GET', '/api/v1/vault/stats'),
   },
 
   // Fixed: unwrap PaginatedResponse { data: [...], pagination: {...} }
-  // markAllRead fires per-item since no bulk endpoint exists on backend
   alerts: {
     list: () => request('GET', '/api/v1/notifications').then((res: any) => res.data ?? []),
     getActive: () => request('GET', '/api/v1/notifications?status=pending').then((res: any) => res.data ?? []),
