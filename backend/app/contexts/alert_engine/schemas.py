@@ -32,7 +32,10 @@ class NotificationUpdate(BaseModel):
     status: NotificationStatus | None = None
     response: str | None = None
     error_message: str | None = None
+    sent_at: datetime | None = None        # was missing — service.py sets this
+    failed_at: datetime | None = None      # was missing — service.py sets this
     next_retry_at: datetime | None = None
+    retry_count: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -68,7 +71,10 @@ class NotificationResponse(BaseModel):
         """Parse JSON context data."""
         if isinstance(v, str):
             import json
-            return json.loads(v)
+            try:
+                return json.loads(v)
+            except (json.JSONDecodeError, ValueError):
+                return None
         return v
 
 
@@ -113,7 +119,10 @@ class NotificationTemplateResponse(BaseModel):
         """Parse JSON variables."""
         if isinstance(v, str):
             import json
-            return json.loads(v)
+            try:
+                return json.loads(v)
+            except (json.JSONDecodeError, ValueError):
+                return None
         return v
 
 
@@ -135,7 +144,6 @@ class NotificationPreferenceCreate(BaseModel):
     @field_validator('quiet_hours_start', 'quiet_hours_end')
     @classmethod
     def validate_hours(cls, v):
-        """Validate quiet hours."""
         if v is not None and (v < 0 or v > 23):
             raise ValueError('Hour must be between 0 and 23')
         return v
@@ -160,7 +168,6 @@ class NotificationPreferenceUpdate(BaseModel):
     @field_validator('quiet_hours_start', 'quiet_hours_end')
     @classmethod
     def validate_hours(cls, v):
-        """Validate quiet hours."""
         if v is not None and (v < 0 or v > 23):
             raise ValueError('Hour must be between 0 and 23')
         return v
