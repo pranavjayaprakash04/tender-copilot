@@ -25,7 +25,7 @@ class StorageClient:
 
     def __init__(self) -> None:
         self._client: Client | None = None
-        self._bucket_name = "vault-documents"
+        self._bucket_name = "compliance-vault"
 
     def _get_client(self) -> Client:
         """Get Supabase client (lazy init)."""
@@ -41,12 +41,10 @@ class StorageClient:
         try:
             client = self._get_client()
 
-            # Fixed: run sync Supabase SDK call in threadpool to avoid blocking event loop
             response = await asyncio.to_thread(
                 lambda: client.storage.from_(self._bucket_name).create_signed_upload_url(
                     path=storage_path,
                     options={"contentType": content_type}
-                    # Fixed: removed upsert=True to prevent overwriting other companies' files
                 )
             )
 
@@ -66,7 +64,6 @@ class StorageClient:
         try:
             client = self._get_client()
 
-            # Fixed: run sync SDK call in threadpool
             response = await asyncio.to_thread(
                 lambda: client.storage.from_(self._bucket_name).create_signed_url(
                     path=storage_path,
@@ -106,13 +103,11 @@ class StorageClient:
 
     async def upload_file(self, storage_path: str, file_data: bytes, content_type: str) -> str:
         """Upload a file directly to storage with validation."""
-        # Fixed: validate actual file content, not just extension/content_type header
         if content_type != "application/pdf" or not _validate_pdf_bytes(file_data):
             raise ExternalServiceException(
                 "Storage", "Only valid PDF files are accepted"
             )
 
-        # Fixed: actual size check on real bytes (not spoofable client header)
         if len(file_data) > settings.MAX_FILE_SIZE:
             raise ExternalServiceException(
                 "Storage", f"File exceeds maximum size of {settings.MAX_FILE_SIZE // (1024*1024)}MB"
@@ -121,13 +116,11 @@ class StorageClient:
         try:
             client = self._get_client()
 
-            # Fixed: run sync SDK call in threadpool + removed upsert
             response = await asyncio.to_thread(
                 lambda: client.storage.from_(self._bucket_name).upload(
                     path=storage_path,
                     file=file_data,
                     file_options={"contentType": content_type}
-                    # Fixed: no upsert=True — prevents overwriting existing files
                 )
             )
 
@@ -148,7 +141,6 @@ class StorageClient:
         try:
             client = self._get_client()
 
-            # Fixed: run sync SDK call in threadpool
             response = await asyncio.to_thread(
                 lambda: client.storage.from_(self._bucket_name).remove([storage_path])
             )
