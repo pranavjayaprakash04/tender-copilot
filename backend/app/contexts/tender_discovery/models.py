@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
 from uuid import UUID
 
 from sqlalchemy import (
@@ -18,7 +17,7 @@ from sqlalchemy import (
 from sqlalchemy import (
     UUID as SQLAlchemyUUID,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
 from app.database import Base
@@ -135,9 +134,9 @@ class Tender(Base):
     last_updated: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     raw_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
-    # Relationships
-    tender_matches: Mapped[list[Any]] = relationship("TenderMatch", back_populates="tender")
-    embedding: Mapped[Any] = relationship("TenderEmbedding", back_populates="tender", uselist=False)
+    # Relationships removed — TenderMatch and TenderEmbedding use BigInteger for
+    # tender_id (no FK) because the scraped tenders table uses bigint PKs, making
+    # a proper SQLAlchemy relationship impossible across the type boundary.
 
     def __repr__(self) -> str:
         return f"Tender(id={self.id}, tender_id={self.tender_id}, title={self.title[:50]}...)"
