@@ -212,31 +212,97 @@ const ComplianceVault: React.FC = () => {
   }, [fetchDocuments]);
 
   // ── Upload ───────────────────────────────────────────────────────────────
+
+  /**
+   * Deep PDF validation — runs entirely in the browser before any network call.
+   *
+   * Layers of defence:
+   *  1. MIME type from the File object (set by the OS, not the file content — spoofable)
+   *  2. File extension — must be exactly ".pdf"
+   *  3. Magic bytes — first 4 bytes of the file must be %PDF (hex 25 50 44 46)
+   *     This catches files renamed to .pdf that are actually executables, zips, etc.
+   *  4. Embedded script / JavaScript keyword scan — reads the first 64 KB and
+   *     searches for /JS , /JavaScript , and AA (auto-action) PDF object markers.
+   *     These are the primary vectors for PDF-based malware.
+   *  5. Embedded executable scan — checks for EXE magic bytes (MZ / 4D5A) inside
+   *     the first 64 KB, which would indicate a dropper embedded in the PDF.
+   *
+   * NOTE: These are client-side heuristics only. The backend must perform its own
+   * validation (MIME sniffing, AV scan, sandboxed rendering). Client checks exist
+   * to give immediate feedback and reduce junk uploads — not as a security guarantee.
+   */
+  const validatePdf = (file: File): Promise<string | null> =>
+    new Promise(resolve => {
+      // Layer 1 — MIME type
+      if (file.type !== 'application/pdf') {
+        resolve('Only PDF files are accepted. This file has type: ' + (file.type || 'unknown'));
+        return;
+      }
+      // Layer 2 — extension
+      if (!file.name.toLowerCase().endsWith('.pdf')) {
+        resolve('File must have a .pdf extension.');
+        return;
+      }
+      // Layer 3 + 4 + 5 — binary inspection
+      const reader = new FileReader();
+      // Read first 64 KB — enough to catch magic bytes and most embedded scripts
+      reader.readAsArrayBuffer(file.slice(0, 65536));
+      reader.onload = () => {
+        const buf = new Uint8Array(reader.result as ArrayBuffer);
+
+        // Layer 3: PDF magic bytes — %PDF = 0x25 0x50 0x44 0x46
+        if (buf[0] !== 0x25 || buf[1] !== 0x50 || buf[2] !== 0x44 || buf[3] !== 0x46) {
+          resolve('File does not appear to be a valid PDF (invalid magic bytes).');
+          return;
+        }
+
+        // Convert to string for text-based pattern scanning
+        const head = Array.from(buf).map(b => String.fromCharCode(b)).join('');
+
+        // Layer 4: embedded JavaScript markers
+        if (/\/JS\s|\/JavaScript\s|\/AA\s/.test(head)) {
+          resolve('This PDF contains embedded scripts and cannot be uploaded for security reasons.');
+          return;
+        }
+
+        // Layer 5: embedded Windows executable (MZ header = 0x4D 0x5A)
+        for (let i = 0; i < buf.length - 1; i++) {
+          if (buf[i] === 0x4D && buf[i + 1] === 0x5A) {
+            resolve('This file contains an embedded executable and cannot be uploaded.');
+            return;
+          }
+        }
+
+        resolve(null); // all checks passed
+      };
+      reader.onerror = () => resolve('Could not read file for validation.');
+    });
+
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
     setUploading(true);
     setError(null);
 
     for (const file of acceptedFiles) {
-      // Client-side guards (backend must also validate)
-      if (file.type !== 'application/pdf') {
-        setError('Only PDF files are accepted.');
-        setUploading(false);
-        return;
-      }
+      // Size check first — avoids reading a huge file for magic bytes
       if (file.size > MAX_FILE_SIZE_BYTES) {
         setError(`"${file.name}" exceeds the 10 MB limit.`);
         setUploading(false);
         return;
       }
 
+      // Deep PDF + malware validation
+      const validationError = await validatePdf(file);
+      if (validationError) {
+        setError(validationError);
+        setUploading(false);
+        return;
+      }
+
       try {
-        // ✅ Build FormData — required for multipart/form-data uploads.
-        // The plain request() helper sends JSON, which breaks file uploads.
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('document_type', pendingDocType); // backend requires this field
-
+        formData.append('document_type', pendingDocType);
         await api.compliance.uploadDocument(formData);
         showSuccess(`Uploaded "${file.name}" successfully.`);
       } catch (err) {
@@ -252,6 +318,7 @@ const ComplianceVault: React.FC = () => {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
+    // react-dropzone MIME filter — first line of defence at the file picker level
     accept: { 'application/pdf': ['.pdf'] },
     multiple: true,
     disabled: uploading,
