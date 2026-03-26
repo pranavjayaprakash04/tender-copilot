@@ -136,11 +136,19 @@ export const api = {
                                                .then((res: any) => res?.data ?? res),
     getDocuments:   (params?: any)          => request('GET', `/api/v1/vault/documents${params ? '?' + new URLSearchParams(params) : ''}`)
                                                .then((res: any) => res?.data ?? res),
-    // POST /vault/upload — multipart, must use uploadFile not request
-    upload:         (data: FormData)        => uploadFile('/api/v1/vault/upload', data)
-                                               .then((res: any) => res?.data ?? res),
-    uploadDocument: (data: FormData)        => uploadFile('/api/v1/vault/upload', data)
-                                               .then((res: any) => res?.data ?? res),
+    // POST /vault/upload — doc_type goes as a query param (backend: Query(...)), file as multipart body
+    upload: (data: FormData) => {
+      const docType = (data.get('document_type') as string) ?? 'other';
+      data.delete('document_type');
+      return uploadFile(`/api/v1/vault/upload?doc_type=${encodeURIComponent(docType)}`, data)
+        .then((res: any) => res?.data ?? res);
+    },
+    uploadDocument: (data: FormData) => {
+      const docType = (data.get('document_type') as string) ?? 'other';
+      data.delete('document_type');
+      return uploadFile(`/api/v1/vault/upload?doc_type=${encodeURIComponent(docType)}`, data)
+        .then((res: any) => res?.data ?? res);
+    },
     update:         (id: string, data: any) => request('PUT', `/api/v1/vault/${id}`, data)
                                                .then((res: any) => res?.data ?? res),
     delete:         (id: string)            => request('DELETE', `/api/v1/vault/${id}`),
