@@ -7,7 +7,8 @@ import api from "@/lib/api";
 
 type Alert = {
   id: string;
-  title: string;
+  title?: string;
+  subject?: string;
   message: string;
   notification_type?: string;
   type?: string;
@@ -28,6 +29,10 @@ function getMeta(alert: Alert) {
   if (key.includes("bid"))    return TYPE_META.bid;
   if (key.includes("tender")) return TYPE_META.tender;
   return TYPE_META[key] ?? TYPE_META.system;
+}
+
+function getTitle(alert: Alert) {
+  return alert.title ?? alert.subject ?? "Notification";
 }
 
 function isUnread(alert: Alert) {
@@ -51,9 +56,14 @@ export default function AlertsPage() {
   const { data: alerts = [], isLoading, isError } = useQuery<Alert[]>({
     queryKey: ["alerts"],
     queryFn: async () => {
-      // api.alerts.list() already unwraps res.data via .then()
       const res = await api.alerts.list();
-      return Array.isArray(res) ? res : [];
+      // Backend returns { notifications: [...], total, page, ... }
+      // Fall back to array if the shape ever changes
+      if (Array.isArray(res)) return res;
+      if (res && Array.isArray(res.notifications)) return res.notifications;
+      if (res && Array.isArray(res.items)) return res.items;
+      if (res && Array.isArray(res.data)) return res.data;
+      return [];
     },
     retry: 1,
   });
@@ -65,7 +75,6 @@ export default function AlertsPage() {
 
   const markAllRead = useMutation({
     mutationFn: async () => {
-      // No bulk endpoint — fire per-item in parallel
       const unread = alerts.filter(isUnread);
       await Promise.allSettled(unread.map((a) => api.alerts.markRead(a.id)));
     },
@@ -178,7 +187,7 @@ export default function AlertsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start gap-2 flex-wrap">
                         <p className={`text-sm font-semibold ${unread ? "text-gray-900" : "text-gray-700"}`}>
-                          {alert.title}
+                          {getTitle(alert)}
                         </p>
                         <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${meta.bg} ${meta.color}`}>
                           {meta.label}
