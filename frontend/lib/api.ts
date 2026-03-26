@@ -128,19 +128,28 @@ export const api = {
   },
 
   compliance: {
-    // GET /vault/documents — list all documents (was wrongly hitting bare /vault)
-    list:           (params?: any)            => request('GET', `/api/v1/vault/documents${params ? '?' + new URLSearchParams(params) : ''}`),
-    get:            (id: string)              => request('GET', `/api/v1/vault/${id}`),
-    getDocuments:   (params?: any)            => request('GET', `/api/v1/vault/documents${params ? '?' + new URLSearchParams(params) : ''}`),
+    // Backend returns PaginatedResponse: { data: [...], success, pagination }
+    // Unwrap .data here so every caller gets a plain array — never an object.
+    list:           (params?: any)          => request('GET', `/api/v1/vault/documents${params ? '?' + new URLSearchParams(params) : ''}`)
+                                               .then((res: any) => res?.data ?? res),
+    get:            (id: string)            => request('GET', `/api/v1/vault/${id}`)
+                                               .then((res: any) => res?.data ?? res),
+    getDocuments:   (params?: any)          => request('GET', `/api/v1/vault/documents${params ? '?' + new URLSearchParams(params) : ''}`)
+                                               .then((res: any) => res?.data ?? res),
     // POST /vault/upload — multipart, must use uploadFile not request
-    upload:         (data: FormData)          => uploadFile('/api/v1/vault/upload', data),
-    uploadDocument: (data: FormData)          => uploadFile('/api/v1/vault/upload', data),
-    update:         (id: string, data: any)   => request('PUT', `/api/v1/vault/${id}`, data),
-    delete:         (id: string)              => request('DELETE', `/api/v1/vault/${id}`),
-    deleteDocument: (id: string)              => request('DELETE', `/api/v1/vault/${id}`),
-    getCategories:  ()                        => request('GET', '/api/v1/vault/categories'),
-    download:       (id: string)              => request('GET', `/api/v1/vault/${id}/download`),
-    getStats:       ()                        => request('GET', '/api/v1/vault/stats'),
+    upload:         (data: FormData)        => uploadFile('/api/v1/vault/upload', data)
+                                               .then((res: any) => res?.data ?? res),
+    uploadDocument: (data: FormData)        => uploadFile('/api/v1/vault/upload', data)
+                                               .then((res: any) => res?.data ?? res),
+    update:         (id: string, data: any) => request('PUT', `/api/v1/vault/${id}`, data)
+                                               .then((res: any) => res?.data ?? res),
+    delete:         (id: string)            => request('DELETE', `/api/v1/vault/${id}`),
+    deleteDocument: (id: string)            => request('DELETE', `/api/v1/vault/${id}`),
+    getCategories:  ()                      => request('GET', '/api/v1/vault/categories')
+                                               .then((res: any) => res?.data ?? res),
+    download:       (id: string)            => request('GET', `/api/v1/vault/${id}/download`),
+    getStats:       ()                      => request('GET', '/api/v1/vault/stats')
+                                               .then((res: any) => res?.data ?? res),
   },
 
   // Fixed: unwrap PaginatedResponse { data: [...], pagination: {...} }
