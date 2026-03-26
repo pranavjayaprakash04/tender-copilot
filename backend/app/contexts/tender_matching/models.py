@@ -122,7 +122,6 @@ class CompanyEmbedding(Base):
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, default=func.uuid_generate_v4())
     company_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
 
-    # Embedding stored as JSON list of floats
     capabilities_embedding: Mapped[list | None] = mapped_column(JSON, nullable=True)
     embedding_model: Mapped[str] = mapped_column(String(50), nullable=False, default="tfidf-v1")
     embedding_version: Mapped[str] = mapped_column(String(20), nullable=False, default="v1")
@@ -154,7 +153,6 @@ class TenderEmbedding(Base):
     # tender_id stored as BigInteger — tenders table uses bigint PK
     tender_id: Mapped[int] = mapped_column(BigInteger, nullable=False, unique=True, index=True)
 
-    # Embedding stored as JSON list of floats
     requirements_embedding: Mapped[list | None] = mapped_column(JSON, nullable=True)
     embedding_model: Mapped[str] = mapped_column(String(50), nullable=False, default="tfidf-v1")
     embedding_version: Mapped[str] = mapped_column(String(20), nullable=False, default="v1")
