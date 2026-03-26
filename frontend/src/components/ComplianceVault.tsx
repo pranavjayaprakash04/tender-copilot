@@ -1,17 +1,43 @@
-import React, { useState, useCallback, useRef } from 'react';
+'use client';
+
+// ─── Removed: export const dynamic = 'force-dynamic'
+// That directive is only valid in Next.js page.tsx / route.tsx files,
+// not inside component files. Placing it here caused a silent build warning
+// and had no effect.
+
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Upload, File, AlertCircle, CheckCircle, Clock, Trash2, Eye, Download, Filter, Search } from 'lucide-react';
+import {
+  Upload, File, AlertCircle, CheckCircle, Clock,
+  Trash2, Download, Search, X, Loader2, ShieldCheck,
+} from 'lucide-react';
 import { format } from 'date-fns';
-import { api } from '@/lib/api';
 import { createClient } from '@supabase/supabase-js';
+import { api } from '@/lib/api';
 
-export const dynamic = 'force-dynamic';
-
+// ─── Supabase ─────────────────────────────────────────────────────────────────
+// Single instance outside the component — avoids creating a new client on every
+// render and keeps session state stable.
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 );
 
+/** Fetch a binary response (blob) from a protected endpoint. */
+const fetchBlob = async (endpoint: string): Promise<Blob> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://tender-copilot.onrender.com';
+  const res = await fetch(`${apiUrl}${endpoint}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+
+  if (!res.ok) throw new Error(`Download failed (${res.status})`);
+  return res.blob();
+};
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 interface Document {
   id: string;
   filename: string;
@@ -21,7 +47,6 @@ interface Document {
   is_current: boolean;
   uploaded_at: string;
   file_size?: number;
-  download_url?: string;
 }
 
 interface DocumentStats {
@@ -29,289 +54,348 @@ interface DocumentStats {
   current_documents: number;
   expired_documents: number;
   expiring_soon_documents: number;
-  by_type: Record<string, number>;
-  upcoming_expiries: Document[];
 }
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+
+const DOC_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'gst',                    label: 'GST Certificate' },
+  { value: 'pan',                    label: 'PAN Card' },
+  { value: 'iso',                    label: 'ISO Certification' },
+  { value: 'udyam',                  label: 'Udyam Registration' },
+  { value: 'trade_license',          label: 'Trade License' },
+  { value: 'bank_guarantee',         label: 'Bank Guarantee' },
+  { value: 'experience_certificate', label: 'Experience Certificate' },
+  { value: 'financial_statement',    label: 'Financial Statement' },
+  { value: 'tax_clearance',          label: 'Tax Clearance' },
+  { value: 'emolument_certificate',  label: 'Emolument Certificate' },
+  { value: 'other',                  label: 'Other' },
+];
+
+const DOC_TYPE_LABEL: Record<string, string> = Object.fromEntries(
+  DOC_TYPE_OPTIONS.map(({ value, label }) => [value, label]),
+);
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Derive stats from a document list — avoids a separate API call. */
+const deriveStats = (docs: Document[]): DocumentStats => {
+  const now = Date.now();
+  const soon = now + 30 * 24 * 60 * 60 * 1000;
+  return {
+    total_documents:     docs.length,
+    current_documents:   docs.filter(d => d.is_current).length,
+    expired_documents:   docs.filter(d => d.expires_at && new Date(d.expires_at).getTime() < now).length,
+    expiring_soon_documents: docs.filter(d => {
+      if (!d.expires_at) return false;
+      const t = new Date(d.expires_at).getTime();
+      return t > now && t <= soon;
+    }).length,
+  };
+};
+
+const getDocumentStatus = (doc: Document): 'superseded' | 'expired' | 'expiring' | 'valid' => {
+  if (!doc.is_current) return 'superseded';
+  if (!doc.expires_at) return 'valid';
+  const t = new Date(doc.expires_at).getTime();
+  const now = Date.now();
+  if (t < now) return 'expired';
+  if (t <= now + 30 * 24 * 60 * 60 * 1000) return 'expiring';
+  return 'valid';
+};
+
+const STATUS_CONFIG = {
+  superseded: { label: 'Superseded', classes: 'bg-gray-100 text-gray-700' },
+  expired:    { label: 'Expired',    classes: 'bg-red-100 text-red-700' },
+  expiring:   { label: 'Expiring Soon', classes: 'bg-yellow-100 text-yellow-700' },
+  valid:      { label: 'Valid',      classes: 'bg-green-100 text-green-700' },
+};
+
+/**
+ * Sanitize error messages before displaying them.
+ * Never expose raw exception messages from the API — they may contain SQL
+ * details, stack traces, or internal paths.
+ */
+const friendlyError = (err: unknown, fallback: string): string => {
+  if (!(err instanceof Error)) return fallback;
+  // Allow only short, obviously user-facing messages (no stack traces / SQL).
+  const msg = err.message;
+  if (msg.length < 120 && !/\bat\b|\bsql\b|Error:/i.test(msg)) return msg;
+  return fallback;
+};
+
+// ─── Confirm Dialog ───────────────────────────────────────────────────────────
+// Replaces the browser's blocking confirm() with an accessible inline modal.
+interface ConfirmDialogProps {
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+const ConfirmDialog: React.FC<ConfirmDialogProps> = ({ message, onConfirm, onCancel }) => (
+  <div
+    role="dialog"
+    aria-modal="true"
+    aria-label="Confirm action"
+    className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+  >
+    <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4">
+      <div className="flex items-start gap-3 mb-4">
+        <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+        <p className="text-gray-800 text-sm">{message}</p>
+      </div>
+      <div className="flex justify-end gap-3">
+        <button
+          onClick={onCancel}
+          className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={onConfirm}
+          className="px-4 py-2 text-sm text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 const ComplianceVault: React.FC = () => {
-  const [documents, setDocuments] = useState<Document[]>([]);
-  const [stats, setStats] = useState<DocumentStats | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState<string>('all');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [selectedDocs, setSelectedDocs] = useState<string[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [documents, setDocuments]         = useState<Document[]>([]);
+  const [stats, setStats]                 = useState<DocumentStats | null>(null);
+  const [loading, setLoading]             = useState(false);
+  const [uploading, setUploading]         = useState(false);
+  const [error, setError]                 = useState<string | null>(null);
+  const [success, setSuccess]             = useState<string | null>(null);
+  const [searchTerm, setSearchTerm]       = useState('');
+  const [filterType, setFilterType]       = useState('all');
+  const [filterStatus, setFilterStatus]   = useState('all');
+  // Upload UX — user must choose document type before dropping files
+  const [pendingDocType, setPendingDocType] = useState('other');
+  // Delete confirmation — holds the doc id to delete; null = dialog closed
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
-  // Fetch documents and stats on mount
-  React.useEffect(() => {
-    fetchDocuments();
-    fetchStats();
-  }, []);
+  // Auto-dismiss success banners after 4 seconds
+  const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showSuccess = (msg: string) => {
+    setSuccess(msg);
+    if (successTimer.current) clearTimeout(successTimer.current);
+    successTimer.current = setTimeout(() => setSuccess(null), 4000);
+  };
 
-  const fetchDocuments = async () => {
+  // ── Fetch ────────────────────────────────────────────────────────────────
+  const fetchDocuments = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const data = await api.compliance.getDocuments();
-      setDocuments(data || []);
+      const docs: Document[] = Array.isArray(data) ? data : (data?.documents ?? []);
+      setDocuments(docs);
+      // Derive stats from the same payload — no second request, no race condition
+      setStats(deriveStats(docs));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch documents');
+      setError(friendlyError(err, 'Failed to load documents. Please try again.'));
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchStats = async () => {
-    try {
-      // For now, we'll calculate stats from documents
-      // This endpoint might need to be implemented in the backend
-      if (documents.length > 0) {
-        const total = documents.length;
-        const current = documents.filter(doc => doc.is_current).length;
-        const expired = documents.filter(doc => 
-          doc.expires_at && new Date(doc.expires_at) < new Date()
-        ).length;
-        const expiringSoon = documents.filter(doc => 
-          doc.expires_at && 
-          new Date(doc.expires_at) <= new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) &&
-          new Date(doc.expires_at) > new Date()
-        ).length;
-        
-        setStats({
-          total_documents: total,
-          current_documents: current,
-          expired_documents: expired,
-          expiring_soon_documents: expiringSoon,
-          by_type: documents.reduce((acc, doc) => {
-            acc[doc.doc_type] = (acc[doc.doc_type] || 0) + 1;
-            return acc;
-          }, {} as Record<string, number>),
-          upcoming_expiries: documents
-            .filter(doc => doc.expires_at && new Date(doc.expires_at) > new Date())
-            .sort((a, b) => new Date(a.expires_at!).getTime() - new Date(b.expires_at!).getTime())
-            .slice(0, 5)
-        });
-      }
-    } catch (err) {
-      console.error('Failed to fetch stats:', err);
-    }
-  };
+  useEffect(() => {
+    fetchDocuments();
+    return () => {
+      if (successTimer.current) clearTimeout(successTimer.current);
+    };
+  }, [fetchDocuments]);
 
+  // ── Upload ───────────────────────────────────────────────────────────────
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
-    
     setUploading(true);
     setError(null);
-    
+
     for (const file of acceptedFiles) {
-      if (!file.name.toLowerCase().endsWith('.pdf')) {
-        setError('Only PDF files are supported');
+      // Client-side guards (backend must also validate)
+      if (file.type !== 'application/pdf') {
+        setError('Only PDF files are accepted.');
         setUploading(false);
         return;
       }
-      
-      if (file.size > 10 * 1024 * 1024) {
-        setError('File size exceeds 10MB limit');
+      if (file.size > MAX_FILE_SIZE_BYTES) {
+        setError(`"${file.name}" exceeds the 10 MB limit.`);
         setUploading(false);
         return;
       }
-      
+
       try {
-        // Upload the file using the API
-        await api.compliance.uploadDocument(file);
-        
-        setSuccess(`Successfully uploaded ${file.name}`);
-        fetchDocuments();
+        // ✅ Build FormData — required for multipart/form-data uploads.
+        // The plain request() helper sends JSON, which breaks file uploads.
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('document_type', pendingDocType); // backend requires this field
+
+        await api.compliance.uploadDocument(formData);
+        showSuccess(`Uploaded "${file.name}" successfully.`);
       } catch (err) {
-        setError(err instanceof Error ? err.message : `Failed to upload ${file.name}`);
+        setError(friendlyError(err, `Failed to upload "${file.name}". Please try again.`));
+        setUploading(false);
+        return;
       }
     }
-    
+
     setUploading(false);
-  }, []);
+    fetchDocuments();
+  }, [pendingDocType, fetchDocuments]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: {
-      'application/pdf': ['.pdf']
-    },
+    accept: { 'application/pdf': ['.pdf'] },
     multiple: true,
-    disabled: uploading
+    disabled: uploading,
   });
 
-  const deleteDocument = async (docId: string) => {
-    if (!confirm('Are you sure you want to delete this document?')) return;
-    
+  // ── Delete ───────────────────────────────────────────────────────────────
+  // Step 1: show confirm dialog (replaces blocking confirm())
+  const requestDelete = (docId: string) => setConfirmDeleteId(docId);
+
+  // Step 2: user confirmed
+  const confirmDelete = async () => {
+    if (!confirmDeleteId) return;
+    const docId = confirmDeleteId;
+    setConfirmDeleteId(null);
+    setError(null);
     try {
-      // This endpoint might need to be implemented in the backend
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/compliance/documents/${docId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-        }
-      });
-      
-      if (!response.ok) throw new Error('Failed to delete document');
-      
-      setSuccess('Document deleted successfully');
+      // ✅ Routes through api.ts — uses correct /api/v1/vault/{id} endpoint
+      await api.compliance.delete(docId);
+      showSuccess('Document deleted.');
       fetchDocuments();
-      fetchStats();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete document');
+      setError(friendlyError(err, 'Failed to delete the document. Please try again.'));
     }
   };
 
+  // ── Download ─────────────────────────────────────────────────────────────
   const downloadDocument = async (docId: string, filename: string) => {
+    setError(null);
     try {
-      // This endpoint might need to be implemented in the backend
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/compliance/documents/${docId}/download`, {
-        headers: {
-          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-        }
-      });
-      
-      if (!response.ok) throw new Error('Failed to get download URL');
-      
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
+      // ✅ Uses correct /api/v1/vault/{id}/download endpoint via fetchBlob helper.
+      // api.compliance.download() calls res.json() which fails on binary responses,
+      // so we use the dedicated fetchBlob helper instead.
+      const blob = await fetchBlob(`/api/v1/vault/${docId}/download`);
+      const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.style.display = 'none';
       a.href = url;
       a.download = filename;
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      // Clean up immediately — don't leak object URLs
+      requestAnimationFrame(() => {
+        URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to download document');
+      setError(friendlyError(err, 'Failed to download the document. Please try again.'));
     }
   };
 
+  // ── Filter / Search ──────────────────────────────────────────────────────
   const filteredDocuments = documents.filter(doc => {
     const matchesSearch = doc.filename.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesType = filterType === 'all' || doc.doc_type === filterType;
-    const matchesStatus = filterStatus === 'all' || 
-      (filterStatus === 'current' && doc.is_current) ||
-      (filterStatus === 'expired' && new Date(doc.expires_at || '') < new Date()) ||
-      (filterStatus === 'expiring' && doc.expires_at && 
-       new Date(doc.expires_at) <= new Date(Date.now() + 30 * 24 * 60 * 60 * 1000));
-    
+    const matchesType   = filterType === 'all' || doc.doc_type === filterType;
+    const status        = getDocumentStatus(doc);
+    const matchesStatus =
+      filterStatus === 'all' ||
+      (filterStatus === 'current'  && status === 'valid') ||
+      (filterStatus === 'expiring' && status === 'expiring') ||
+      (filterStatus === 'expired'  && status === 'expired');
     return matchesSearch && matchesType && matchesStatus;
   });
 
-  const getDocumentTypeLabel = (type: string) => {
-    const labels: Record<string, string> = {
-      gst: 'GST Certificate',
-      pan: 'PAN Card',
-      iso: 'ISO Certification',
-      udyam: 'Udyam Registration',
-      trade_license: 'Trade License',
-      bank_guarantee: 'Bank Guarantee',
-      experience_certificate: 'Experience Certificate',
-      financial_statement: 'Financial Statement',
-      tax_clearance: 'Tax Clearance',
-      emolument_certificate: 'Emolument Certificate',
-      other: 'Other'
-    };
-    return labels[type] || type;
-  };
-
-  const getStatusColor = (doc: Document) => {
-    if (!doc.is_current) return 'bg-gray-100 text-gray-800';
-    if (!doc.expires_at) return 'bg-green-100 text-green-800';
-    if (new Date(doc.expires_at) < new Date()) return 'bg-red-100 text-red-800';
-    if (new Date(doc.expires_at) <= new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)) {
-      return 'bg-yellow-100 text-yellow-800';
-    }
-    return 'bg-green-100 text-green-800';
-  };
-
-  const getStatusText = (doc: Document) => {
-    if (!doc.is_current) return 'Superseded';
-    if (!doc.expires_at) return 'Valid';
-    if (new Date(doc.expires_at) < new Date()) return 'Expired';
-    if (new Date(doc.expires_at) <= new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)) {
-      return 'Expiring Soon';
-    }
-    return 'Valid';
-  };
-
+  // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
+
+      {/* Confirm Delete Dialog */}
+      {confirmDeleteId && (
+        <ConfirmDialog
+          message="Delete this document permanently? This action cannot be undone."
+          onConfirm={confirmDelete}
+          onCancel={() => setConfirmDeleteId(null)}
+        />
+      )}
+
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Compliance Vault</h1>
-        <p className="text-gray-600 mt-2">Manage your compliance documents and certificates</p>
+      <div className="mb-8 flex items-center gap-3">
+        <ShieldCheck className="h-8 w-8 text-indigo-600" />
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Compliance Vault</h1>
+          <p className="text-gray-500 mt-1">Manage your compliance documents and certificates</p>
+        </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats */}
       {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <File className="h-8 w-8 text-blue-600" />
-              <div className="ml-4">
-                <p className="text-sm text-gray-600">Total Documents</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.total_documents}</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          {[
+            { label: 'Total',         value: stats.total_documents,        icon: File,         color: 'text-blue-600' },
+            { label: 'Current',       value: stats.current_documents,      icon: CheckCircle,  color: 'text-green-600' },
+            { label: 'Expiring Soon', value: stats.expiring_soon_documents, icon: Clock,       color: 'text-yellow-600' },
+            { label: 'Expired',       value: stats.expired_documents,      icon: AlertCircle,  color: 'text-red-600' },
+          ].map(({ label, value, icon: Icon, color }) => (
+            <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 flex items-center gap-4">
+              <Icon className={`h-7 w-7 flex-shrink-0 ${color}`} />
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wide">{label}</p>
+                <p className="text-2xl font-bold text-gray-900">{value}</p>
               </div>
             </div>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <CheckCircle className="h-8 w-8 text-green-600" />
-              <div className="ml-4">
-                <p className="text-sm text-gray-600">Current</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.current_documents}</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <Clock className="h-8 w-8 text-yellow-600" />
-              <div className="ml-4">
-                <p className="text-sm text-gray-600">Expiring Soon</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.expiring_soon_documents}</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <AlertCircle className="h-8 w-8 text-red-600" />
-              <div className="ml-4">
-                <p className="text-sm text-gray-600">Expired</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.expired_documents}</p>
-              </div>
-            </div>
-          </div>
+          ))}
         </div>
       )}
 
-      {/* Upload Area */}
-      <div className="bg-white rounded-lg shadow mb-8">
+      {/* Upload */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm mb-8 p-6">
+        <h2 className="text-sm font-semibold text-gray-700 mb-4">Upload Document</h2>
+
+        {/* Document type must be chosen before uploading */}
+        <div className="mb-4 flex items-center gap-3">
+          <label htmlFor="upload-doc-type" className="text-sm text-gray-600 flex-shrink-0">
+            Document type <span className="text-red-500">*</span>
+          </label>
+          <select
+            id="upload-doc-type"
+            value={pendingDocType}
+            onChange={e => setPendingDocType(e.target.value)}
+            className="flex-1 max-w-xs px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          >
+            {DOC_TYPE_OPTIONS.map(({ value, label }) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+        </div>
+
         <div
           {...getRootProps()}
-          className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-            isDragActive
-              ? 'border-blue-500 bg-blue-50'
-              : 'border-gray-300 hover:border-gray-400'
-          } ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+          className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer
+            ${isDragActive  ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:border-gray-300'}
+            ${uploading     ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
         >
           <input {...getInputProps()} />
-          <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
           {uploading ? (
-            <p className="text-gray-600">Uploading...</p>
+            <div className="flex flex-col items-center gap-2">
+              <Loader2 className="h-10 w-10 text-indigo-500 animate-spin" />
+              <p className="text-sm text-gray-500">Uploading…</p>
+            </div>
           ) : isDragActive ? (
-            <p className="text-blue-600">Drop the files here...</p>
+            <p className="text-indigo-600 font-medium">Drop files here…</p>
           ) : (
-            <div>
-              <p className="text-gray-600 mb-2">Drag & drop PDF files here, or click to select</p>
-              <p className="text-sm text-gray-500">Maximum file size: 10MB</p>
+            <div className="flex flex-col items-center gap-2">
+              <Upload className="h-10 w-10 text-gray-300" />
+              <p className="text-sm text-gray-600">Drag & drop PDF files here, or <span className="text-indigo-600 font-medium">browse</span></p>
+              <p className="text-xs text-gray-400">PDF only · Max 10 MB per file</p>
             </div>
           )}
         </div>
@@ -319,70 +403,51 @@ const ComplianceVault: React.FC = () => {
 
       {/* Alerts */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-center">
-          <AlertCircle className="h-5 w-5 text-red-600 mr-3" />
-          <p className="text-red-800">{error}</p>
-          <button
-            onClick={() => setError(null)}
-            className="ml-auto text-red-600 hover:text-red-800"
-          >
-            ×
+        <div role="alert" className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-5 flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-red-800 flex-1">{error}</p>
+          <button onClick={() => setError(null)} aria-label="Dismiss" className="text-red-400 hover:text-red-700">
+            <X className="h-4 w-4" />
           </button>
         </div>
       )}
-
       {success && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 flex items-center">
-          <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
-          <p className="text-green-800">{success}</p>
-          <button
-            onClick={() => setSuccess(null)}
-            className="ml-auto text-green-600 hover:text-green-800"
-          >
-            ×
+        <div role="status" className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 mb-5 flex items-start gap-3">
+          <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-green-800 flex-1">{success}</p>
+          <button onClick={() => setSuccess(null)} aria-label="Dismiss" className="text-green-400 hover:text-green-700">
+            <X className="h-4 w-4" />
           </button>
         </div>
       )}
 
-      {/* Filters and Search */}
-      <div className="bg-white rounded-lg shadow mb-6 p-6">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search documents..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
+      {/* Filters */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm mb-6 p-4">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="search"
+              placeholder="Search documents…"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
           </div>
-          
           <select
             value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onChange={e => setFilterType(e.target.value)}
+            className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
           >
             <option value="all">All Types</option>
-            <option value="gst">GST Certificate</option>
-            <option value="pan">PAN Card</option>
-            <option value="iso">ISO Certification</option>
-            <option value="udyam">Udyam Registration</option>
-            <option value="trade_license">Trade License</option>
-            <option value="bank_guarantee">Bank Guarantee</option>
-            <option value="experience_certificate">Experience Certificate</option>
-            <option value="financial_statement">Financial Statement</option>
-            <option value="tax_clearance">Tax Clearance</option>
-            <option value="emolument_certificate">Emolument Certificate</option>
-            <option value="other">Other</option>
+            {DOC_TYPE_OPTIONS.map(({ value, label }) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
           </select>
-          
           <select
             value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onChange={e => setFilterStatus(e.target.value)}
+            className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
           >
             <option value="all">All Status</option>
             <option value="current">Current</option>
@@ -392,75 +457,69 @@ const ComplianceVault: React.FC = () => {
         </div>
       </div>
 
-      {/* Documents List */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">
-            Documents ({filteredDocuments.length})
+      {/* Document List */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-gray-700">
+            Documents
+            <span className="ml-2 text-gray-400 font-normal">({filteredDocuments.length})</span>
           </h2>
         </div>
-        
+
         {loading ? (
-          <div className="p-8 text-center">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            <p className="mt-2 text-gray-600">Loading documents...</p>
+          <div className="p-12 flex flex-col items-center gap-3 text-gray-400">
+            <Loader2 className="h-8 w-8 animate-spin" />
+            <p className="text-sm">Loading documents…</p>
           </div>
         ) : filteredDocuments.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
-            <File className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-            <p>No documents found</p>
+          <div className="p-12 flex flex-col items-center gap-3 text-gray-400">
+            <File className="h-10 w-10" />
+            <p className="text-sm">No documents found</p>
           </div>
         ) : (
-          <div className="divide-y divide-gray-200">
-            {filteredDocuments.map((doc) => (
-              <div key={doc.id} className="p-6 hover:bg-gray-50">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <File className="h-8 w-8 text-gray-400" />
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-900">{doc.filename}</h3>
-                      <p className="text-sm text-gray-500">
-                        {getDocumentTypeLabel(doc.doc_type)} • Version {doc.version}
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        Uploaded {format(new Date(doc.uploaded_at), 'MMM d, yyyy')}
-                      </p>
-                    </div>
+          <ul className="divide-y divide-gray-50">
+            {filteredDocuments.map(doc => {
+              const status = getDocumentStatus(doc);
+              const cfg    = STATUS_CONFIG[status];
+              return (
+                <li key={doc.id} className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 transition-colors">
+                  <File className="h-8 w-8 text-gray-300 flex-shrink-0" />
+
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{doc.filename}</p>
+                    <p className="text-xs text-gray-500">
+                      {DOC_TYPE_LABEL[doc.doc_type] ?? doc.doc_type} · v{doc.version}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      Uploaded {format(new Date(doc.uploaded_at), 'dd MMM yyyy')}
+                      {doc.expires_at && ` · Expires ${format(new Date(doc.expires_at), 'dd MMM yyyy')}`}
+                    </p>
                   </div>
-                  
-                  <div className="flex items-center space-x-4">
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(doc)}`}>
-                      {getStatusText(doc)}
-                    </span>
-                    
-                    {doc.expires_at && (
-                      <p className="text-sm text-gray-500">
-                        Expires {format(new Date(doc.expires_at), 'MMM d, yyyy')}
-                      </p>
-                    )}
-                    
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => downloadDocument(doc.id, doc.filename)}
-                        className="p-2 text-gray-600 hover:text-blue-600 transition-colors"
-                        title="Download"
-                      >
-                        <Download className="h-4 w-4" />
-                      </button>
-                      
-                      <button
-                        onClick={() => deleteDocument(doc.id)}
-                        className="p-2 text-gray-600 hover:text-red-600 transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
+
+                  <span className={`px-2 py-0.5 text-xs font-medium rounded-full flex-shrink-0 ${cfg.classes}`}>
+                    {cfg.label}
+                  </span>
+
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => downloadDocument(doc.id, doc.filename)}
+                      title="Download"
+                      className="p-2 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                    >
+                      <Download className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => requestDelete(doc.id)}
+                      title="Delete"
+                      className="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
-                </div>
-              </div>
-            ))}
-          </div>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </div>
     </div>
