@@ -41,9 +41,15 @@ class StorageClient:
                     options={"contentType": "application/pdf"}
                 )
             )
-            if response.get("error"):
+            if isinstance(response, dict) and response.get("error"):
                 raise ExternalServiceException("Supabase Storage", response["error"]["message"])
-            return response["signedUrl"]
+            if isinstance(response, dict):
+                url = response.get("signedURL") or response.get("signedUrl") or response.get("signed_url")
+                if url:
+                    return url
+            if hasattr(response, "signed_url") and response.signed_url:
+                return response.signed_url
+            raise ExternalServiceException("Supabase Storage", f"Unexpected response shape: {response}")
         except ExternalServiceException:
             raise
         except Exception as e:
@@ -58,9 +64,19 @@ class StorageClient:
                     expires_in=expires_in
                 )
             )
-            if response.get("error"):
-                raise ExternalServiceException("Supabase Storage", response["error"]["message"])
-            return response["signedUrl"]
+            # Supabase SDK returns different shapes depending on version
+            if isinstance(response, dict):
+                if response.get("error"):
+                    raise ExternalServiceException("Supabase Storage", response["error"]["message"])
+                url = response.get("signedURL") or response.get("signedUrl") or response.get("signed_url")
+                if url:
+                    return url
+            # Newer SDK returns an object with attribute
+            if hasattr(response, "signed_url") and response.signed_url:
+                return response.signed_url
+            if hasattr(response, "signedURL") and response.signedURL:
+                return response.signedURL
+            raise ExternalServiceException("Supabase Storage", f"Unexpected response shape: {response}")
         except ExternalServiceException:
             raise
         except Exception as e:
