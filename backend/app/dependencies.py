@@ -1,9 +1,7 @@
 from __future__ import annotations
-
 import uuid
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.database import get_async_session
 from app.shared.lang_context import Lang, LangContext
 
@@ -37,12 +35,10 @@ def get_lang_context(request: Request) -> LangContext:
         lang = request.headers.get("Accept-Language", "en")
         # Accept-Language can be "en-US,en;q=0.9" — take just the primary tag
         lang = lang.split(",")[0].split("-")[0].strip()
-
     # Validate — Lang is typing.Literal["en", "ta"], cannot be instantiated.
     # lang is already a plain str at this point; pass it directly.
     if lang not in ("en", "ta"):
         lang = "en"
-
     return LangContext.from_lang(lang)  # type: ignore[arg-type]
 
 
@@ -54,6 +50,7 @@ async def get_db_session(
         session.info["trace_id"] = trace_id
         try:
             yield session
+            await session.commit()
         except Exception:
             await session.rollback()
             raise
