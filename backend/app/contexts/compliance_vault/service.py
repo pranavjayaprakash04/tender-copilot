@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import re
 from datetime import datetime, UTC
 from uuid import UUID
 
@@ -36,6 +38,86 @@ logger = structlog.get_logger()
 
 _PDF_MAGIC = b"%PDF"
 
+# Dangerous PDF stream keywords that indicate active content
+_DANGEROUS_PDF_PATTERNS = [
+    b"/JS",
+    b"/JavaScript",
+    b"/AA",           # Auto Action
+    b"/OpenAction",   # Runs on open
+    b"/Launch",       # Launches external app
+    b"/EmbeddedFile", # Embedded file streams
+    b"/RichMedia",    # Flash/video embeds
+    b"/XFA",          # XML Forms Architecture (can run scripts)
+]
+
+# Windows PE header — catches executables disguised as PDFs
+_PE_MAGIC = b"MZ"
+
+# Max filename length to prevent DoS via long filenames
+_MAX_FILENAME_LEN = 255
+
+# Allowed filename characters (alphanumeric, spaces, hyphens, underscores, dots)
+_SAFE_FILENAME_RE = re.compile(r"^[\w\s\-. ()]+$")
+
+
+def _sanitize_filename(filename: str) -> str:
+    """
+    Sanitize filename to prevent path traversal and injection attacks.
+    - Strips directory components (path traversal)
+    - Removes null bytes
+    - Limits length
+    - Allows only safe characters
+    """
+    # Strip any directory components (path traversal)
+    filename = os.path.basename(filename)
+
+    # Remove null bytes
+    filename = filename.replace("\x00", "")
+
+    # Limit length
+    if len(filename) > _MAX_FILENAME_LEN:
+        name, ext = os.path.splitext(filename)
+        filename = name[:_MAX_FILENAME_LEN - len(ext)] + ext
+
+    # Enforce safe character set
+    if not _SAFE_FILENAME_RE.match(filename):
+        raise ValidationException(
+            "Filename contains invalid characters. Use only letters, numbers, spaces, hyphens, underscores, and dots."
+        )
+
+    return filename
+
+
+def _validate_pdf_content(file_content: bytes) -> None:
+    """
+    Deep validation of PDF bytes:
+    1. Magic bytes check (must start with %PDF)
+    2. PE header check (catches EXE disguised as PDF)
+    3. Dangerous stream keyword scan (JS, auto-actions, embedded files)
+    4. Ensures file ends with %%EOF (basic structure check)
+    """
+    # 1. Magic bytes — must start with %PDF
+    if file_content[:4] != _PDF_MAGIC:
+        raise ValidationException("File must be a valid PDF (invalid magic bytes)")
+
+    # 2. PE header check anywhere in first 1KB — polyglot PDF/EXE detection
+    if _PE_MAGIC in file_content[:1024]:
+        raise ValidationException("File contains executable content and has been rejected")
+
+    # 3. Scan entire file for dangerous PDF stream keywords
+    for pattern in _DANGEROUS_PDF_PATTERNS:
+        if pattern in file_content:
+            keyword = pattern.decode("ascii", errors="replace")
+            raise ValidationException(
+                f"PDF contains disallowed active content ({keyword}) and has been rejected"
+            )
+
+    # 4. Basic structural check — valid PDFs end with %%EOF
+    # Check last 1024 bytes to allow for trailing whitespace/comments
+    tail = file_content[-1024:]
+    if b"%%EOF" not in tail:
+        raise ValidationException("File does not appear to be a valid PDF (missing %%EOF marker)")
+
 
 class ComplianceVaultService:
     """Service for compliance vault operations."""
@@ -62,47 +144,62 @@ class ComplianceVaultService:
         trace_id: str | None = None
     ) -> VaultDocumentResponse:
         """Upload a document to the vault."""
-        # Validate filename present
+
+        # ── Filename validation ────────────────────────────────────────────────
         if not file.filename:
             raise ValidationException("Filename is required")
 
-        # Validate extension
         if not file.filename.lower().endswith(".pdf"):
             raise ValidationException("Only PDF files are supported")
 
-        # Read file content into memory
+        # Sanitize filename — prevents path traversal and injection
+        safe_filename = _sanitize_filename(file.filename)
+
+        # ── Read file into memory ──────────────────────────────────────────────
         file_content = await file.read()
 
-        # Validate actual file size on real bytes (not spoofable client header)
+        # ── Size check on real bytes (not spoofable Content-Length header) ─────
+        if len(file_content) == 0:
+            raise ValidationException("File is empty")
+
         if len(file_content) > 10 * 1024 * 1024:
             raise FileUploadException("File size exceeds 10MB limit")
 
-        # Validate by magic bytes only — browsers (especially Chrome) often send
-        # text/plain as the multipart Content-Type for PDFs, so we never trust
-        # file.content_type. Magic bytes are the only reliable check.
-        if not file_content[:4] == _PDF_MAGIC:
-            raise ValidationException("File must be a valid PDF")
+        # ── Deep PDF content validation ────────────────────────────────────────
+        # This is the main security gate: magic bytes, PE header, dangerous
+        # stream keywords, and structural EOF check all happen here.
+        try:
+            _validate_pdf_content(file_content)
+        except ValidationException:
+            logger.warning(
+                "pdf_validation_rejected",
+                trace_id=trace_id,
+                filename=safe_filename,
+                company_id=str(company_id),
+            )
+            raise
 
         document_data = VaultDocumentCreate(
             company_id=company_id,
             doc_type=doc_type,
-            filename=file.filename,
+            filename=safe_filename,
             expires_at=expires_at
         )
 
-        # Step 1: Upload to storage first (atomic — DB record created only after success)
-        temp_path = f"companies/{company_id}/documents/temp_{file.filename}"
+        # ── Step 1: Upload to storage first ───────────────────────────────────
+        # DB record is only created after storage succeeds (atomic ordering)
+        temp_path = f"companies/{company_id}/documents/temp_{safe_filename}"
         try:
             await self._storage.upload_file(temp_path, file_content, "application/pdf")
         except Exception as e:
             logger.error("storage_upload_failed", trace_id=trace_id, error=str(e))
             raise FileUploadException(f"Failed to upload document: {e}")
 
-        # Step 2: Create DB record (storage confirmed good)
+        # ── Step 2: Create DB record ───────────────────────────────────────────
         try:
             document = await self._document_repo.create(document_data)
         except Exception as e:
-            # Storage uploaded but DB failed — clean up storage
+            # Storage uploaded but DB failed — clean up storage to avoid orphans
             try:
                 await self._storage.delete_file(temp_path)
             except Exception:
@@ -110,8 +207,8 @@ class ComplianceVaultService:
             logger.error("db_create_failed_after_upload", trace_id=trace_id, error=str(e))
             raise FileUploadException(f"Failed to save document record: {e}")
 
-        # Step 3: Move to final path with real document ID
-        final_path = f"companies/{company_id}/documents/{document.id}/{file.filename}"
+        # ── Step 3: Move to final path with real document ID ──────────────────
+        final_path = f"companies/{company_id}/documents/{document.id}/{safe_filename}"
         try:
             await self._storage.upload_file(final_path, file_content, "application/pdf")
             await self._storage.delete_file(temp_path)
@@ -119,7 +216,7 @@ class ComplianceVaultService:
             logger.warning("final_path_move_failed", trace_id=trace_id, error=str(e))
             final_path = temp_path
 
-        # Step 4: Update document with final storage path
+        # ── Step 4: Update document with final storage path ───────────────────
         document.storage_path = final_path
         await self._document_repo.update(
             document.id, company_id,
@@ -132,7 +229,7 @@ class ComplianceVaultService:
             document_id=document.id,
             company_id=company_id,
             doc_type=doc_type,
-            filename=file.filename
+            filename=safe_filename,
         )
 
         return VaultDocumentResponse.model_validate(document)
