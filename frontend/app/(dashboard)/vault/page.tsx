@@ -47,7 +47,7 @@ const DOC_TYPES = Object.entries(DOC_TYPE_META) as [DocumentType, typeof DOC_TYP
 
 // ─── PDF-only security validation ────────────────────────────────────────────
 
-const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
 async function validatePdf(file: File): Promise<string | null> {
   if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf"))
@@ -55,23 +55,19 @@ async function validatePdf(file: File): Promise<string | null> {
   if (file.size > MAX_FILE_BYTES)
     return "File exceeds 10 MB limit.";
 
-  // Check magic bytes: PDF starts with %PDF (25 50 44 46)
   const buf = await file.slice(0, 65536).arrayBuffer();
   const bytes = new Uint8Array(buf);
-
   const magic = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]);
   if (magic !== "%PDF") return "File is not a valid PDF.";
 
-  // Reject embedded executables (MZ header) anywhere in first 64 KB
   for (let i = 0; i < bytes.length - 1; i++) {
     if (bytes[i] === 0x4d && bytes[i + 1] === 0x5a) return "File contains embedded executable content.";
   }
 
-  // Reject PDFs with JavaScript actions
   const text = new TextDecoder("ascii", { fatal: false }).decode(bytes);
   if (/\/JS\b|\/JavaScript\b|\/AA\b/.test(text)) return "PDF contains JavaScript — file rejected.";
 
-  return null; // valid
+  return null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -137,7 +133,8 @@ function UploadModal({ onClose }: { onClose: () => void }) {
       const formData = new FormData();
       formData.append("file", file);
       if (expiresAt) formData.append("expires_at", new Date(expiresAt).toISOString());
-      return api.compliance.upload(formData);
+      // Pass docType explicitly as second argument — it goes as ?doc_type= query param
+      return api.compliance.upload(formData, docType);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["vault"] });
@@ -161,7 +158,6 @@ function UploadModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="modal-body">
-          {/* Document type selector */}
           <div className="field">
             <label className="field-label">Document Type</label>
             <div className="doc-type-grid">
@@ -179,7 +175,6 @@ function UploadModal({ onClose }: { onClose: () => void }) {
             </div>
           </div>
 
-          {/* File drop zone — PDF only */}
           <div className="field">
             <label className="field-label">File <span className="field-optional">(PDF only, max 10 MB)</span></label>
             <div
@@ -213,7 +208,6 @@ function UploadModal({ onClose }: { onClose: () => void }) {
             {fileError && <div className="field-error">{fileError}</div>}
           </div>
 
-          {/* Expiry date */}
           {meta.hasExpiry && (
             <div className="field">
               <label className="field-label">
@@ -330,7 +324,6 @@ function StatsBar({ docs }: { docs: VaultDocument[] }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function VaultPage() {
-  // ── Hydration guard: don't render until client is ready ──────────────────
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
@@ -343,11 +336,10 @@ export default function VaultPage() {
   const { data: rawData, isLoading } = useQuery({
     queryKey: ["vault"],
     queryFn:  () => api.compliance.list(),
-    staleTime: 60_000,
-    enabled: mounted, // don't fetch during SSR
+    staleTime: 0,
+    enabled: mounted,
   });
 
-  // Defensive unwrap — handles array, { data: [] }, or { documents: [] }
   const docs: VaultDocument[] = Array.isArray(rawData)
     ? rawData
     : Array.isArray((rawData as any)?.data)
@@ -389,7 +381,6 @@ export default function VaultPage() {
     return true;
   });
 
-  // Don't render mismatched HTML during SSR
   if (!mounted) {
     return (
       <div style={{ minHeight: "100vh", background: "#0F1117", display: "flex", alignItems: "center", justifyContent: "center" }}>
