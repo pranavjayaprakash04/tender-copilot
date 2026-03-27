@@ -133,11 +133,12 @@ function UploadModal({ onClose }: { onClose: () => void }) {
       const formData = new FormData();
       formData.append("file", file);
       if (expiresAt) formData.append("expires_at", new Date(expiresAt).toISOString());
-      // Pass docType explicitly as second argument — it goes as ?doc_type= query param
       return api.compliance.upload(formData, docType);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["vault"] });
+    onSuccess: async () => {
+      // Wait for the list to actually refetch before closing the modal
+      await queryClient.invalidateQueries({ queryKey: ["vault"] });
+      await queryClient.refetchQueries({ queryKey: ["vault"] });
       onClose();
     },
   });
@@ -337,6 +338,7 @@ export default function VaultPage() {
     queryKey: ["vault"],
     queryFn:  () => api.compliance.list(),
     staleTime: 0,
+    refetchOnWindowFocus: true,
     enabled: mounted,
   });
 
@@ -350,9 +352,10 @@ export default function VaultPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.compliance.delete(id),
-    onSuccess:  () => {
+    onSuccess: async () => {
       setDeleteTarget(null);
-      queryClient.invalidateQueries({ queryKey: ["vault"] });
+      await queryClient.invalidateQueries({ queryKey: ["vault"] });
+      await queryClient.refetchQueries({ queryKey: ["vault"] });
     },
   });
 
