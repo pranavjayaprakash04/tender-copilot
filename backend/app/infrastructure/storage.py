@@ -64,14 +64,12 @@ class StorageClient:
                     expires_in=expires_in
                 )
             )
-            # Supabase SDK returns different shapes depending on version
             if isinstance(response, dict):
                 if response.get("error"):
                     raise ExternalServiceException("Supabase Storage", response["error"]["message"])
                 url = response.get("signedURL") or response.get("signedUrl") or response.get("signed_url")
                 if url:
                     return url
-            # Newer SDK returns an object with attribute
             if hasattr(response, "signed_url") and response.signed_url:
                 return response.signed_url
             if hasattr(response, "signedURL") and response.signedURL:
@@ -116,6 +114,7 @@ class StorageClient:
                     file_options={
                         "content-type": "application/pdf",
                         "contentType": "application/pdf",
+                        "upsert": "true",
                     }
                 )
 
