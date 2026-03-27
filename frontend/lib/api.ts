@@ -31,10 +31,6 @@ const request = async (method: string, endpoint: string, data?: any) => {
   return res.json();
 };
 
-/**
- * Multipart file upload helper.
- * Do NOT set Content-Type manually — the browser sets it with the correct boundary.
- */
 const uploadFile = async (endpoint: string, formData: FormData) => {
   const token = await getToken();
   const headers: Record<string, string> = {};
@@ -50,20 +46,15 @@ const uploadFile = async (endpoint: string, formData: FormData) => {
   return res.json();
 };
 
-/**
- * Maps frontend filter keys to backend query param names for the tenders API.
- * Frontend uses short friendly names; backend expects TenderSearchFilters field names.
- */
 const mapTenderParams = (params?: Record<string, any>): Record<string, any> => {
   if (!params) return {};
   const mapped: Record<string, any> = {};
   for (const [key, value] of Object.entries(params)) {
     if (value === '' || value === null || value === undefined) continue;
     switch (key) {
-      case 'search':       mapped['search_query'] = value; break;
-      case 'deadline':     mapped['deadline_days'] = value; break;
-      // category, state, source, status pass through unchanged
-      default:             mapped[key] = value;
+      case 'search':   mapped['search_query'] = value; break;
+      case 'deadline': mapped['deadline_days'] = value; break;
+      default:         mapped[key] = value;
     }
   }
   return mapped;
@@ -128,39 +119,43 @@ export const api = {
   },
 
   compliance: {
-    // Backend returns PaginatedResponse: { data: [...], success, pagination }
-    // Unwrap .data here so every caller gets a plain array — never an object.
-    list:           (params?: any)          => request('GET', `/api/v1/vault/documents${params ? '?' + new URLSearchParams(params) : ''}`)
-                                               .then((res: any) => res?.data ?? res),
-    get:            (id: string)            => request('GET', `/api/v1/vault/${id}`)
-                                               .then((res: any) => res?.data ?? res),
-    getDocuments:   (params?: any)          => request('GET', `/api/v1/vault/documents${params ? '?' + new URLSearchParams(params) : ''}`)
-                                               .then((res: any) => res?.data ?? res),
-    // POST /vault/upload — doc_type goes as a query param (backend: Query(...)), file as multipart body
-    upload: (data: FormData) => {
-      const docType = (data.get('document_type') as string) ?? 'other';
-      data.delete('document_type');
-      return uploadFile(`/api/v1/vault/upload?doc_type=${encodeURIComponent(docType)}`, data)
-        .then((res: any) => res?.data ?? res);
-    },
-    uploadDocument: (data: FormData) => {
-      const docType = (data.get('document_type') as string) ?? 'other';
-      data.delete('document_type');
-      return uploadFile(`/api/v1/vault/upload?doc_type=${encodeURIComponent(docType)}`, data)
-        .then((res: any) => res?.data ?? res);
-    },
-    update:         (id: string, data: any) => request('PUT', `/api/v1/vault/${id}`, data)
-                                               .then((res: any) => res?.data ?? res),
-    delete:         (id: string)            => request('DELETE', `/api/v1/vault/${id}`),
-    deleteDocument: (id: string)            => request('DELETE', `/api/v1/vault/${id}`),
-    getCategories:  ()                      => request('GET', '/api/v1/vault/categories')
-                                               .then((res: any) => res?.data ?? res),
-    download:       (id: string)            => request('GET', `/api/v1/vault/${id}/download`),
-    getStats:       ()                      => request('GET', '/api/v1/vault/stats')
-                                               .then((res: any) => res?.data ?? res),
+    list: (params?: any) =>
+      request('GET', `/api/v1/vault/documents${params ? '?' + new URLSearchParams(params) : ''}`)
+        .then((res: any) => res?.data ?? res),
+    get: (id: string) =>
+      request('GET', `/api/v1/vault/${id}`)
+        .then((res: any) => res?.data ?? res),
+    getDocuments: (params?: any) =>
+      request('GET', `/api/v1/vault/documents${params ? '?' + new URLSearchParams(params) : ''}`)
+        .then((res: any) => res?.data ?? res),
+
+    // docType passed as query param — never read from FormData
+    upload: (formData: FormData, docType: string = 'other') =>
+      uploadFile(`/api/v1/vault/upload?doc_type=${encodeURIComponent(docType)}`, formData)
+        .then((res: any) => res?.data ?? res),
+
+    uploadDocument: (formData: FormData, docType: string = 'other') =>
+      uploadFile(`/api/v1/vault/upload?doc_type=${encodeURIComponent(docType)}`, formData)
+        .then((res: any) => res?.data ?? res),
+
+    update: (id: string, data: any) =>
+      request('PUT', `/api/v1/vault/documents/${id}`, data)
+        .then((res: any) => res?.data ?? res),
+    delete: (id: string) =>
+      request('DELETE', `/api/v1/vault/documents/${id}`),
+    deleteDocument: (id: string) =>
+      request('DELETE', `/api/v1/vault/documents/${id}`),
+    getCategories: () =>
+      request('GET', '/api/v1/vault/categories')
+        .then((res: any) => res?.data ?? res),
+    download: (id: string) =>
+      request('GET', `/api/v1/vault/documents/${id}`)
+        .then((res: any) => res?.download_url ?? res?.data?.download_url ?? res),
+    getStats: () =>
+      request('GET', '/api/v1/vault/stats')
+        .then((res: any) => res?.data ?? res),
   },
 
-  // Fixed: unwrap PaginatedResponse { data: [...], pagination: {...} }
   alerts: {
     list: () => request('GET', '/api/v1/notifications').then((res: any) => res.data ?? []),
     getActive: () => request('GET', '/api/v1/notifications?status=pending').then((res: any) => res.data ?? []),
