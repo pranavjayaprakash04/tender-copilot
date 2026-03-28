@@ -1,11 +1,10 @@
 from __future__ import annotations
-import asyncio
 import time
 import uuid
 from enum import StrEnum
 from typing import TypeVar
 import structlog
-from groq import APIError, Groq
+from groq import APIError, AsyncGroq
 from pydantic import BaseModel
 from tenacity import (
     retry,
@@ -29,7 +28,7 @@ class GroqModel(StrEnum):
 
 class GroqClient:
     def __init__(self) -> None:
-        self._client = Groq(api_key=settings.GROQ_API_KEY)
+        self._client = AsyncGroq(api_key=settings.GROQ_API_KEY)
 
     @retry(
         stop=stop_after_attempt(3),
@@ -62,10 +61,7 @@ class GroqClient:
             messages.append({"role": "user", "content": user_prompt})
 
         try:
-            # Run the synchronous Groq SDK call in a thread pool
-            # so it doesn't block the async event loop
-            response = await asyncio.to_thread(
-                self._client.chat.completions.create,
+            response = await self._client.chat.completions.create(
                 model=model.value,
                 messages=messages,
                 temperature=temperature,
