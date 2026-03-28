@@ -1,10 +1,9 @@
 from __future__ import annotations
-
+import asyncio
 import time
 import uuid
 from enum import StrEnum
 from typing import TypeVar
-
 import structlog
 from groq import APIError, Groq
 from pydantic import BaseModel
@@ -14,19 +13,19 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
 )
-
 from app.config import settings
 from app.shared.exceptions import LLMException
 from app.shared.lang_context import LangContext
 
 logger = structlog.get_logger()
-
 T = TypeVar("T", bound=BaseModel)
 
+
 class GroqModel(StrEnum):
-    PRIMARY   = "llama-3.3-70b-versatile"    # Bid gen, doc intelligence
-    FAST      = "llama-3.1-8b-instant"        # Matching, WhatsApp intent
-    REASONING = "deepseek-r1-distill-llama-70b"  # Analysis, intelligence
+    PRIMARY   = "llama-3.3-70b-versatile"
+    FAST      = "llama-3.1-8b-instant"
+    REASONING = "deepseek-r1-distill-llama-70b"
+
 
 class GroqClient:
     def __init__(self) -> None:
@@ -44,7 +43,7 @@ class GroqClient:
         system_prompt: str | None,
         user_prompt: str,
         output_schema: type[T],
-        lang: LangContext,
+        lang: LangContext | None = None,
         trace_id: str | None = None,
         company_id: str | None = None,
         temperature: float = 0.7,
@@ -52,8 +51,6 @@ class GroqClient:
         _trace = trace_id or str(uuid.uuid4())
         start = time.monotonic()
 
-        # DeepSeek-R1: no system prompt, all instructions in user message
-        # temperature must be 0.6 for DeepSeek
         is_deepseek = model == GroqModel.REASONING
         if is_deepseek:
             temperature = 0.6
@@ -65,7 +62,10 @@ class GroqClient:
             messages.append({"role": "user", "content": user_prompt})
 
         try:
-            response = self._client.chat.completions.create(
+            # Run the synchronous Groq SDK call in a thread pool
+            # so it doesn't block the async event loop
+            response = await asyncio.to_thread(
+                self._client.chat.completions.create,
                 model=model.value,
                 messages=messages,
                 temperature=temperature,
