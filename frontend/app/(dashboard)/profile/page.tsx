@@ -54,30 +54,34 @@ export default function ProfilePage() {
   const [form, setForm] = useState<CompanyProfile>({});
   const [saved, setSaved] = useState(false);
 
-  // Load Supabase user
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user));
   }, []);
 
-  // Load company profile
-  const { data: profile, isLoading } = useQuery<CompanyProfile>({
+  const { data: profile, isLoading } = useQuery<CompanyProfile | null>({
     queryKey: ["company-profile"],
     queryFn: async () => {
       try {
         return await api.companies.getProfile();
       } catch {
-        return {};
+        return null;
       }
     },
-    retry: 1,
+    retry: false,
   });
+
+  // Profile exists = has an id from the backend
+  const profileExists = !!(profile?.id);
 
   useEffect(() => {
     if (profile) setForm(profile);
   }, [profile]);
 
-  const updateProfile = useMutation({
-    mutationFn: (data: CompanyProfile) => api.companies.updateProfile(data),
+  const saveProfile = useMutation({
+    mutationFn: (data: CompanyProfile) =>
+      profileExists
+        ? api.companies.updateProfile(data)   // PATCH — update existing
+        : api.companies.createProfile(data),   // POST  — create new
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["company-profile"] });
       setEditing(false);
@@ -101,7 +105,6 @@ export default function ProfilePage() {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
 
-        {/* Header */}
         <h1 className="text-3xl font-bold text-gray-900">Profile</h1>
 
         {/* Account card */}
@@ -124,13 +127,18 @@ export default function ProfilePage() {
         {/* Company profile card */}
         <div className="bg-white border border-gray-200 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-5">
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Company Profile</h2>
+            <div>
+              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Company Profile</h2>
+              {!profileExists && !isLoading && (
+                <p className="text-xs text-amber-600 mt-1">No profile yet — fill in your details to enable bid matching.</p>
+              )}
+            </div>
             {!editing && (
               <button
                 onClick={() => setEditing(true)}
                 className="text-sm font-medium text-blue-600 hover:text-blue-700"
               >
-                Edit
+                {profileExists ? "Edit" : "Set up"}
               </button>
             )}
           </div>
@@ -143,7 +151,7 @@ export default function ProfilePage() {
             </div>
           ) : editing ? (
             <form
-              onSubmit={(e) => { e.preventDefault(); updateProfile.mutate(form); }}
+              onSubmit={(e) => { e.preventDefault(); saveProfile.mutate(form); }}
               className="space-y-4"
             >
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -180,10 +188,10 @@ export default function ProfilePage() {
               <div className="flex gap-3 pt-2">
                 <button
                   type="submit"
-                  disabled={updateProfile.isPending}
+                  disabled={saveProfile.isPending}
                   className="px-5 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-colors"
                 >
-                  {updateProfile.isPending ? "Saving…" : "Save Changes"}
+                  {saveProfile.isPending ? "Saving…" : profileExists ? "Save Changes" : "Create Profile"}
                 </button>
                 <button
                   type="button"
@@ -194,7 +202,7 @@ export default function ProfilePage() {
                 </button>
               </div>
 
-              {updateProfile.isError && (
+              {saveProfile.isError && (
                 <p className="text-sm text-red-600">Failed to save. Please try again.</p>
               )}
             </form>
