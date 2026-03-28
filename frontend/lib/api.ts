@@ -104,11 +104,13 @@ export const api = {
   },
 
   companies: {
-    get: (id: string) => request('GET', `/api/v1/companies/${id}`),
-    getProfile: () => request('GET', '/api/v1/companies/profile'),
-    create: (data: any) => request('POST', '/api/v1/companies', data),
-    update: (id: string, data: any) => request('PUT', `/api/v1/companies/${id}`, data),
-    updateProfile: (data: any) => request('PUT', '/api/v1/companies/profile', data),
+    get: (id: string) => request('GET', `/api/v1/company/${id}`),
+    // GET — returns null (not 404) when no profile exists yet
+    getProfile: () => request('GET', '/api/v1/company/profile').catch(() => null),
+    // POST — first-time profile creation
+    createProfile: (data: any) => request('POST', '/api/v1/company/profile', data),
+    // PATCH — update existing profile
+    updateProfile: (data: any) => request('PATCH', '/api/v1/company/profile', data),
   },
 
   auth: {
@@ -128,16 +130,12 @@ export const api = {
     getDocuments: (params?: any) =>
       request('GET', `/api/v1/vault/documents${params ? '?' + new URLSearchParams(params) : ''}`)
         .then((res: any) => res?.data ?? res),
-
-    // docType passed as query param — never read from FormData
     upload: (formData: FormData, docType: string = 'other') =>
       uploadFile(`/api/v1/vault/upload?doc_type=${encodeURIComponent(docType)}`, formData)
         .then((res: any) => res?.data ?? res),
-
     uploadDocument: (formData: FormData, docType: string = 'other') =>
       uploadFile(`/api/v1/vault/upload?doc_type=${encodeURIComponent(docType)}`, formData)
         .then((res: any) => res?.data ?? res),
-
     update: (id: string, data: any) =>
       request('PUT', `/api/v1/vault/documents/${id}`, data)
         .then((res: any) => res?.data ?? res),
