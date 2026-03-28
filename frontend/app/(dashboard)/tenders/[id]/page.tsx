@@ -101,24 +101,37 @@ function IntelligencePanel({ tender }: { tender: TenderDetail }) {
   const [bidAmount, setBidAmount] = useState("");
   const [openComp, setOpenComp] = useState<number | null>(null);
 
-  const tenderId = tender.tender_id || tender.id;
+  // Use tender.id (DB UUID), NOT tender.tender_id (external reference string)
+  const tenderId = tender.id;
+
+  // Fetch real company_id from profile
+  const { data: profileData } = useQuery({
+    queryKey: ["company-profile"],
+    queryFn: () => api.companies.getProfile(),
+    staleTime: 300_000,
+  });
+  const companyId = (profileData as any)?.id ?? (profileData as any)?.data?.id ?? null;
 
   const winProbMutation = useMutation<WinProbabilityResponse, Error>({
-    mutationFn: () =>
-      api.post("/api/v1/intelligence/bid/win-probability", {
+    mutationFn: () => {
+      if (!companyId) throw new Error("Company profile not loaded");
+      return api.post("/api/v1/intelligence/bid/win-probability", {
         tender_id: tenderId,
-        company_id: "current",
+        company_id: companyId,
         our_bid_amount: bidAmount ? parseFloat(bidAmount) : null,
-      }),
+      });
+    },
   });
 
   const competitorMutation = useMutation<CompetitorAnalysisResponse, Error>({
-    mutationFn: () =>
-      api.post("/api/v1/intelligence/bid/analyze-competitors", {
+    mutationFn: () => {
+      if (!companyId) throw new Error("Company profile not loaded");
+      return api.post("/api/v1/intelligence/bid/analyze-competitors", {
         tender_id: tenderId,
-        company_id: "current",
+        company_id: companyId,
         lang: "en",
-      }),
+      });
+    },
   });
 
   const category = tender.category || "";
@@ -138,6 +151,7 @@ function IntelligencePanel({ tender }: { tender: TenderDetail }) {
         .intel-top{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #1E2537}
         .intel-title{font-size:15px;font-weight:700;color:#F1F5F9;display:flex;align-items:center;gap:8px}
         .intel-badge{background:#3B82F620;color:#3B82F6;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:.5px}
+        .intel-no-company{padding:20px;text-align:center;font-size:13px;color:#F59E0B}
         .i-tabs{display:flex;border-bottom:1px solid #1E2537}
         .i-tab{flex:1;padding:12px 8px;text-align:center;font-size:12px;font-weight:500;color:#475569;cursor:pointer;transition:all .15s;border-bottom:2px solid transparent}
         .i-tab:hover{color:#94A3B8;background:#1A1F2E}
@@ -205,241 +219,257 @@ function IntelligencePanel({ tender }: { tender: TenderDetail }) {
           </div>
         </div>
 
-        <div className="i-tabs">
-          {([
-            { key: "winprob", label: "Win Probability" },
-            { key: "competitors", label: "Competitors" },
-            { key: "market", label: "Market Price" },
-          ] as const).map((t) => (
-            <div
-              key={t.key}
-              className={`i-tab${activeTab === t.key ? " i-tab--active" : ""}`}
-              onClick={() => setActiveTab(t.key)}
-            >
-              {t.label}
-            </div>
-          ))}
-        </div>
-
-        <div className="i-body">
-
-          {/* ── Win Probability ── */}
-          {activeTab === "winprob" && (
-            <div>
-              <div className="i-row">
-                <input
-                  className="i-input"
-                  type="number"
-                  placeholder="Your bid amount in ₹ (optional)"
-                  value={bidAmount}
-                  onChange={(e) => setBidAmount(e.target.value)}
-                />
-                <button
-                  className="i-btn"
-                  disabled={winProbMutation.isPending}
-                  onClick={() => winProbMutation.mutate()}
+        {/* Guard: company profile must be loaded */}
+        {!companyId ? (
+          <div className="intel-no-company">
+            ⚠️ Company profile not found. Please complete your profile setup before running intelligence.
+          </div>
+        ) : (
+          <>
+            <div className="i-tabs">
+              {([
+                { key: "winprob", label: "Win Probability" },
+                { key: "competitors", label: "Competitors" },
+                { key: "market", label: "Market Price" },
+              ] as const).map((t) => (
+                <div
+                  key={t.key}
+                  className={`i-tab${activeTab === t.key ? " i-tab--active" : ""}`}
+                  onClick={() => setActiveTab(t.key)}
                 >
-                  {winProbMutation.isPending ? <><span className="i-spinner" />Analysing…</> : "Analyse"}
-                </button>
-              </div>
-
-              {winProbMutation.isError && (
-                <div className="i-error">Analysis failed. Please try again.</div>
-              )}
-
-              {!winProb && !winProbMutation.isPending && (
-                <div className="i-empty">Enter your bid amount and click Analyse to get your win probability</div>
-              )}
-
-              {winProb && (
-                <>
-                  <div className="i-win-top">
-                    <WinRing probability={winProb.win_probability} />
-                    <div className="i-win-meta">
-                      <span className="i-conf" style={{
-                        background: winColor(winProb.win_probability) + "22",
-                        color: winColor(winProb.win_probability),
-                      }}>
-                        {winProb.confidence?.toUpperCase()} CONFIDENCE
-                      </span>
-
-                      {winProb.recommended_range && (
-                        <div className="i-range">
-                          <div className="i-range-title">Recommended Bid Range</div>
-                          <div className="i-range-row">
-                            <div>
-                              <div className="i-range-val">{fmt(winProb.recommended_range.min)}</div>
-                              <div className="i-range-label">Min</div>
-                            </div>
-                            <div style={{ color: "#1E2537" }}>→</div>
-                            <div>
-                              <div className="i-range-val">{fmt(winProb.recommended_range.max)}</div>
-                              <div className="i-range-label">Max</div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {winProb.market_avg && (
-                        <div className="i-avg">Market average: {fmt(winProb.market_avg)}</div>
-                      )}
-                    </div>
-                  </div>
-
-                  {winProb.factors?.length > 0 && (
-                    <div className="i-factors">
-                      <div className="i-factors-title">Key Factors</div>
-                      {winProb.factors.map((f, i) => (
-                        <div key={i} className="i-factor">
-                          <span className="i-factor-dot" />
-                          {f}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {/* ── Competitors ── */}
-          {activeTab === "competitors" && (
-            <div>
-              {compData && (
-                <div className="comp-banner">
-                  <div>
-                    <div className="comp-banner-label">Our Win Probability</div>
-                    {compData.recommended_price && (
-                      <div style={{ fontSize: 11, color: "#64748B", marginTop: 2 }}>
-                        Recommended: {fmt(compData.recommended_price)}
-                      </div>
-                    )}
-                  </div>
-                  <div className="comp-banner-val" style={{ color: winColor(compData.our_win_probability) }}>
-                    {pct(compData.our_win_probability)}
-                  </div>
-                </div>
-              )}
-
-              <button
-                className={`i-btn${compData ? " i-btn--outline" : ""}`}
-                disabled={competitorMutation.isPending}
-                onClick={() => competitorMutation.mutate()}
-                style={{ marginBottom: 14 }}
-              >
-                {competitorMutation.isPending
-                  ? <><span className="i-spinner" />Analysing…</>
-                  : compData ? "Re-analyse" : "Analyse Competitors"}
-              </button>
-
-              {competitorMutation.isError && (
-                <div className="i-error">Analysis failed. Please try again.</div>
-              )}
-
-              {!compData && !competitorMutation.isPending && (
-                <div className="i-empty">Click Analyse Competitors to see who you're up against</div>
-              )}
-
-              {compData?.insights?.map((c, i) => (
-                <div key={i} className="comp-card">
-                  <div className="comp-head" onClick={() => setOpenComp(openComp === i ? null : i)}>
-                    <div className="comp-rank" style={{ color: winColor(c.win_probability) }}>{i + 1}</div>
-                    <div className="comp-info">
-                      <span className="comp-name">{c.competitor_name}</span>
-                      {c.estimated_bid && <span className="comp-bid">{fmt(c.estimated_bid)}</span>}
-                    </div>
-                    <div className="comp-pct" style={{ color: winColor(c.win_probability) }}>{pct(c.win_probability)}</div>
-                    <div className="comp-bar-wrap">
-                      <div className="comp-bar" style={{ width: pct(c.win_probability), background: winColor(c.win_probability) }} />
-                    </div>
-                    <button className="comp-toggle">{openComp === i ? "▲" : "▼"}</button>
-                  </div>
-                  {openComp === i && (
-                    <div className="comp-detail">
-                      <div>
-                        <div className="comp-col-title" style={{ color: "#10B981" }}>Strengths</div>
-                        {c.strengths.map((s, j) => (
-                          <div key={j} className="comp-item">
-                            <span className="comp-dot" style={{ background: "#10B981" }} />{s}
-                          </div>
-                        ))}
-                      </div>
-                      <div>
-                        <div className="comp-col-title" style={{ color: "#EF4444" }}>Weaknesses</div>
-                        {c.weaknesses.map((w, j) => (
-                          <div key={j} className="comp-item">
-                            <span className="comp-dot" style={{ background: "#EF4444" }} />{w}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                  {t.label}
                 </div>
               ))}
             </div>
-          )}
 
-          {/* ── Market Price ── */}
-          {activeTab === "market" && (
-            <div>
-              <div className="i-row">
-                <div style={{ flex: 1, fontSize: 12, color: "#64748B" }}>
-                  Category: <strong style={{ color: "#E2E8F0" }}>{tender.category || "Not specified"}</strong>
+            <div className="i-body">
+
+              {/* ── Win Probability ── */}
+              {activeTab === "winprob" && (
+                <div>
+                  <div className="i-row">
+                    <input
+                      className="i-input"
+                      type="number"
+                      placeholder="Your bid amount in ₹ (optional)"
+                      value={bidAmount}
+                      onChange={(e) => setBidAmount(e.target.value)}
+                    />
+                    <button
+                      className="i-btn"
+                      disabled={winProbMutation.isPending}
+                      onClick={() => winProbMutation.mutate()}
+                    >
+                      {winProbMutation.isPending ? <><span className="i-spinner" />Analysing…</> : "Analyse"}
+                    </button>
+                  </div>
+
+                  {winProbMutation.isError && (
+                    <div className="i-error">
+                      {winProbMutation.error?.message || "Analysis failed. Please try again."}
+                    </div>
+                  )}
+
+                  {!winProb && !winProbMutation.isPending && (
+                    <div className="i-empty">Enter your bid amount and click Analyse to get your win probability</div>
+                  )}
+
+                  {winProb && (
+                    <>
+                      <div className="i-win-top">
+                        <WinRing probability={winProb.win_probability} />
+                        <div className="i-win-meta">
+                          <span className="i-conf" style={{
+                            background: winColor(winProb.win_probability) + "22",
+                            color: winColor(winProb.win_probability),
+                          }}>
+                            {winProb.confidence?.toUpperCase()} CONFIDENCE
+                          </span>
+
+                          {winProb.recommended_range && (
+                            <div className="i-range">
+                              <div className="i-range-title">Recommended Bid Range</div>
+                              <div className="i-range-row">
+                                <div>
+                                  <div className="i-range-val">{fmt(winProb.recommended_range.min)}</div>
+                                  <div className="i-range-label">Min</div>
+                                </div>
+                                <div style={{ color: "#1E2537" }}>→</div>
+                                <div>
+                                  <div className="i-range-val">{fmt(winProb.recommended_range.max)}</div>
+                                  <div className="i-range-label">Max</div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {winProb.market_avg && (
+                            <div className="i-avg">Market average: {fmt(winProb.market_avg)}</div>
+                          )}
+                        </div>
+                      </div>
+
+                      {winProb.factors?.length > 0 && (
+                        <div className="i-factors">
+                          <div className="i-factors-title">Key Factors</div>
+                          {winProb.factors.map((f, i) => (
+                            <div key={i} className="i-factor">
+                              <span className="i-factor-dot" />
+                              {f}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
-                <button
-                  className="i-btn"
-                  disabled={!category || marketLoading}
-                  onClick={() => fetchMarket()}
-                >
-                  {marketLoading ? <><span className="i-spinner" />Fetching…</> : "Get Price Data"}
-                </button>
-              </div>
-
-              {!marketData && !marketLoading && (
-                <div className="i-empty">Click Get Price Data to see market pricing for {tender.category || "this category"}</div>
               )}
 
-              {marketData && (
-                <>
-                  <div className="mkt-grid">
-                    <div className="mkt-card">
-                      <div className="mkt-val">{fmt(marketData.avg_price)}</div>
-                      <div className="mkt-label">Average Price</div>
+              {/* ── Competitors ── */}
+              {activeTab === "competitors" && (
+                <div>
+                  {compData && (
+                    <div className="comp-banner">
+                      <div>
+                        <div className="comp-banner-label">Our Win Probability</div>
+                        {compData.recommended_price && (
+                          <div style={{ fontSize: 11, color: "#64748B", marginTop: 2 }}>
+                            Recommended: {fmt(compData.recommended_price)}
+                          </div>
+                        )}
+                      </div>
+                      <div className="comp-banner-val" style={{ color: winColor(compData.our_win_probability) }}>
+                        {pct(compData.our_win_probability)}
+                      </div>
                     </div>
-                    <div className="mkt-card">
-                      <div className="mkt-val" style={{ color: "#10B981" }}>{fmt(marketData.min_price)}</div>
-                      <div className="mkt-label">Minimum (L1)</div>
+                  )}
+
+                  <button
+                    className={`i-btn${compData ? " i-btn--outline" : ""}`}
+                    disabled={competitorMutation.isPending}
+                    onClick={() => competitorMutation.mutate()}
+                    style={{ marginBottom: 14 }}
+                  >
+                    {competitorMutation.isPending
+                      ? <><span className="i-spinner" />Analysing…</>
+                      : compData ? "Re-analyse" : "Analyse Competitors"}
+                  </button>
+
+                  {competitorMutation.isError && (
+                    <div className="i-error">
+                      {competitorMutation.error?.message || "Analysis failed. Please try again."}
                     </div>
-                    <div className="mkt-card">
-                      <div className="mkt-val" style={{ color: "#EF4444" }}>{fmt(marketData.max_price)}</div>
-                      <div className="mkt-label">Maximum</div>
+                  )}
+
+                  {!compData && !competitorMutation.isPending && (
+                    <div className="i-empty">Click Analyse Competitors to see who you're up against</div>
+                  )}
+
+                  {compData?.insights?.map((c, i) => (
+                    <div key={i} className="comp-card">
+                      <div className="comp-head" onClick={() => setOpenComp(openComp === i ? null : i)}>
+                        <div className="comp-rank" style={{ color: winColor(c.win_probability) }}>{i + 1}</div>
+                        <div className="comp-info">
+                          <span className="comp-name">{c.competitor_name}</span>
+                          {c.estimated_bid && <span className="comp-bid">{fmt(c.estimated_bid)}</span>}
+                        </div>
+                        <div className="comp-pct" style={{ color: winColor(c.win_probability) }}>{pct(c.win_probability)}</div>
+                        <div className="comp-bar-wrap">
+                          <div className="comp-bar" style={{ width: pct(c.win_probability), background: winColor(c.win_probability) }} />
+                        </div>
+                        <button className="comp-toggle">{openComp === i ? "▲" : "▼"}</button>
+                      </div>
+                      {openComp === i && (
+                        <div className="comp-detail">
+                          <div>
+                            <div className="comp-col-title" style={{ color: "#10B981" }}>Strengths</div>
+                            {c.strengths.map((s, j) => (
+                              <div key={j} className="comp-item">
+                                <span className="comp-dot" style={{ background: "#10B981" }} />{s}
+                              </div>
+                            ))}
+                          </div>
+                          <div>
+                            <div className="comp-col-title" style={{ color: "#EF4444" }}>Weaknesses</div>
+                            {c.weaknesses.map((w, j) => (
+                              <div key={j} className="comp-item">
+                                <span className="comp-dot" style={{ background: "#EF4444" }} />{w}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <div className="mkt-card">
-                      <div className="mkt-val" style={{ color: "#F59E0B" }}>{marketData.sample_count}</div>
-                      <div className="mkt-label">Tenders Sampled</div>
-                    </div>
-                  </div>
-                  <div className="mkt-bar-section">
-                    <div className="mkt-bar-title">Price Range Distribution</div>
-                    <div className="mkt-bar-track">
-                      <div className="mkt-bar-fill" style={{
-                        width: `${((marketData.avg_price - marketData.min_price) / (marketData.max_price - marketData.min_price)) * 100}%`
-                      }} />
-                    </div>
-                    <div className="mkt-bar-labels">
-                      <span>{fmt(marketData.min_price)}</span>
-                      <span>Avg: {fmt(marketData.avg_price)}</span>
-                      <span>{fmt(marketData.max_price)}</span>
-                    </div>
-                    <div className="mkt-sample">
-                      Based on {marketData.sample_count} tenders · Last updated {new Date(marketData.last_refreshed).toLocaleDateString("en-IN")}
-                    </div>
-                  </div>
-                </>
+                  ))}
+                </div>
               )}
+
+              {/* ── Market Price ── */}
+              {activeTab === "market" && (
+                <div>
+                  <div className="i-row">
+                    <div style={{ flex: 1, fontSize: 12, color: "#64748B" }}>
+                      Category: <strong style={{ color: "#E2E8F0" }}>{tender.category || "Not specified"}</strong>
+                    </div>
+                    <button
+                      className="i-btn"
+                      disabled={!category || marketLoading}
+                      onClick={() => fetchMarket()}
+                    >
+                      {marketLoading ? <><span className="i-spinner" />Fetching…</> : "Get Price Data"}
+                    </button>
+                  </div>
+
+                  {!marketData && !marketLoading && (
+                    <div className="i-empty">
+                      Click Get Price Data to see market pricing for {tender.category || "this category"}
+                    </div>
+                  )}
+
+                  {marketData && (
+                    <>
+                      <div className="mkt-grid">
+                        <div className="mkt-card">
+                          <div className="mkt-val">{fmt(marketData.avg_price)}</div>
+                          <div className="mkt-label">Average Price</div>
+                        </div>
+                        <div className="mkt-card">
+                          <div className="mkt-val" style={{ color: "#10B981" }}>{fmt(marketData.min_price)}</div>
+                          <div className="mkt-label">Minimum (L1)</div>
+                        </div>
+                        <div className="mkt-card">
+                          <div className="mkt-val" style={{ color: "#EF4444" }}>{fmt(marketData.max_price)}</div>
+                          <div className="mkt-label">Maximum</div>
+                        </div>
+                        <div className="mkt-card">
+                          <div className="mkt-val" style={{ color: "#F59E0B" }}>{marketData.sample_count}</div>
+                          <div className="mkt-label">Tenders Sampled</div>
+                        </div>
+                      </div>
+                      <div className="mkt-bar-section">
+                        <div className="mkt-bar-title">Price Range Distribution</div>
+                        <div className="mkt-bar-track">
+                          <div className="mkt-bar-fill" style={{
+                            width: `${((marketData.avg_price - marketData.min_price) / (marketData.max_price - marketData.min_price)) * 100}%`
+                          }} />
+                        </div>
+                        <div className="mkt-bar-labels">
+                          <span>{fmt(marketData.min_price)}</span>
+                          <span>Avg: {fmt(marketData.avg_price)}</span>
+                          <span>{fmt(marketData.max_price)}</span>
+                        </div>
+                        <div className="mkt-sample">
+                          Based on {marketData.sample_count} tenders · Last updated {new Date(marketData.last_refreshed).toLocaleDateString("en-IN")}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
     </>
   );
@@ -628,7 +658,7 @@ export default function TenderDetailPage({ params }: { params: { id: string } })
           </div>
         </div>
 
-        {/* Intelligence Panel — shown inline when button clicked */}
+        {/* Intelligence Panel */}
         {showIntel && <IntelligencePanel tender={tender} />}
 
       </div>
