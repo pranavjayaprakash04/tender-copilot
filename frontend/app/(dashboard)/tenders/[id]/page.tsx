@@ -101,10 +101,8 @@ function IntelligencePanel({ tender }: { tender: TenderDetail }) {
   const [bidAmount, setBidAmount] = useState("");
   const [openComp, setOpenComp] = useState<number | null>(null);
 
-  // Use tender.id (DB UUID), NOT tender.tender_id (external reference string)
   const tenderId = tender.id;
 
-  // Fetch real company_id from profile
   const { data: profileData } = useQuery({
     queryKey: ["company-profile"],
     queryFn: () => api.companies.getProfile(),
@@ -123,14 +121,38 @@ function IntelligencePanel({ tender }: { tender: TenderDetail }) {
     },
   });
 
+  // ── Competitor mutation now calls Vercel API route (bypasses Render network block) ──
   const competitorMutation = useMutation<CompetitorAnalysisResponse, Error>({
-    mutationFn: () => {
+    mutationFn: async () => {
       if (!companyId) throw new Error("Company profile not loaded");
-      return api.post("/api/v1/intelligence/bid/analyze-competitors", {
-        tender_id: tenderId,
-        company_id: companyId,
-        lang: "en",
+
+      const res = await fetch("/api/competitors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: tender.title,
+          category: tender.category,
+          estimated_value: tender.estimated_value,
+          location: tender.state,
+        }),
       });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error || "Competitor analysis failed");
+      }
+
+      const data = await res.json();
+
+      return {
+        tender_id: tender.id,
+        company_id: companyId,
+        insights: data.competitors ?? [],
+        our_win_probability: data.our_win_probability ?? 0.5,
+        recommended_price: data.recommended_price ?? null,
+        analysis_lang: "en",
+        generated_at: new Date().toISOString(),
+      };
     },
   });
 
@@ -219,7 +241,6 @@ function IntelligencePanel({ tender }: { tender: TenderDetail }) {
           </div>
         </div>
 
-        {/* Guard: company profile must be loaded */}
         {!companyId ? (
           <div className="intel-no-company">
             ⚠️ Company profile not found. Please complete your profile setup before running intelligence.
