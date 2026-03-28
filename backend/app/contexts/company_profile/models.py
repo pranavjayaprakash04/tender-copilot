@@ -51,6 +51,11 @@ class Company(Base):
     employee_count: Mapped[int] = mapped_column(Integer, nullable=True)
     annual_revenue: Mapped[float] = mapped_column(Float, nullable=True)
 
+    # Indian compliance fields (added via ALTER TABLE migration)
+    gstin: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    udyam_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    turnover_range: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
     # Metadata
     certifications: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     specializations: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
