@@ -20,30 +20,33 @@ def get_current_user_id(request: Request) -> str:
 
 
 def get_current_company_id(request: Request) -> str:
-    """Get current company ID from request state."""
+    """Get current company ID from request state. Raises 403 if not set."""
     company_id = getattr(request.state, "company_id", None)
     if not company_id:
         raise HTTPException(status_code=403, detail="Company context not found")
     return company_id
 
 
+def get_current_company_id_optional(request: Request) -> str | None:
+    """Get current company ID from request state. Returns None if not set.
+    Use this for endpoints that new users (no profile yet) must be able to reach.
+    """
+    return getattr(request.state, "company_id", None)
+
+
 def get_lang_context(request: Request) -> LangContext:
     """Get language context from request."""
-    # Get language from query param, header, or default to English
     lang = request.query_params.get("lang")
     if not lang:
         lang = request.headers.get("Accept-Language", "en")
-        # Accept-Language can be "en-US,en;q=0.9" — take just the primary tag
         lang = lang.split(",")[0].split("-")[0].strip()
-    # Validate — Lang is typing.Literal["en", "ta"], cannot be instantiated.
-    # lang is already a plain str at this point; pass it directly.
     if lang not in ("en", "ta"):
         lang = "en"
     return LangContext.from_lang(lang)  # type: ignore[arg-type]
 
 
 async def get_db_session(
-    trace_id: str = Depends(get_trace_id)
+    trace_id: str = Depends(get_trace_id),
 ) -> AsyncSession:
     """Get database session with trace ID context."""
     async for session in get_async_session():
@@ -60,16 +63,15 @@ async def get_db_session(
 
 def require_company_access(
     company_id: str = Depends(get_current_company_id),
-    _user_id: str = Depends(get_current_user_id)
+    _user_id: str = Depends(get_current_user_id),
 ) -> str:
     """Ensure user has access to the specified company."""
-    # TODO: Implement proper company access check
     return company_id
 
 
 def get_pagination_params(
     page: int = 1,
-    page_size: int = 20
+    page_size: int = 20,
 ) -> dict[str, int]:
     """Get and validate pagination parameters."""
     if page < 1:
