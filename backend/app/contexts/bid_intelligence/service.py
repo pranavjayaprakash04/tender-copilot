@@ -62,26 +62,26 @@ class BidIntelligenceService:
         tender = await self._get_scraped_tender(req.tender_id)
 
         # Use mock competitor insights (real AI call can be wired later)
+        est_value = float(tender["estimated_value"]) if tender and tender.get("estimated_value") else None
+
         insights = [
             CompetitorInsight(
                 competitor_name="ABC Enterprises",
-                estimated_bid=tender["estimated_value"] * 0.95 if tender and tender.get("estimated_value") else None,
+                estimated_bid=est_value * 0.95 if est_value else None,
                 win_probability=0.65,
                 strengths=["Strong financial backing", "Similar project experience"],
                 weaknesses=["Higher overhead costs", "Slower delivery timeline"],
             ),
             CompetitorInsight(
                 competitor_name="XYZ Solutions",
-                estimated_bid=tender["estimated_value"] * 0.88 if tender and tender.get("estimated_value") else None,
+                estimated_bid=est_value * 0.88 if est_value else None,
                 win_probability=0.45,
                 strengths=["Technical expertise", "Competitive pricing"],
                 weaknesses=["Limited resources", "Less experience with large projects"],
             ),
         ]
 
-        recommended_price = None
-        if tender and tender.get("estimated_value"):
-            recommended_price = tender["estimated_value"] * 0.92
+        recommended_price = est_value * 0.92 if est_value else None
 
         return CompetitorAnalysisResponse(
             tender_id=req.tender_id,
