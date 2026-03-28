@@ -2,22 +2,20 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-
 const navLinks = [
   { href: "/tenders", label: "Tenders" },
   { href: "/bids", label: "Bids" },
+  { href: "/intelligence", label: "Intelligence" },
   { href: "/vault", label: "Vault" },
   { href: "/alerts", label: "Alerts" },
   { href: "/profile", label: "Profile" },
 ];
-
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-
   return (
     <div className="min-h-screen bg-gray-50">
       <nav className="bg-white shadow-sm border-b border-gray-200">
@@ -31,7 +29,6 @@ export default function DashboardLayout({
                 {navLinks.map(({ href, label }) => {
                   const isActive = pathname === href || pathname.startsWith(href + "/");
                   return (
-                    // Fixed: use Next.js Link instead of <a> to prevent full page reloads
                     <Link
                       key={href}
                       href={href}
