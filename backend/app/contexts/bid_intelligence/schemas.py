@@ -8,8 +8,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class CompetitorAnalysisRequest(BaseModel):
-    """Request for competitor analysis."""
-    tender_id: str          # integer ID from scraped tenders table e.g. "230211"
+    tender_id: str
     company_id: UUID
     lang: str = "en"
 
@@ -22,7 +21,6 @@ class CompetitorAnalysisRequest(BaseModel):
 
 
 class CompetitorInsight(BaseModel):
-    """Individual competitor insight."""
     competitor_name: str
     estimated_bid: float | None
     win_probability: float
@@ -31,7 +29,6 @@ class CompetitorInsight(BaseModel):
 
 
 class CompetitorAnalysisResponse(BaseModel):
-    """Response containing competitor analysis."""
     tender_id: str
     company_id: UUID
     insights: list[CompetitorInsight]
@@ -39,36 +36,30 @@ class CompetitorAnalysisResponse(BaseModel):
     recommended_price: float | None
     analysis_lang: str
     generated_at: datetime
-
     model_config = ConfigDict(from_attributes=True)
 
 
 class WinProbabilityRequest(BaseModel):
-    """Request for win probability calculation."""
-    tender_id: str          # integer ID from scraped tenders table e.g. "230211"
+    tender_id: str
     company_id: UUID
     our_bid_amount: float | None = None
 
 
 class WinProbabilityResponse(BaseModel):
-    """Response with win probability analysis."""
     tender_id: str
     win_probability: float
     confidence: str
     factors: list[str]
     market_avg: float | None
     recommended_range: dict[str, Any] | None
-
     model_config = ConfigDict(from_attributes=True)
 
 
 class MarketPriceResponse(BaseModel):
-    """Response with market price data."""
     category: str
     avg_price: float
     min_price: float
     max_price: float
     sample_count: int
     last_refreshed: datetime
-
-    model_config = ConfigDict(from_attributes=True
+    model_config = ConfigDict(from_attributes=True)
