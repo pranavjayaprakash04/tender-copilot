@@ -39,6 +39,7 @@ class VaultDocumentUpdate(BaseModel):
     filename: str | None = Field(None, min_length=1, max_length=255)
     expires_at: datetime | None = None
     is_current: bool | None = None
+    storage_path: str | None = None  # ← needed for service to update final path after upload
 
 
 # Response schemas
@@ -55,6 +56,9 @@ class VaultDocumentResponse(VaultDocumentBase):
     is_expired: bool
     days_until_expiry: int | None
     is_expiring_soon: bool
+
+    # Optional — only present on get_document (single fetch), not list
+    download_url: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
