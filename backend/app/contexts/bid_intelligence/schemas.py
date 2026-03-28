@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 class CompetitorAnalysisRequest(BaseModel):
     """Request for competitor analysis."""
-    tender_id: UUID
+    tender_id: str          # integer ID from scraped tenders table e.g. "230211"
     company_id: UUID
     lang: str = "en"
 
@@ -32,7 +32,7 @@ class CompetitorInsight(BaseModel):
 
 class CompetitorAnalysisResponse(BaseModel):
     """Response containing competitor analysis."""
-    tender_id: UUID
+    tender_id: str
     company_id: UUID
     insights: list[CompetitorInsight]
     our_win_probability: float
@@ -45,14 +45,14 @@ class CompetitorAnalysisResponse(BaseModel):
 
 class WinProbabilityRequest(BaseModel):
     """Request for win probability calculation."""
-    tender_id: UUID
+    tender_id: str          # integer ID from scraped tenders table e.g. "230211"
     company_id: UUID
-    our_bid_amount: float | None
+    our_bid_amount: float | None = None
 
 
 class WinProbabilityResponse(BaseModel):
     """Response with win probability analysis."""
-    tender_id: UUID
+    tender_id: str
     win_probability: float
     confidence: str
     factors: list[str]
@@ -71,4 +71,4 @@ class MarketPriceResponse(BaseModel):
     sample_count: int
     last_refreshed: datetime
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True
