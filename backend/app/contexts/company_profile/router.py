@@ -1,10 +1,10 @@
 from uuid import UUID
-
 from fastapi import APIRouter, Depends
-
-from app.contexts.user_management.schemas import UserResponse
-from app.dependencies import get_current_company_id, get_current_user_id
-
+from app.dependencies import (
+    get_current_company_id,
+    get_current_company_id_optional,
+    get_current_user_id,
+)
 from .schemas import (
     CompanyProfileCreate,
     CompanyProfileResponse,
@@ -15,43 +15,48 @@ from .service import CompanyProfileService
 router = APIRouter(prefix="/company", tags=["company_profile"])
 
 
-@router.get("/company/profile", response_model=CompanyProfileResponse)
+@router.get("/profile", response_model=CompanyProfileResponse | None)
 async def get_profile(
-    _current_user: UserResponse = Depends(get_current_user_id),
-    company_id: UUID = Depends(get_current_company_id),
-) -> CompanyProfileResponse:
-    """Get current company profile."""
+    _current_user: str = Depends(get_current_user_id),
+    company_id: str | None = Depends(get_current_company_id_optional),
+) -> CompanyProfileResponse | None:
+    """Get current company profile. Returns null for new users with no profile."""
+    if not company_id:
+        return None
     service = CompanyProfileService()
-    return await service.get_profile(company_id)
+    try:
+        return await service.get_profile(UUID(company_id))
+    except Exception:
+        return None
 
 
-@router.post("/company/profile", response_model=CompanyProfileResponse)
+@router.post("/profile", response_model=CompanyProfileResponse)
 async def create_profile(
     data: CompanyProfileCreate,
-    current_user: UserResponse = Depends(get_current_user_id),
+    current_user_id: str = Depends(get_current_user_id),
 ) -> CompanyProfileResponse:
-    """Create company profile."""
+    """Create company profile for a new user."""
     service = CompanyProfileService()
-    return await service.create_profile(current_user.id, data)
+    return await service.create_profile(UUID(current_user_id), data)
 
 
-@router.patch("/company/profile", response_model=CompanyProfileResponse)
+@router.patch("/profile", response_model=CompanyProfileResponse)
 async def update_profile(
     data: CompanyProfileUpdate,
-    _current_user: UserResponse = Depends(get_current_user_id),
-    company_id: UUID = Depends(get_current_company_id),
+    _current_user: str = Depends(get_current_user_id),
+    company_id: str = Depends(get_current_company_id),
 ) -> CompanyProfileResponse:
     """Update company profile."""
     service = CompanyProfileService()
-    return await service.update_profile(company_id, data)
+    return await service.update_profile(UUID(company_id), data)
 
 
-@router.get("/company/profile/lang")
+@router.get("/profile/lang")
 async def get_preferred_lang(
-    _current_user: UserResponse = Depends(get_current_user_id),
-    company_id: UUID = Depends(get_current_company_id),
+    _current_user: str = Depends(get_current_user_id),
+    company_id: str = Depends(get_current_company_id),
 ) -> dict[str, str]:
-    """Get preferred language (used by frontend Tamil toggle)."""
+    """Get preferred language."""
     service = CompanyProfileService()
-    lang = await service.get_preferred_lang(company_id)
+    lang = await service.get_preferred_lang(UUID(company_id))
     return {"lang": lang}
