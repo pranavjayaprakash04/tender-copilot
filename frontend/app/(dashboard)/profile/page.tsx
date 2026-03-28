@@ -14,14 +14,17 @@ const supabase = createClient(
 type CompanyProfile = {
   id?: string;
   name?: string;
-  registration_number?: string;
-  gstin?: string;
   industry?: string;
-  state?: string;
-  website?: string;
+  location?: string;
   contact_email?: string;
   contact_phone?: string;
-  [key: string]: any;
+  website?: string;
+  description?: string;
+  capabilities_text?: string;
+  gstin?: string;
+  udyam_number?: string;
+  turnover_range?: string;
+  preferred_lang?: string;
 };
 
 const INDUSTRIES = [
@@ -36,6 +39,11 @@ const INDIAN_STATES = [
   "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim",
   "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand",
   "West Bengal",
+];
+
+const TURNOVER_RANGES = [
+  "Below ₹40L", "₹40L – ₹1Cr", "₹1Cr – ₹5Cr",
+  "₹5Cr – ₹25Cr", "Above ₹25Cr",
 ];
 
 function InitialAvatar({ name, email }: { name?: string; email?: string }) {
@@ -70,7 +78,6 @@ export default function ProfilePage() {
     retry: false,
   });
 
-  // Profile exists = has an id from the backend
   const profileExists = !!(profile?.id);
 
   useEffect(() => {
@@ -80,8 +87,8 @@ export default function ProfilePage() {
   const saveProfile = useMutation({
     mutationFn: (data: CompanyProfile) =>
       profileExists
-        ? api.companies.updateProfile(data)   // PATCH — update existing
-        : api.companies.createProfile(data),   // POST  — create new
+        ? api.companies.updateProfile(data)
+        : api.companies.createProfile(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["company-profile"] });
       setEditing(false);
@@ -97,7 +104,7 @@ export default function ProfilePage() {
 
   const field = (key: keyof CompanyProfile) => ({
     value: form[key] ?? "",
-    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
       setForm((f) => ({ ...f, [key]: e.target.value })),
   });
 
@@ -118,7 +125,9 @@ export default function ProfilePage() {
               </p>
               <p className="text-gray-500 text-sm">{user?.email}</p>
               <p className="text-gray-400 text-xs mt-0.5">
-                Joined {user?.created_at ? new Date(user.created_at).toLocaleDateString("en-IN", { month: "long", year: "numeric" }) : "—"}
+                Joined {user?.created_at
+                  ? new Date(user.created_at).toLocaleDateString("en-IN", { month: "long", year: "numeric" })
+                  : "—"}
               </p>
             </div>
           </div>
@@ -130,7 +139,9 @@ export default function ProfilePage() {
             <div>
               <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Company Profile</h2>
               {!profileExists && !isLoading && (
-                <p className="text-xs text-amber-600 mt-1">No profile yet — fill in your details to enable bid matching.</p>
+                <p className="text-xs text-amber-600 mt-1">
+                  No profile yet — fill in your details to enable bid matching.
+                </p>
               )}
             </div>
             {!editing && (
@@ -155,15 +166,15 @@ export default function ProfilePage() {
               className="space-y-4"
             >
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <InputField label="Company Name" {...field("name")} />
-                <InputField label="Registration Number" {...field("registration_number")} />
+                <InputField label="Company Name *" {...field("name")} />
                 <InputField label="GSTIN" {...field("gstin")} placeholder="22AAAAA0000A1Z5" />
-                <InputField label="Website" {...field("website")} placeholder="https://" />
-                <InputField label="Contact Email" type="email" {...field("contact_email")} />
+                <InputField label="Udyam Number" {...field("udyam_number")} placeholder="UDYAM-XX-00-0000000" />
+                <InputField label="Website" {...field("website")} placeholder="https://example.com" />
+                <InputField label="Contact Email *" type="email" {...field("contact_email")} />
                 <InputField label="Contact Phone" {...field("contact_phone")} placeholder="+91" />
 
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-gray-500">Industry</label>
+                  <label className="text-xs font-medium text-gray-500">Industry *</label>
                   <select
                     {...field("industry")}
                     className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
@@ -174,15 +185,46 @@ export default function ProfilePage() {
                 </div>
 
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-gray-500">State</label>
+                  <label className="text-xs font-medium text-gray-500">State *</label>
                   <select
-                    {...field("state")}
+                    {...field("location")}
                     className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                   >
                     <option value="">Select state</option>
                     {INDIAN_STATES.map((s) => <option key={s}>{s}</option>)}
                   </select>
                 </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-gray-500">Annual Turnover Range</label>
+                  <select
+                    {...field("turnover_range")}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="">Select range</option>
+                    {TURNOVER_RANGES.map((r) => <option key={r}>{r}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-500">Company Description</label>
+                <textarea
+                  {...field("description")}
+                  rows={2}
+                  placeholder="Brief description of your company"
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-500">Capabilities</label>
+                <textarea
+                  {...field("capabilities_text")}
+                  rows={3}
+                  placeholder="Describe your company's key capabilities and expertise..."
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                />
               </div>
 
               <div className="flex gap-3 pt-2">
@@ -209,13 +251,26 @@ export default function ProfilePage() {
           ) : (
             <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
               <ProfileField label="Company Name" value={profile?.name} />
-              <ProfileField label="Registration Number" value={profile?.registration_number} />
               <ProfileField label="GSTIN" value={profile?.gstin} />
+              <ProfileField label="Udyam Number" value={profile?.udyam_number} />
               <ProfileField label="Industry" value={profile?.industry} />
-              <ProfileField label="State" value={profile?.state} />
+              <ProfileField label="State" value={profile?.location} />
+              <ProfileField label="Turnover Range" value={profile?.turnover_range} />
               <ProfileField label="Website" value={profile?.website} />
               <ProfileField label="Contact Email" value={profile?.contact_email} />
               <ProfileField label="Contact Phone" value={profile?.contact_phone} />
+              {profile?.description && (
+                <div className="sm:col-span-2">
+                  <dt className="text-xs font-medium text-gray-400 mb-0.5">Description</dt>
+                  <dd className="text-sm text-gray-800">{profile.description}</dd>
+                </div>
+              )}
+              {profile?.capabilities_text && (
+                <div className="sm:col-span-2">
+                  <dt className="text-xs font-medium text-gray-400 mb-0.5">Capabilities</dt>
+                  <dd className="text-sm text-gray-800">{profile.capabilities_text}</dd>
+                </div>
+              )}
             </dl>
           )}
 
@@ -226,7 +281,7 @@ export default function ProfilePage() {
           )}
         </div>
 
-        {/* Danger zone */}
+        {/* Account actions */}
         <div className="bg-white border border-gray-200 rounded-2xl p-6">
           <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">Account Actions</h2>
           <button
@@ -266,7 +321,9 @@ function ProfileField({ label, value }: { label: string; value?: string }) {
   return (
     <div>
       <dt className="text-xs font-medium text-gray-400 mb-0.5">{label}</dt>
-      <dd className="text-sm font-medium text-gray-800">{value || <span className="text-gray-300 font-normal">Not set</span>}</dd>
+      <dd className="text-sm font-medium text-gray-800">
+        {value || <span className="text-gray-300 font-normal">Not set</span>}
+      </dd>
     </div>
   );
 }
