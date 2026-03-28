@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -42,7 +42,6 @@ interface TenderListParams {
 // ─── Match score calculation ──────────────────────────────────────────────────
 
 const CITY_TO_STATE: Record<string, string> = {
-  // Tamil Nadu
   chennai: "tamil nadu", madurai: "tamil nadu", coimbatore: "tamil nadu",
   vellore: "tamil nadu", trichy: "tamil nadu", tiruchirappalli: "tamil nadu",
   salem: "tamil nadu", tirunelveli: "tamil nadu", tirupur: "tamil nadu",
@@ -53,7 +52,6 @@ const CITY_TO_STATE: Record<string, string> = {
   tambaram: "tamil nadu", avadi: "tamil nadu", ambattur: "tamil nadu",
   kagithapuram: "tamil nadu", moongilthuraipattu: "tamil nadu",
   kachirayapalayam: "tamil nadu", mondipatti: "tamil nadu", ttps: "tamil nadu",
-  // Other major cities
   "new delhi": "delhi", delhi: "delhi",
   mumbai: "maharashtra", pune: "maharashtra", nagpur: "maharashtra",
   bengaluru: "karnataka", bangalore: "karnataka", mysuru: "karnataka",
@@ -73,7 +71,7 @@ const KNOWN_STATES = [
   "uttar pradesh", "rajasthan", "gujarat", "west bengal", "madhya pradesh",
   "kerala", "andhra pradesh", "bihar", "jharkhand", "odisha",
   "punjab", "haryana", "uttarakhand", "himachal pradesh", "assam",
-  "chhattisgarh", "goa", "jammu and kashmir",
+  "chhattisgarh", "goa", "jammu and kashmir", "sikkim", "meghalaya",
 ];
 
 const CATEGORY_INDUSTRY_MAP: Record<string, string[]> = {
@@ -109,15 +107,16 @@ function calculateMatchScore(tender: Tender, profile: CompanyProfile | null): nu
     }
   }
 
-  // Location match (30 pts) — no false partial credit for different states
+  // Location match (30 pts) — only score the tender's location field, not procuring_entity
   const tenderState = resolveState(tender.state);
   const companyState = resolveState(profile.location);
   if (tenderState && companyState) {
     if (tenderState === companyState) {
       score += 30;
     } else if (tenderState.includes(companyState) || companyState.includes(tenderState)) {
-      score += 20;
+      score += 15;
     }
+    // 0 for different state
   }
 
   // Capabilities keyword match (20 pts)
@@ -214,6 +213,14 @@ export default function TendersPage() {
     ? ((profileRaw as any).data ?? profileRaw) as CompanyProfile
     : null;
 
+  // Score and sort tenders by match score descending
+  const sortedTenders = useMemo(() => {
+    if (!tenders) return [];
+    return [...tenders]
+      .map((t) => ({ ...t, _score: calculateMatchScore(t, profile) }))
+      .sort((a, b) => b._score - a._score);
+  }, [tenders, profile]);
+
   const clearFilters = useCallback(() => {
     setFilters({ search: "", category: "", state: "", deadline: "" });
     setDebouncedSearch("");
@@ -297,47 +304,44 @@ export default function TendersPage() {
               <p className="text-red-600 mb-4">Error loading tenders</p>
               <Button onClick={() => refetch()}>Retry</Button>
             </div>
-          ) : !tenders || tenders.length === 0 ? (
+          ) : !sortedTenders || sortedTenders.length === 0 ? (
             <div className="col-span-full text-center py-12">
               <p className="text-gray-600">No tenders found matching your filters</p>
             </div>
           ) : (
-            tenders.map((tender) => {
-              const matchScore = calculateMatchScore(tender, profile);
-              return (
-                <div
-                  key={tender.id}
-                  className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
-                >
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
-                    {tender.title}
-                  </h3>
-                  <p className="text-gray-600 mb-2 truncate">{tender.procuring_entity}</p>
-                  <p className="text-lg font-medium text-gray-900 mb-4">
-                    {formatValue(tender.estimated_value)}
-                  </p>
-                  <div className="flex justify-between items-center mb-4">
-                    <span className={cn(
-                      "px-2 py-1 rounded-full text-xs font-medium",
-                      getMatchScoreColor(matchScore)
-                    )}>
-                      {profile ? `Match: ${matchScore}%` : "Match: —"}
-                    </span>
-                    <span className={cn("text-sm font-medium", getDeadlineColor(tender.bid_submission_deadline))}>
-                      {formatDeadline(tender.bid_submission_deadline)}
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={() => router.push(`/tenders/${tender.id}`)}>
-                      View Details
-                    </Button>
-                    <Button size="sm" variant="outline">
-                      Set Alert
-                    </Button>
-                  </div>
+            sortedTenders.map((tender) => (
+              <div
+                key={tender.id}
+                className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
+              >
+                <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
+                  {tender.title}
+                </h3>
+                <p className="text-gray-600 mb-2 truncate">{tender.procuring_entity}</p>
+                <p className="text-lg font-medium text-gray-900 mb-4">
+                  {formatValue(tender.estimated_value)}
+                </p>
+                <div className="flex justify-between items-center mb-4">
+                  <span className={cn(
+                    "px-2 py-1 rounded-full text-xs font-medium",
+                    getMatchScoreColor(tender._score)
+                  )}>
+                    {profile ? `Match: ${tender._score}%` : "Match: —"}
+                  </span>
+                  <span className={cn("text-sm font-medium", getDeadlineColor(tender.bid_submission_deadline))}>
+                    {formatDeadline(tender.bid_submission_deadline)}
+                  </span>
                 </div>
-              );
-            })
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={() => router.push(`/tenders/${tender.id}`)}>
+                    View Details
+                  </Button>
+                  <Button size="sm" variant="outline">
+                    Set Alert
+                  </Button>
+                </div>
+              </div>
+            ))
           )}
         </div>
       </div>
