@@ -5,7 +5,7 @@ from typing import Any
 
 import structlog
 from pydantic import BaseModel
-from sqlalchemy import select, text
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.contexts.bid_intelligence.schemas import (
@@ -67,6 +67,41 @@ class BidIntelligenceService:
             return dict(row) if row else None
         except Exception as e:
             logger.error("get_scraped_tender_error", tender_id=tender_id, error=str(e))
+            return None
+
+    async def _get_market_price(self, category: str) -> MarketPrice | None:
+        try:
+            result = await self.session.execute(
+                text("""
+                    SELECT
+                        tender_category,
+                        'all'                           AS portal,
+                        SUM(avg_estimated_value * sample_count)
+                            / NULLIF(SUM(sample_count), 0) AS avg_estimated_value,
+                        MIN(min_value)                  AS min_value,
+                        MAX(max_value)                  AS max_value,
+                        SUM(sample_count)               AS sample_count,
+                        MAX(last_refreshed)             AS last_refreshed
+                    FROM market_prices
+                    WHERE LOWER(tender_category) = LOWER(:category)
+                    GROUP BY tender_category
+                """),
+                {"category": category}
+            )
+            row = result.mappings().first()
+            if not row:
+                return None
+            mp = MarketPrice()
+            mp.tender_category = row["tender_category"]
+            mp.portal = row["portal"]
+            mp.avg_estimated_value = float(row["avg_estimated_value"])
+            mp.min_value = float(row["min_value"])
+            mp.max_value = float(row["max_value"])
+            mp.sample_count = int(row["sample_count"])
+            mp.last_refreshed = row["last_refreshed"]
+            return mp
+        except Exception as e:
+            logger.error("_get_market_price_error", category=category, error=str(e))
             return None
 
     async def analyze_competitors(self, req: CompetitorAnalysisRequest) -> CompetitorAnalysisResponse:
@@ -219,14 +254,4 @@ Return ONLY valid JSON:
             }
         except Exception as e:
             logger.error("get_market_price_error", category=category, error=str(e))
-            return None
-
-    async def _get_market_price(self, category: str) -> MarketPrice | None:
-        try:
-            result = await self.session.execute(
-                select(MarketPrice).where(MarketPrice.tender_category == category)
-            )
-            return result.scalar_one_or_none()
-        except Exception as e:
-            logger.error("_get_market_price_error", category=category, error=str(e))
             return None
