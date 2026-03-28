@@ -41,44 +41,86 @@ interface TenderListParams {
 
 // ─── Match score calculation ──────────────────────────────────────────────────
 
-// Maps tender categories to company industries that are a good fit
-const CATEGORY_INDUSTRY_MAP: Record<string, string[]> = {
-  "Works":    ["construction", "infrastructure", "civil", "engineering", "real estate", "building"],
-  "Goods":    ["manufacturing", "supply", "trading", "retail", "logistics", "procurement", "goods"],
-  "Services": ["it", "software", "consulting", "services", "technology", "management", "facility"],
+const CITY_TO_STATE: Record<string, string> = {
+  // Tamil Nadu
+  chennai: "tamil nadu", madurai: "tamil nadu", coimbatore: "tamil nadu",
+  vellore: "tamil nadu", trichy: "tamil nadu", tiruchirappalli: "tamil nadu",
+  salem: "tamil nadu", tirunelveli: "tamil nadu", tirupur: "tamil nadu",
+  erode: "tamil nadu", thoothukudi: "tamil nadu", tuticorin: "tamil nadu",
+  dindigul: "tamil nadu", thanjavur: "tamil nadu", ranipet: "tamil nadu",
+  kanchipuram: "tamil nadu", chengalpattu: "tamil nadu", villupuram: "tamil nadu",
+  cuddalore: "tamil nadu", nagapattinam: "tamil nadu", adyar: "tamil nadu",
+  tambaram: "tamil nadu", avadi: "tamil nadu", ambattur: "tamil nadu",
+  kagithapuram: "tamil nadu", moongilthuraipattu: "tamil nadu",
+  kachirayapalayam: "tamil nadu", mondipatti: "tamil nadu", ttps: "tamil nadu",
+  // Other major cities
+  "new delhi": "delhi", delhi: "delhi",
+  mumbai: "maharashtra", pune: "maharashtra", nagpur: "maharashtra",
+  bengaluru: "karnataka", bangalore: "karnataka", mysuru: "karnataka",
+  hyderabad: "telangana", warangal: "telangana",
+  lucknow: "uttar pradesh", kanpur: "uttar pradesh", agra: "uttar pradesh",
+  jaipur: "rajasthan", jodhpur: "rajasthan",
+  ahmedabad: "gujarat", surat: "gujarat", vadodara: "gujarat",
+  kolkata: "west bengal",
+  bhopal: "madhya pradesh", indore: "madhya pradesh",
+  patna: "bihar", ranchi: "jharkhand",
+  roorkee: "uttarakhand", dehradun: "uttarakhand",
+  chandigarh: "punjab",
 };
+
+const KNOWN_STATES = [
+  "tamil nadu", "karnataka", "maharashtra", "delhi", "telangana",
+  "uttar pradesh", "rajasthan", "gujarat", "west bengal", "madhya pradesh",
+  "kerala", "andhra pradesh", "bihar", "jharkhand", "odisha",
+  "punjab", "haryana", "uttarakhand", "himachal pradesh", "assam",
+  "chhattisgarh", "goa", "jammu and kashmir",
+];
+
+const CATEGORY_INDUSTRY_MAP: Record<string, string[]> = {
+  Works:    ["construction", "infrastructure", "civil", "engineering", "real estate", "building", "facility"],
+  Goods:    ["manufacturing", "supply", "trading", "retail", "logistics", "procurement", "goods", "equipment"],
+  Services: ["it", "software", "consulting", "services", "technology", "management", "facility", "maintenance", "digital"],
+};
+
+function resolveState(location: string | null | undefined): string {
+  if (!location) return "";
+  const lower = location.toLowerCase().trim();
+  for (const state of KNOWN_STATES) {
+    if (lower.includes(state)) return state;
+  }
+  for (const [city, state] of Object.entries(CITY_TO_STATE)) {
+    if (lower.includes(city)) return state;
+  }
+  return lower;
+}
 
 function calculateMatchScore(tender: Tender, profile: CompanyProfile | null): number {
   if (!profile) return 0;
-
   let score = 0;
 
-  // Category vs Industry match (50 points)
+  // Category vs Industry (50 pts)
   if (tender.category && profile.industry) {
-    const tenderCat = tender.category.toLowerCase();
     const companyIndustry = profile.industry.toLowerCase();
-    const matchingIndustries = CATEGORY_INDUSTRY_MAP[tender.category] ?? [];
-
-    if (matchingIndustries.some((kw) => companyIndustry.includes(kw))) {
+    const keywords = CATEGORY_INDUSTRY_MAP[tender.category] ?? [];
+    if (keywords.some((kw) => companyIndustry.includes(kw))) {
       score += 50;
-    } else if (companyIndustry.includes(tenderCat)) {
-      score += 40;
+    } else if (companyIndustry.includes(tender.category.toLowerCase())) {
+      score += 25;
     }
   }
 
-  // Location match (30 points)
-  if (tender.state && profile.location) {
-    const tenderState = tender.state.toLowerCase();
-    const companyLocation = profile.location.toLowerCase();
-    if (companyLocation.includes(tenderState) || tenderState.includes(companyLocation)) {
+  // Location match (30 pts) — no false partial credit for different states
+  const tenderState = resolveState(tender.state);
+  const companyState = resolveState(profile.location);
+  if (tenderState && companyState) {
+    if (tenderState === companyState) {
       score += 30;
-    } else {
-      // Partial credit for same region
-      score += 10;
+    } else if (tenderState.includes(companyState) || companyState.includes(tenderState)) {
+      score += 20;
     }
   }
 
-  // Capabilities keyword match (20 points)
+  // Capabilities keyword match (20 pts)
   if (tender.title && profile.capabilities_text) {
     const capabilities = profile.capabilities_text.toLowerCase();
     const titleWords = tender.title.toLowerCase().split(/\s+/);
@@ -163,7 +205,6 @@ export default function TendersPage() {
     staleTime: 60_000,
   });
 
-  // Fetch company profile once for match score calculation
   const { data: profileRaw } = useQuery({
     queryKey: ["company-profile"],
     queryFn: () => api.companies.getProfile(),
