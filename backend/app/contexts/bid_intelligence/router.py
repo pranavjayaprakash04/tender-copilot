@@ -1,10 +1,7 @@
 from __future__ import annotations
-
 from typing import Any
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.contexts.bid_intelligence.schemas import (
     CompetitorAnalysisRequest,
     CompetitorAnalysisResponse,
@@ -22,12 +19,11 @@ router = APIRouter(prefix="/intelligence/bid", tags=["bid_intelligence"])
 
 
 async def get_bid_intelligence_service(
-    session: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_async_session),
 ) -> BidIntelligenceService:
-    """Get bid intelligence service instance."""
     groq_client = GroqClient()
     tender_repo = TenderRepository(session)
-    company_repo: CompanyProfileRepository = CompanyProfileRepository(session)
+    company_repo = CompanyProfileRepository(session)
     return BidIntelligenceService(groq_client, tender_repo, company_repo, session)
 
 
@@ -36,11 +32,10 @@ async def analyze_competitors(
     req: CompetitorAnalysisRequest,
     service: BidIntelligenceService = Depends(get_bid_intelligence_service),
     _current_user_id: str = Depends(get_current_user_id),
-    company_id: str = Depends(get_current_company_id),
+    _company_id: str = Depends(get_current_company_id),
 ) -> CompetitorAnalysisResponse:
-    """Analyze competitors for a tender."""
     try:
-        return await service.analyze_competitors(req, company_id)
+        return await service.analyze_competitors(req)  # company_id is inside req
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
@@ -50,11 +45,10 @@ async def calculate_win_probability(
     req: WinProbabilityRequest,
     service: BidIntelligenceService = Depends(get_bid_intelligence_service),
     _current_user_id: str = Depends(get_current_user_id),
-    company_id: str = Depends(get_current_company_id),
+    _company_id: str = Depends(get_current_company_id),
 ) -> WinProbabilityResponse:
-    """Calculate win probability for a bid."""
     try:
-        return await service.calculate_win_probability(req, company_id)
+        return await service.calculate_win_probability(req)  # company_id is inside req
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
@@ -64,10 +58,9 @@ async def get_market_price(
     category: str,
     service: BidIntelligenceService = Depends(get_bid_intelligence_service),
     _current_user_id: str = Depends(get_current_user_id),
-    company_id: str = Depends(get_current_company_id),
+    _company_id: str = Depends(get_current_company_id),
 ) -> dict[str, Any] | None:
-    """Get market price data for a category."""
     try:
-        return await service.get_market_price(category, company_id)
+        return await service.get_market_price(category)  # no company_id needed
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
