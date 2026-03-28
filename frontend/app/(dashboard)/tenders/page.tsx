@@ -7,32 +7,93 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-// Matches backend TenderResponse field names exactly
 interface Tender {
   id: string;
   tender_id: string;
   title: string;
   description: string;
-  procuring_entity: string;         // was: organization
-  bid_submission_deadline: string | null; // was: deadline
-  estimated_value?: number | null;  // was: value (and is number, not string)
+  procuring_entity: string;
+  bid_submission_deadline: string | null;
+  estimated_value?: number | null;
   emd_amount?: number | null;
   category: string | null;
   status: string;
-  published_date: string | null;    // was: posted_date
+  published_date: string | null;
   source_url: string | null;
   state?: string | null;
   match_score?: number | null;
 }
 
+interface CompanyProfile {
+  id: string;
+  name: string;
+  industry: string | null;
+  location: string | null;
+  capabilities_text: string | null;
+}
+
 interface TenderListParams {
   category?: string;
   state?: string;
-  deadline?: string;   // mapped to deadline_days in api.ts
-  search?: string;     // mapped to search_query in api.ts
+  deadline?: string;
+  search?: string;
 }
 
-// Outside component — not recreated on every render
+// ─── Match score calculation ──────────────────────────────────────────────────
+
+// Maps tender categories to company industries that are a good fit
+const CATEGORY_INDUSTRY_MAP: Record<string, string[]> = {
+  "Works":    ["construction", "infrastructure", "civil", "engineering", "real estate", "building"],
+  "Goods":    ["manufacturing", "supply", "trading", "retail", "logistics", "procurement", "goods"],
+  "Services": ["it", "software", "consulting", "services", "technology", "management", "facility"],
+};
+
+function calculateMatchScore(tender: Tender, profile: CompanyProfile | null): number {
+  if (!profile) return 0;
+
+  let score = 0;
+
+  // Category vs Industry match (50 points)
+  if (tender.category && profile.industry) {
+    const tenderCat = tender.category.toLowerCase();
+    const companyIndustry = profile.industry.toLowerCase();
+    const matchingIndustries = CATEGORY_INDUSTRY_MAP[tender.category] ?? [];
+
+    if (matchingIndustries.some((kw) => companyIndustry.includes(kw))) {
+      score += 50;
+    } else if (companyIndustry.includes(tenderCat)) {
+      score += 40;
+    }
+  }
+
+  // Location match (30 points)
+  if (tender.state && profile.location) {
+    const tenderState = tender.state.toLowerCase();
+    const companyLocation = profile.location.toLowerCase();
+    if (companyLocation.includes(tenderState) || tenderState.includes(companyLocation)) {
+      score += 30;
+    } else {
+      // Partial credit for same region
+      score += 10;
+    }
+  }
+
+  // Capabilities keyword match (20 points)
+  if (tender.title && profile.capabilities_text) {
+    const capabilities = profile.capabilities_text.toLowerCase();
+    const titleWords = tender.title.toLowerCase().split(/\s+/);
+    const matchCount = titleWords.filter(
+      (w) => w.length > 4 && capabilities.includes(w)
+    ).length;
+    if (matchCount >= 3) score += 20;
+    else if (matchCount >= 1) score += 10;
+  }
+
+  return Math.min(score, 100);
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 const SkeletonCard = () => (
   <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 animate-pulse">
     <div className="h-6 bg-gray-200 rounded mb-4 w-3/4"></div>
@@ -74,6 +135,8 @@ const getMatchScoreColor = (score: number) => {
   return "bg-red-100 text-red-800";
 };
 
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function TendersPage() {
   const router = useRouter();
 
@@ -84,14 +147,12 @@ export default function TendersPage() {
     search: "",
   });
 
-  // Debounced search — only fires API call 400ms after user stops typing
   const [debouncedSearch, setDebouncedSearch] = useState("");
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(filters.search || ""), 400);
     return () => clearTimeout(timer);
   }, [filters.search]);
 
-  // Strip empty values; use debounced search
   const activeFilters = Object.fromEntries(
     Object.entries({ ...filters, search: debouncedSearch }).filter(([_, v]) => v !== "")
   );
@@ -101,6 +162,16 @@ export default function TendersPage() {
     queryFn: () => api.tenders.search(activeFilters),
     staleTime: 60_000,
   });
+
+  // Fetch company profile once for match score calculation
+  const { data: profileRaw } = useQuery({
+    queryKey: ["company-profile"],
+    queryFn: () => api.companies.getProfile(),
+    staleTime: 300_000,
+  });
+  const profile: CompanyProfile | null = profileRaw
+    ? ((profileRaw as any).data ?? profileRaw) as CompanyProfile
+    : null;
 
   const clearFilters = useCallback(() => {
     setFilters({ search: "", category: "", state: "", deadline: "" });
@@ -122,7 +193,6 @@ export default function TendersPage() {
               onChange={(e) => setFilters({ ...filters, search: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            {/* Category values match exactly what's stored in the DB */}
             <select
               value={filters.category}
               onChange={(e) => setFilters({ ...filters, category: e.target.value })}
@@ -163,7 +233,6 @@ export default function TendersPage() {
               <option value="Goa">Goa</option>
               <option value="Jammu and Kashmir">Jammu and Kashmir</option>
             </select>
-            {/* deadline value is sent as deadline_days (number of days) via api.ts mapper */}
             <select
               value={filters.deadline}
               onChange={(e) => setFilters({ ...filters, deadline: e.target.value })}
@@ -192,42 +261,42 @@ export default function TendersPage() {
               <p className="text-gray-600">No tenders found matching your filters</p>
             </div>
           ) : (
-            tenders.map((tender) => (
-              <div
-                key={tender.id}
-                className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
-              >
-                <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
-                  {tender.title}
-                </h3>
-                {/* procuring_entity replaces organization */}
-                <p className="text-gray-600 mb-2 truncate">{tender.procuring_entity}</p>
-                {/* estimated_value is now a number */}
-                <p className="text-lg font-medium text-gray-900 mb-4">
-                  {formatValue(tender.estimated_value)}
-                </p>
-                <div className="flex justify-between items-center mb-4">
-                  <span className={cn(
-                    "px-2 py-1 rounded-full text-xs font-medium",
-                    getMatchScoreColor(tender.match_score || 0)
-                  )}>
-                    Match: {tender.match_score || 0}%
-                  </span>
-                  {/* bid_submission_deadline replaces deadline */}
-                  <span className={cn("text-sm font-medium", getDeadlineColor(tender.bid_submission_deadline))}>
-                    {formatDeadline(tender.bid_submission_deadline)}
-                  </span>
+            tenders.map((tender) => {
+              const matchScore = calculateMatchScore(tender, profile);
+              return (
+                <div
+                  key={tender.id}
+                  className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
+                >
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
+                    {tender.title}
+                  </h3>
+                  <p className="text-gray-600 mb-2 truncate">{tender.procuring_entity}</p>
+                  <p className="text-lg font-medium text-gray-900 mb-4">
+                    {formatValue(tender.estimated_value)}
+                  </p>
+                  <div className="flex justify-between items-center mb-4">
+                    <span className={cn(
+                      "px-2 py-1 rounded-full text-xs font-medium",
+                      getMatchScoreColor(matchScore)
+                    )}>
+                      {profile ? `Match: ${matchScore}%` : "Match: —"}
+                    </span>
+                    <span className={cn("text-sm font-medium", getDeadlineColor(tender.bid_submission_deadline))}>
+                      {formatDeadline(tender.bid_submission_deadline)}
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => router.push(`/tenders/${tender.id}`)}>
+                      View Details
+                    </Button>
+                    <Button size="sm" variant="outline">
+                      Set Alert
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={() => router.push(`/tenders/${tender.id}`)}>
-                    View Details
-                  </Button>
-                  <Button size="sm" variant="outline">
-                    Set Alert
-                  </Button>
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
