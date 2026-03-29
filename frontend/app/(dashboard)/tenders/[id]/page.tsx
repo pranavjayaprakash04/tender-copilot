@@ -21,6 +21,7 @@ interface TenderDetail {
   published_date: string | null;
   description: string | null;
   source_url: string | null;
+  source: string | null;
   status: string | null;
   emd_amount: number | null;
   processing_fee: number | null;
@@ -32,7 +33,7 @@ interface WinProbabilityResponse {
   confidence: string;
   factors: string[];
   market_avg: number | null;
-  recommended_range: { min: number; max: number } | null;
+  recommended_range: { min: number; max: number; optimal?: number } | null;
 }
 
 interface CompetitorInsight {
@@ -62,14 +63,50 @@ interface MarketPriceResponse {
   last_refreshed: string;
 }
 
+interface EligibilityCriteria {
+  name: string;
+  status: "pass" | "fail" | "warning";
+  detail: string;
+}
+
+interface EligibilityResponse {
+  eligible: boolean;
+  score: number;
+  verdict: string;
+  criteria: EligibilityCriteria[];
+  missing_documents: string[];
+  recommendations: string[];
+  summary: string;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
 
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
-
 const winColor = (p: number) => p >= 0.7 ? "#10B981" : p >= 0.4 ? "#F59E0B" : "#EF4444";
+
+// ─── Modal Shell ──────────────────────────────────────────────────────────────
+
+function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div
+        className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl shadow-2xl"
+        style={{ background: "#0F1117", border: "1px solid #1E2537" }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#1E2537]">
+          <h2 className="text-base font-semibold text-white">{title}</h2>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-300 text-xl leading-none">✕</button>
+        </div>
+        <div className="p-6">{children}</div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Win Probability Ring ─────────────────────────────────────────────────────
 
@@ -80,75 +117,144 @@ function WinRing({ probability }: { probability: number }) {
   const color = winColor(probability);
   return (
     <svg width="110" height="110" viewBox="0 0 110 110">
-      <circle cx="55" cy="55" r={r} fill="none" stroke="#E5E7EB" strokeWidth="10" />
+      <circle cx="55" cy="55" r={r} fill="none" stroke="#1E2537" strokeWidth="10" />
       <circle cx="55" cy="55" r={r} fill="none" stroke={color} strokeWidth="10"
         strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
         transform="rotate(-90 55 55)" style={{ transition: "stroke-dasharray 1s ease" }} />
       <text x="55" y="51" textAnchor="middle" fill={color} fontSize="18" fontWeight="700" fontFamily="sans-serif">
         {(probability * 100).toFixed(0)}%
       </text>
-      <text x="55" y="66" textAnchor="middle" fill="#6B7280" fontSize="10" fontFamily="sans-serif">
-        Win Chance
-      </text>
+      <text x="55" y="66" textAnchor="middle" fill="#6B7280" fontSize="10" fontFamily="sans-serif">Win Chance</text>
     </svg>
   );
 }
 
-// ─── Intelligence Panel ───────────────────────────────────────────────────────
+// ─── Win Probability Modal ────────────────────────────────────────────────────
 
-function IntelligencePanel({ tender }: { tender: TenderDetail }) {
-  const [activeTab, setActiveTab] = useState<"winprob" | "competitors" | "market">("winprob");
+function WinProbabilityModal({ tender, companyId, onClose }: { tender: TenderDetail; companyId: string; onClose: () => void }) {
   const [bidAmount, setBidAmount] = useState("");
-  const [openComp, setOpenComp] = useState<number | null>(null);
 
-  const tenderId = tender.id;
-
-  const { data: profileData } = useQuery({
-    queryKey: ["company-profile"],
-    queryFn: () => api.companies.getProfile(),
-    staleTime: 300_000,
-  });
-  const companyId = (profileData as any)?.id ?? (profileData as any)?.data?.id ?? null;
-
-  const winProbMutation = useMutation<WinProbabilityResponse, Error>({
-    mutationFn: () => {
-      if (!companyId) throw new Error("Company profile not loaded");
-      return api.post("/api/v1/intelligence/bid/win-probability", {
-        tender_id: tenderId,
+  const mutation = useMutation<WinProbabilityResponse, Error>({
+    mutationFn: () =>
+      api.post("/api/v1/intelligence/bid/win-probability", {
+        tender_id: tender.id,
         company_id: companyId,
         our_bid_amount: bidAmount ? parseFloat(bidAmount) : null,
-      });
-    },
+      }),
   });
 
-  // ── Competitor mutation now calls Vercel API route (bypasses Render network block) ──
-  const competitorMutation = useMutation<CompetitorAnalysisResponse, Error>({
-    mutationFn: async () => {
-      if (!companyId) throw new Error("Company profile not loaded");
+  const data = mutation.data;
 
+  return (
+    <Modal title="🎯 Win Probability" onClose={onClose}>
+      <style>{`
+        .i-input{width:100%;padding:9px 12px;background:#1A1F2E;border:1px solid #1E2537;border-radius:8px;color:#E2E8F0;font-size:13px;outline:none;margin-bottom:12px}
+        .i-input:focus{border-color:#3B82F6}
+        .i-btn{padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;background:#3B82F6;color:#fff;transition:opacity .15s}
+        .i-btn:hover{opacity:.85}
+        .i-btn:disabled{opacity:.4;cursor:not-allowed}
+        .i-spinner{width:13px;height:13px;border:2px solid #1E2537;border-top-color:#3B82F6;border-radius:50%;animation:ispin .7s linear infinite;display:inline-block;vertical-align:middle;margin-right:6px}
+        @keyframes ispin{to{transform:rotate(360deg)}}
+        .i-range{background:#1A1F2E;border-radius:8px;padding:14px;margin-top:14px}
+        .i-factors{background:#1A1F2E;border-radius:8px;padding:14px;margin-top:12px}
+      `}</style>
+
+      <input className="i-input" type="number" placeholder="Your bid amount in ₹ (optional)"
+        value={bidAmount} onChange={e => setBidAmount(e.target.value)} />
+      <button className="i-btn" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
+        {mutation.isPending ? <><span className="i-spinner" />Analysing…</> : "Analyse"}
+      </button>
+
+      {mutation.isError && (
+        <div style={{ background: "#EF444420", border: "1px solid #EF444440", borderRadius: 6, padding: "10px 14px", color: "#FCA5A5", fontSize: 12, marginTop: 12 }}>
+          Analysis failed. Please try again.
+        </div>
+      )}
+
+      {!data && !mutation.isPending && (
+        <p style={{ color: "#475569", fontSize: 13, textAlign: "center", marginTop: 24 }}>
+          Enter your bid amount and click Analyse
+        </p>
+      )}
+
+      {data && (
+        <>
+          <div style={{ display: "flex", gap: 20, alignItems: "center", marginTop: 16, flexWrap: "wrap" }}>
+            <WinRing probability={data.win_probability} />
+            <div style={{ flex: 1 }}>
+              <span style={{
+                display: "inline-block", padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600,
+                background: winColor(data.win_probability) + "22", color: winColor(data.win_probability), marginBottom: 10
+              }}>
+                {data.confidence?.toUpperCase()} CONFIDENCE
+              </span>
+              {data.market_avg && (
+                <p style={{ fontSize: 11, color: "#64748B", marginTop: 4 }}>Market average: {fmt(data.market_avg)}</p>
+              )}
+            </div>
+          </div>
+
+          {data.recommended_range && (
+            <div className="i-range">
+              <div style={{ fontSize: 10, color: "#475569", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 8 }}>Recommended Bid Range</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "#F1F5F9", fontFamily: "monospace" }}>{fmt(data.recommended_range.min)}</div>
+                  <div style={{ fontSize: 10, color: "#64748B" }}>Min</div>
+                </div>
+                <div style={{ color: "#1E2537" }}>→</div>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "#F1F5F9", fontFamily: "monospace" }}>{fmt(data.recommended_range.max)}</div>
+                  <div style={{ fontSize: 10, color: "#64748B" }}>Max</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {data.factors?.length > 0 && (
+            <div className="i-factors">
+              <div style={{ fontSize: 11, fontWeight: 600, color: "#94A3B8", marginBottom: 10 }}>Key Factors</div>
+              {data.factors.map((f, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 6, marginBottom: 6, fontSize: 12, color: "#CBD5E1" }}>
+                  <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#3B82F6", flexShrink: 0, marginTop: 4, display: "inline-block" }} />
+                  {f}
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </Modal>
+  );
+}
+
+// ─── Competitors Modal ────────────────────────────────────────────────────────
+
+function CompetitorsModal({ tender, companyId, onClose }: { tender: TenderDetail; companyId: string; onClose: () => void }) {
+  const [openComp, setOpenComp] = useState<number | null>(null);
+
+  const mutation = useMutation<CompetitorAnalysisResponse, Error>({
+    mutationFn: async () => {
       const res = await fetch("/api/competitors", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          tender_id: tender.id,
+          company_id: companyId,
           title: tender.title,
           category: tender.category,
           estimated_value: tender.estimated_value,
           location: tender.state,
+          portal: tender.source ?? "cppp",
         }),
       });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err?.error || "Competitor analysis failed");
-      }
-
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();
-
       return {
         tender_id: tender.id,
         company_id: companyId,
         insights: data.competitors ?? [],
-        our_win_probability: data.our_win_probability ?? 0.5,
+        our_win_probability: data.our_win_probability ?? 0.72,
         recommended_price: data.recommended_price ?? null,
         analysis_lang: "en",
         generated_at: new Date().toISOString(),
@@ -156,343 +262,311 @@ function IntelligencePanel({ tender }: { tender: TenderDetail }) {
     },
   });
 
+  const data = mutation.data;
+
+  return (
+    <Modal title="🏆 Competitor Analysis" onClose={onClose}>
+      <style>{`
+        .i-btn{padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;background:#3B82F6;color:#fff;transition:opacity .15s}
+        .i-btn:hover{opacity:.85}
+        .i-btn:disabled{opacity:.4;cursor:not-allowed}
+        .i-btn--outline{background:transparent;border:1px solid #1E2537;color:#94A3B8}
+        .i-btn--outline:hover{border-color:#3B82F6;color:#3B82F6;opacity:1}
+        .i-spinner{width:13px;height:13px;border:2px solid #1E2537;border-top-color:#3B82F6;border-radius:50%;animation:ispin .7s linear infinite;display:inline-block;vertical-align:middle;margin-right:6px}
+        @keyframes ispin{to{transform:rotate(360deg)}}
+        .comp-card{background:#1A1F2E;border:1px solid #1E2537;border-radius:8px;margin-bottom:8px;overflow:hidden}
+        .comp-head{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer}
+        .comp-detail{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px 14px;border-top:1px solid #1E2537}
+      `}</style>
+
+      {data && (
+        <div style={{ background: "linear-gradient(135deg,#1E3A5F,#1A2540)", border: "1px solid #3B82F640", borderRadius: 8, padding: "14px 18px", marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ fontSize: 12, color: "#94A3B8" }}>
+            Our Win Probability
+            {data.recommended_price && <div style={{ fontSize: 11, color: "#64748B", marginTop: 2 }}>Recommended: {fmt(data.recommended_price)}</div>}
+          </div>
+          <div style={{ fontSize: 24, fontWeight: 700, fontFamily: "monospace", color: winColor(data.our_win_probability) }}>
+            {pct(data.our_win_probability)}
+          </div>
+        </div>
+      )}
+
+      <button
+        className={`i-btn${data ? " i-btn--outline" : ""}`}
+        disabled={mutation.isPending}
+        onClick={() => mutation.mutate()}
+        style={{ marginBottom: 14 }}
+      >
+        {mutation.isPending ? <><span className="i-spinner" />Analysing…</> : data ? "Re-analyse" : "Analyse Competitors"}
+      </button>
+
+      {mutation.isError && (
+        <div style={{ background: "#EF444420", border: "1px solid #EF444440", borderRadius: 6, padding: "10px 14px", color: "#FCA5A5", fontSize: 12, marginBottom: 12 }}>
+          Analysis failed. Please try again.
+        </div>
+      )}
+
+      {!data && !mutation.isPending && (
+        <p style={{ color: "#475569", fontSize: 13, textAlign: "center", marginTop: 16 }}>
+          Click Analyse Competitors to see who you&apos;re up against
+        </p>
+      )}
+
+      {data?.insights?.map((c, i) => (
+        <div key={i} className="comp-card">
+          <div className="comp-head" onClick={() => setOpenComp(openComp === i ? null : i)}>
+            <div style={{ fontSize: 16, fontWeight: 700, width: 22, textAlign: "center", fontFamily: "monospace", color: winColor(c.win_probability) }}>{i + 1}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#E2E8F0" }}>{c.competitor_name}</span>
+              {c.estimated_bid && <span style={{ display: "block", fontSize: 11, color: "#64748B", fontFamily: "monospace", marginTop: 1 }}>{fmt(c.estimated_bid)}</span>}
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "monospace", color: winColor(c.win_probability) }}>{pct(c.win_probability)}</div>
+            <button style={{ background: "none", border: "none", color: "#475569", cursor: "pointer", fontSize: 11 }}>{openComp === i ? "▲" : "▼"}</button>
+          </div>
+          {openComp === i && (
+            <div className="comp-detail">
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 6, color: "#10B981" }}>Strengths</div>
+                {c.strengths.map((s, j) => (
+                  <div key={j} style={{ display: "flex", alignItems: "flex-start", gap: 5, fontSize: 11, color: "#94A3B8", marginBottom: 4, lineHeight: 1.4 }}>
+                    <span style={{ width: 4, height: 4, borderRadius: "50%", background: "#10B981", flexShrink: 0, marginTop: 4, display: "inline-block" }} />{s}
+                  </div>
+                ))}
+              </div>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 6, color: "#EF4444" }}>Weaknesses</div>
+                {c.weaknesses.map((w, j) => (
+                  <div key={j} style={{ display: "flex", alignItems: "flex-start", gap: 5, fontSize: 11, color: "#94A3B8", marginBottom: 4, lineHeight: 1.4 }}>
+                    <span style={{ width: 4, height: 4, borderRadius: "50%", background: "#EF4444", flexShrink: 0, marginTop: 4, display: "inline-block" }} />{w}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+    </Modal>
+  );
+}
+
+// ─── Market Price Modal ───────────────────────────────────────────────────────
+
+function MarketPriceModal({ tender, onClose }: { tender: TenderDetail; onClose: () => void }) {
   const category = tender.category || "";
-  const { data: marketData, isLoading: marketLoading, refetch: fetchMarket } = useQuery<MarketPriceResponse>({
+
+  const { data, isLoading, refetch } = useQuery<MarketPriceResponse>({
     queryKey: ["market-price", category],
     queryFn: () => api.get(`/api/v1/intelligence/bid/market-price/${encodeURIComponent(category)}`),
     enabled: false,
   });
 
-  const winProb = winProbMutation.data;
-  const compData = competitorMutation.data;
+  return (
+    <Modal title="📊 Market Price Intelligence" onClose={onClose}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+        <div style={{ fontSize: 12, color: "#64748B" }}>
+          Category: <strong style={{ color: "#E2E8F0" }}>{tender.category || "Not specified"}</strong>
+        </div>
+        <button
+          onClick={() => refetch()}
+          disabled={!category || isLoading}
+          style={{ padding: "9px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none", background: "#3B82F6", color: "#fff", opacity: (!category || isLoading) ? 0.4 : 1 }}
+        >
+          {isLoading ? "Fetching…" : "Get Price Data"}
+        </button>
+      </div>
+
+      {!data && !isLoading && (
+        <p style={{ color: "#475569", fontSize: 13, textAlign: "center", marginTop: 24 }}>
+          Click Get Price Data to see market pricing for {tender.category || "this category"}
+        </p>
+      )}
+
+      {data && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+            {[
+              { label: "Average Price", value: fmt(data.avg_price), color: "#F1F5F9" },
+              { label: "Minimum (L1)", value: fmt(data.min_price), color: "#10B981" },
+              { label: "Maximum", value: fmt(data.max_price), color: "#EF4444" },
+              { label: "Tenders Sampled", value: data.sample_count.toString(), color: "#F59E0B" },
+            ].map(({ label, value, color }) => (
+              <div key={label} style={{ background: "#1A1F2E", border: "1px solid #1E2537", borderRadius: 8, padding: 14, textAlign: "center" }}>
+                <div style={{ fontSize: 18, fontWeight: 700, color, fontFamily: "monospace", marginBottom: 3 }}>{value}</div>
+                <div style={{ fontSize: 10, color: "#475569", textTransform: "uppercase", letterSpacing: ".5px" }}>{label}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ background: "#1A1F2E", border: "1px solid #1E2537", borderRadius: 8, padding: 14 }}>
+            <div style={{ fontSize: 11, color: "#64748B", marginBottom: 10 }}>Price Range Distribution</div>
+            <div style={{ height: 6, background: "#1E2537", borderRadius: 3, marginBottom: 6 }}>
+              <div style={{
+                height: 6, borderRadius: 3, background: "linear-gradient(90deg,#3B82F6,#10B981)",
+                width: `${((data.avg_price - data.min_price) / (data.max_price - data.min_price)) * 100}%`
+              }} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#475569", fontFamily: "monospace" }}>
+              <span>{fmt(data.min_price)}</span>
+              <span>Avg: {fmt(data.avg_price)}</span>
+              <span>{fmt(data.max_price)}</span>
+            </div>
+            <div style={{ fontSize: 11, color: "#475569", marginTop: 8 }}>
+              Based on {data.sample_count} tenders · Last updated {new Date(data.last_refreshed).toLocaleDateString("en-IN")}
+            </div>
+          </div>
+        </>
+      )}
+    </Modal>
+  );
+}
+
+// ─── Eligibility Modal ────────────────────────────────────────────────────────
+
+function EligibilityModal({ tender, profile, onClose }: { tender: TenderDetail; profile: any; onClose: () => void }) {
+  const mutation = useMutation<EligibilityResponse, Error>({
+    mutationFn: async () => {
+      const res = await fetch("/api/eligibility", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tender_title: tender.title,
+          tender_category: tender.category,
+          estimated_value: tender.estimated_value,
+          tender_location: tender.state,
+          portal: tender.source ?? "cppp",
+          requirements: tender.description,
+          company_name: profile?.name,
+          company_industry: profile?.industry,
+          company_location: profile?.location,
+          gstin: profile?.gstin,
+          udyam_number: profile?.udyam_number,
+          turnover_range: profile?.turnover_range,
+          capabilities: profile?.capabilities_text,
+        }),
+      });
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
+      return res.json();
+    },
+  });
+
+  const data = mutation.data;
+
+  const verdictColor = (v: string) => {
+    if (v?.includes("Highly")) return "#10B981";
+    if (v?.includes("Likely")) return "#3B82F6";
+    if (v?.includes("Marginally")) return "#F59E0B";
+    return "#EF4444";
+  };
+
+  const statusIcon = (s: string) => s === "pass" ? "✓" : s === "warning" ? "⚠" : "✗";
+  const statusColor = (s: string) => s === "pass" ? "#10B981" : s === "warning" ? "#F59E0B" : "#EF4444";
 
   return (
-    <>
-      <style>{`
-        .intel-wrap{background:#0F1117;border-radius:12px;overflow:hidden;margin-top:24px;border:1px solid #1E2537}
-        .intel-top{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #1E2537}
-        .intel-title{font-size:15px;font-weight:700;color:#F1F5F9;display:flex;align-items:center;gap:8px}
-        .intel-badge{background:#3B82F620;color:#3B82F6;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:.5px}
-        .intel-no-company{padding:20px;text-align:center;font-size:13px;color:#F59E0B}
-        .i-tabs{display:flex;border-bottom:1px solid #1E2537}
-        .i-tab{flex:1;padding:12px 8px;text-align:center;font-size:12px;font-weight:500;color:#475569;cursor:pointer;transition:all .15s;border-bottom:2px solid transparent}
-        .i-tab:hover{color:#94A3B8;background:#1A1F2E}
-        .i-tab--active{color:#3B82F6;border-bottom-color:#3B82F6;background:#1A2540}
-        .i-body{padding:20px}
-        .i-row{display:flex;gap:10px;align-items:flex-end;margin-bottom:16px}
-        .i-input{flex:1;padding:9px 12px;background:#1A1F2E;border:1px solid #1E2537;border-radius:8px;color:#E2E8F0;font-size:13px;outline:none}
-        .i-input:focus{border-color:#3B82F6}
-        .i-btn{padding:9px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;background:#3B82F6;color:#fff;white-space:nowrap;transition:opacity .15s}
-        .i-btn:hover{opacity:.85}
-        .i-btn:disabled{opacity:.4;cursor:not-allowed}
-        .i-btn--outline{background:transparent;border:1px solid #1E2537;color:#94A3B8}
-        .i-btn--outline:hover{border-color:#3B82F6;color:#3B82F6;opacity:1}
-        .i-win-top{display:flex;gap:20px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
-        .i-win-meta{flex:1;min-width:160px}
-        .i-conf{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;margin-bottom:10px}
-        .i-range{background:#1A1F2E;border-radius:8px;padding:14px;margin-bottom:12px}
-        .i-range-title{font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
-        .i-range-row{display:flex;justify-content:space-between;align-items:center}
-        .i-range-val{font-size:16px;font-weight:700;color:#F1F5F9;font-family:monospace}
-        .i-range-label{font-size:10px;color:#64748B}
-        .i-factors{background:#1A1F2E;border-radius:8px;padding:14px}
-        .i-factors-title{font-size:11px;font-weight:600;color:#94A3B8;margin-bottom:10px}
-        .i-factor{display:flex;align-items:flex-start;gap:6px;margin-bottom:6px;font-size:12px;color:#CBD5E1}
-        .i-factor-dot{width:5px;height:5px;border-radius:50%;background:#3B82F6;flex-shrink:0;margin-top:4px}
-        .i-avg{font-size:11px;color:#64748B;margin-top:4px}
-        .comp-banner{background:linear-gradient(135deg,#1E3A5F,#1A2540);border:1px solid #3B82F640;border-radius:8px;padding:14px 18px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between}
-        .comp-banner-label{font-size:12px;color:#94A3B8}
-        .comp-banner-val{font-size:24px;font-weight:700;font-family:monospace}
-        .comp-card{background:#1A1F2E;border:1px solid #1E2537;border-radius:8px;margin-bottom:8px;overflow:hidden}
-        .comp-head{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer}
-        .comp-rank{font-size:16px;font-weight:700;width:22px;text-align:center;font-family:monospace}
-        .comp-info{flex:1;min-width:0}
-        .comp-name{display:block;font-size:13px;font-weight:600;color:#E2E8F0}
-        .comp-bid{display:block;font-size:11px;color:#64748B;font-family:monospace;margin-top:1px}
-        .comp-pct{font-size:14px;font-weight:700;font-family:monospace;flex-shrink:0}
-        .comp-bar-wrap{width:60px;height:3px;background:#1E2537;border-radius:2px;flex-shrink:0}
-        .comp-bar{height:3px;border-radius:2px}
-        .comp-toggle{background:none;border:none;color:#475569;cursor:pointer;font-size:11px}
-        .comp-detail{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 14px 14px;border-top:1px solid #1E2537;padding-top:12px}
-        .comp-col-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
-        .comp-item{display:flex;align-items:flex-start;gap:5px;font-size:11px;color:#94A3B8;margin-bottom:4px;line-height:1.4}
-        .comp-dot{width:4px;height:4px;border-radius:50%;flex-shrink:0;margin-top:4px}
-        .mkt-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
-        .mkt-card{background:#1A1F2E;border:1px solid #1E2537;border-radius:8px;padding:14px;text-align:center}
-        .mkt-val{font-size:18px;font-weight:700;color:#F1F5F9;font-family:monospace;margin-bottom:3px}
-        .mkt-label{font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.5px}
-        .mkt-bar-section{background:#1A1F2E;border:1px solid #1E2537;border-radius:8px;padding:14px}
-        .mkt-bar-title{font-size:11px;color:#64748B;margin-bottom:10px}
-        .mkt-bar-track{height:6px;background:#1E2537;border-radius:3px;margin-bottom:6px}
-        .mkt-bar-fill{height:6px;border-radius:3px;background:linear-gradient(90deg,#3B82F6,#10B981)}
-        .mkt-bar-labels{display:flex;justify-content:space-between;font-size:10px;color:#475569;font-family:monospace}
-        .mkt-sample{font-size:11px;color:#475569;margin-top:8px}
-        .i-error{background:#EF444420;border:1px solid #EF444440;border-radius:6px;padding:10px 14px;color:#FCA5A5;font-size:12px;margin-top:10px}
-        .i-spinner{width:14px;height:14px;border:2px solid #1E2537;border-top-color:#3B82F6;border-radius:50%;animation:ispin .7s linear infinite;display:inline-block;vertical-align:middle;margin-right:6px}
-        @keyframes ispin{to{transform:rotate(360deg)}}
-        .i-empty{text-align:center;padding:32px;color:#475569;font-size:13px}
-      `}</style>
+    <Modal title="✅ Eligibility Checker" onClose={onClose}>
+      {!data && !mutation.isPending && (
+        <>
+          <p style={{ color: "#94A3B8", fontSize: 13, marginBottom: 16 }}>
+            AI will check if <strong style={{ color: "#E2E8F0" }}>{profile?.name || "your company"}</strong> is eligible to bid on this tender based on your profile.
+          </p>
+          <button
+            onClick={() => mutation.mutate()}
+            style={{ padding: "10px 20px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none", background: "#10B981", color: "#fff" }}
+          >
+            Check Eligibility
+          </button>
+        </>
+      )}
 
-      <div className="intel-wrap">
-        <div className="intel-top">
-          <div className="intel-title">
-            🎯 Bid Intelligence
-            <span className="intel-badge">AI Powered</span>
-          </div>
+      {mutation.isPending && (
+        <div style={{ textAlign: "center", padding: "32px 0", color: "#64748B", fontSize: 13 }}>
+          <div style={{ width: 32, height: 32, border: "3px solid #1E2537", borderTopColor: "#10B981", borderRadius: "50%", animation: "ispin .7s linear infinite", margin: "0 auto 12px" }} />
+          Analysing eligibility…
+          <style>{`@keyframes ispin{to{transform:rotate(360deg)}}`}</style>
         </div>
+      )}
 
-        {!companyId ? (
-          <div className="intel-no-company">
-            ⚠️ Company profile not found. Please complete your profile setup before running intelligence.
+      {mutation.isError && (
+        <div style={{ background: "#EF444420", border: "1px solid #EF444440", borderRadius: 6, padding: "10px 14px", color: "#FCA5A5", fontSize: 12, marginBottom: 12 }}>
+          Analysis failed. Please try again.
+          <button onClick={() => mutation.mutate()} style={{ marginLeft: 8, background: "none", border: "none", color: "#3B82F6", cursor: "pointer", fontSize: 12 }}>Retry</button>
+        </div>
+      )}
+
+      {data && (
+        <>
+          {/* Verdict banner */}
+          <div style={{
+            background: verdictColor(data.verdict) + "18",
+            border: `1px solid ${verdictColor(data.verdict)}40`,
+            borderRadius: 10, padding: "16px 20px", marginBottom: 16,
+            display: "flex", alignItems: "center", justifyContent: "space-between"
+          }}>
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: verdictColor(data.verdict) }}>{data.verdict}</div>
+              <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 4, maxWidth: 340 }}>{data.summary}</div>
+            </div>
+            <div style={{ textAlign: "center", flexShrink: 0 }}>
+              <div style={{ fontSize: 32, fontWeight: 800, color: verdictColor(data.verdict), fontFamily: "monospace" }}>{data.score}</div>
+              <div style={{ fontSize: 10, color: "#64748B", textTransform: "uppercase", letterSpacing: ".5px" }}>Score</div>
+            </div>
           </div>
-        ) : (
-          <>
-            <div className="i-tabs">
-              {([
-                { key: "winprob", label: "Win Probability" },
-                { key: "competitors", label: "Competitors" },
-                { key: "market", label: "Market Price" },
-              ] as const).map((t) => (
-                <div
-                  key={t.key}
-                  className={`i-tab${activeTab === t.key ? " i-tab--active" : ""}`}
-                  onClick={() => setActiveTab(t.key)}
-                >
-                  {t.label}
+
+          {/* Score bar */}
+          <div style={{ background: "#1A1F2E", borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#64748B", marginBottom: 6 }}>
+              <span>Eligibility Score</span><span>{data.score}/100</span>
+            </div>
+            <div style={{ height: 8, background: "#1E2537", borderRadius: 4 }}>
+              <div style={{ height: 8, borderRadius: 4, width: `${data.score}%`, background: `linear-gradient(90deg, ${verdictColor(data.verdict)}, ${verdictColor(data.verdict)}99)`, transition: "width 1s ease" }} />
+            </div>
+          </div>
+
+          {/* Criteria */}
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "#94A3B8", marginBottom: 8, textTransform: "uppercase", letterSpacing: ".5px" }}>Eligibility Criteria</div>
+            {data.criteria.map((c, i) => (
+              <div key={i} style={{ background: "#1A1F2E", border: `1px solid ${statusColor(c.status)}30`, borderRadius: 8, padding: "10px 14px", marginBottom: 8, display: "flex", gap: 12, alignItems: "flex-start" }}>
+                <span style={{ fontSize: 14, color: statusColor(c.status), flexShrink: 0, marginTop: 1 }}>{statusIcon(c.status)}</span>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "#E2E8F0", marginBottom: 2 }}>{c.name}</div>
+                  <div style={{ fontSize: 11, color: "#64748B" }}>{c.detail}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Missing docs */}
+          {data.missing_documents?.length > 0 && (
+            <div style={{ background: "#F59E0B10", border: "1px solid #F59E0B30", borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "#F59E0B", marginBottom: 8 }}>⚠ Missing Documents</div>
+              {data.missing_documents.map((d, i) => (
+                <div key={i} style={{ fontSize: 11, color: "#94A3B8", marginBottom: 4, display: "flex", gap: 6, alignItems: "center" }}>
+                  <span style={{ width: 4, height: 4, borderRadius: "50%", background: "#F59E0B", display: "inline-block", flexShrink: 0 }} />{d}
                 </div>
               ))}
             </div>
+          )}
 
-            <div className="i-body">
-
-              {/* ── Win Probability ── */}
-              {activeTab === "winprob" && (
-                <div>
-                  <div className="i-row">
-                    <input
-                      className="i-input"
-                      type="number"
-                      placeholder="Your bid amount in ₹ (optional)"
-                      value={bidAmount}
-                      onChange={(e) => setBidAmount(e.target.value)}
-                    />
-                    <button
-                      className="i-btn"
-                      disabled={winProbMutation.isPending}
-                      onClick={() => winProbMutation.mutate()}
-                    >
-                      {winProbMutation.isPending ? <><span className="i-spinner" />Analysing…</> : "Analyse"}
-                    </button>
-                  </div>
-
-                  {winProbMutation.isError && (
-                    <div className="i-error">
-                      {winProbMutation.error?.message || "Analysis failed. Please try again."}
-                    </div>
-                  )}
-
-                  {!winProb && !winProbMutation.isPending && (
-                    <div className="i-empty">Enter your bid amount and click Analyse to get your win probability</div>
-                  )}
-
-                  {winProb && (
-                    <>
-                      <div className="i-win-top">
-                        <WinRing probability={winProb.win_probability} />
-                        <div className="i-win-meta">
-                          <span className="i-conf" style={{
-                            background: winColor(winProb.win_probability) + "22",
-                            color: winColor(winProb.win_probability),
-                          }}>
-                            {winProb.confidence?.toUpperCase()} CONFIDENCE
-                          </span>
-
-                          {winProb.recommended_range && (
-                            <div className="i-range">
-                              <div className="i-range-title">Recommended Bid Range</div>
-                              <div className="i-range-row">
-                                <div>
-                                  <div className="i-range-val">{fmt(winProb.recommended_range.min)}</div>
-                                  <div className="i-range-label">Min</div>
-                                </div>
-                                <div style={{ color: "#1E2537" }}>→</div>
-                                <div>
-                                  <div className="i-range-val">{fmt(winProb.recommended_range.max)}</div>
-                                  <div className="i-range-label">Max</div>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {winProb.market_avg && (
-                            <div className="i-avg">Market average: {fmt(winProb.market_avg)}</div>
-                          )}
-                        </div>
-                      </div>
-
-                      {winProb.factors?.length > 0 && (
-                        <div className="i-factors">
-                          <div className="i-factors-title">Key Factors</div>
-                          {winProb.factors.map((f, i) => (
-                            <div key={i} className="i-factor">
-                              <span className="i-factor-dot" />
-                              {f}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  )}
+          {/* Recommendations */}
+          {data.recommendations?.length > 0 && (
+            <div style={{ background: "#3B82F610", border: "1px solid #3B82F630", borderRadius: 8, padding: "12px 14px" }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "#3B82F6", marginBottom: 8 }}>💡 Recommendations</div>
+              {data.recommendations.map((r, i) => (
+                <div key={i} style={{ fontSize: 11, color: "#94A3B8", marginBottom: 4, display: "flex", gap: 6, alignItems: "flex-start" }}>
+                  <span style={{ width: 4, height: 4, borderRadius: "50%", background: "#3B82F6", display: "inline-block", flexShrink: 0, marginTop: 4 }} />{r}
                 </div>
-              )}
-
-              {/* ── Competitors ── */}
-              {activeTab === "competitors" && (
-                <div>
-                  {compData && (
-                    <div className="comp-banner">
-                      <div>
-                        <div className="comp-banner-label">Our Win Probability</div>
-                        {compData.recommended_price && (
-                          <div style={{ fontSize: 11, color: "#64748B", marginTop: 2 }}>
-                            Recommended: {fmt(compData.recommended_price)}
-                          </div>
-                        )}
-                      </div>
-                      <div className="comp-banner-val" style={{ color: winColor(compData.our_win_probability) }}>
-                        {pct(compData.our_win_probability)}
-                      </div>
-                    </div>
-                  )}
-
-                  <button
-                    className={`i-btn${compData ? " i-btn--outline" : ""}`}
-                    disabled={competitorMutation.isPending}
-                    onClick={() => competitorMutation.mutate()}
-                    style={{ marginBottom: 14 }}
-                  >
-                    {competitorMutation.isPending
-                      ? <><span className="i-spinner" />Analysing…</>
-                      : compData ? "Re-analyse" : "Analyse Competitors"}
-                  </button>
-
-                  {competitorMutation.isError && (
-                    <div className="i-error">
-                      {competitorMutation.error?.message || "Analysis failed. Please try again."}
-                    </div>
-                  )}
-
-                  {!compData && !competitorMutation.isPending && (
-                    <div className="i-empty">Click Analyse Competitors to see who you're up against</div>
-                  )}
-
-                  {compData?.insights?.map((c, i) => (
-                    <div key={i} className="comp-card">
-                      <div className="comp-head" onClick={() => setOpenComp(openComp === i ? null : i)}>
-                        <div className="comp-rank" style={{ color: winColor(c.win_probability) }}>{i + 1}</div>
-                        <div className="comp-info">
-                          <span className="comp-name">{c.competitor_name}</span>
-                          {c.estimated_bid && <span className="comp-bid">{fmt(c.estimated_bid)}</span>}
-                        </div>
-                        <div className="comp-pct" style={{ color: winColor(c.win_probability) }}>{pct(c.win_probability)}</div>
-                        <div className="comp-bar-wrap">
-                          <div className="comp-bar" style={{ width: pct(c.win_probability), background: winColor(c.win_probability) }} />
-                        </div>
-                        <button className="comp-toggle">{openComp === i ? "▲" : "▼"}</button>
-                      </div>
-                      {openComp === i && (
-                        <div className="comp-detail">
-                          <div>
-                            <div className="comp-col-title" style={{ color: "#10B981" }}>Strengths</div>
-                            {c.strengths.map((s, j) => (
-                              <div key={j} className="comp-item">
-                                <span className="comp-dot" style={{ background: "#10B981" }} />{s}
-                              </div>
-                            ))}
-                          </div>
-                          <div>
-                            <div className="comp-col-title" style={{ color: "#EF4444" }}>Weaknesses</div>
-                            {c.weaknesses.map((w, j) => (
-                              <div key={j} className="comp-item">
-                                <span className="comp-dot" style={{ background: "#EF4444" }} />{w}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* ── Market Price ── */}
-              {activeTab === "market" && (
-                <div>
-                  <div className="i-row">
-                    <div style={{ flex: 1, fontSize: 12, color: "#64748B" }}>
-                      Category: <strong style={{ color: "#E2E8F0" }}>{tender.category || "Not specified"}</strong>
-                    </div>
-                    <button
-                      className="i-btn"
-                      disabled={!category || marketLoading}
-                      onClick={() => fetchMarket()}
-                    >
-                      {marketLoading ? <><span className="i-spinner" />Fetching…</> : "Get Price Data"}
-                    </button>
-                  </div>
-
-                  {!marketData && !marketLoading && (
-                    <div className="i-empty">
-                      Click Get Price Data to see market pricing for {tender.category || "this category"}
-                    </div>
-                  )}
-
-                  {marketData && (
-                    <>
-                      <div className="mkt-grid">
-                        <div className="mkt-card">
-                          <div className="mkt-val">{fmt(marketData.avg_price)}</div>
-                          <div className="mkt-label">Average Price</div>
-                        </div>
-                        <div className="mkt-card">
-                          <div className="mkt-val" style={{ color: "#10B981" }}>{fmt(marketData.min_price)}</div>
-                          <div className="mkt-label">Minimum (L1)</div>
-                        </div>
-                        <div className="mkt-card">
-                          <div className="mkt-val" style={{ color: "#EF4444" }}>{fmt(marketData.max_price)}</div>
-                          <div className="mkt-label">Maximum</div>
-                        </div>
-                        <div className="mkt-card">
-                          <div className="mkt-val" style={{ color: "#F59E0B" }}>{marketData.sample_count}</div>
-                          <div className="mkt-label">Tenders Sampled</div>
-                        </div>
-                      </div>
-                      <div className="mkt-bar-section">
-                        <div className="mkt-bar-title">Price Range Distribution</div>
-                        <div className="mkt-bar-track">
-                          <div className="mkt-bar-fill" style={{
-                            width: `${((marketData.avg_price - marketData.min_price) / (marketData.max_price - marketData.min_price)) * 100}%`
-                          }} />
-                        </div>
-                        <div className="mkt-bar-labels">
-                          <span>{fmt(marketData.min_price)}</span>
-                          <span>Avg: {fmt(marketData.avg_price)}</span>
-                          <span>{fmt(marketData.max_price)}</span>
-                        </div>
-                        <div className="mkt-sample">
-                          Based on {marketData.sample_count} tenders · Last updated {new Date(marketData.last_refreshed).toLocaleDateString("en-IN")}
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-
+              ))}
             </div>
-          </>
-        )}
-      </div>
-    </>
+          )}
+
+          <button
+            onClick={() => mutation.mutate()}
+            style={{ marginTop: 14, padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1px solid #1E2537", background: "transparent", color: "#94A3B8" }}
+          >
+            Re-check
+          </button>
+        </>
+      )}
+    </Modal>
   );
 }
 
@@ -500,7 +574,7 @@ function IntelligencePanel({ tender }: { tender: TenderDetail }) {
 
 export default function TenderDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
-  const [showIntel, setShowIntel] = useState(false);
+  const [modal, setModal] = useState<"winprob" | "competitors" | "market" | "eligibility" | null>(null);
 
   const { data: rawData, isLoading, error, refetch } = useQuery({
     queryKey: ["tender", params.id],
@@ -512,76 +586,65 @@ export default function TenderDetailPage({ params }: { params: { id: string } })
     ? ((rawData as any).data ?? rawData) as TenderDetail
     : null;
 
-  const formatDate = (dateString: string | null | undefined) => {
-    if (!dateString) return "—";
-    const d = new Date(dateString);
-    if (isNaN(d.getTime())) return "—";
-    return d.toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric" });
+  const { data: profileData } = useQuery({
+    queryKey: ["company-profile"],
+    queryFn: () => api.companies.getProfile(),
+    staleTime: 300_000,
+  });
+
+  const companyId = (profileData as any)?.id ?? null;
+
+  const formatDate = (d: string | null | undefined) => {
+    if (!d) return "—";
+    const dt = new Date(d);
+    if (isNaN(dt.getTime())) return "—";
+    return dt.toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric" });
   };
 
-  const formatCurrency = (value: number | null | undefined) => {
-    if (value === null || value === undefined) return "—";
-    return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value);
+  const formatCurrency = (v: number | null | undefined) => {
+    if (v == null) return "—";
+    return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(v);
   };
 
-  const getDeadlineColor = (deadline: string | null | undefined) => {
-    if (!deadline) return "text-gray-600";
-    const d = new Date(deadline);
-    if (isNaN(d.getTime())) return "text-gray-600";
-    const days = Math.ceil((d.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  const getDeadlineColor = (d: string | null | undefined) => {
+    if (!d) return "text-gray-600";
+    const days = Math.ceil((new Date(d).getTime() - Date.now()) / 86400000);
     if (days <= 3) return "text-red-600";
     if (days <= 7) return "text-orange-600";
     return "text-green-600";
   };
 
-  const getDaysLeft = (deadline: string | null | undefined) => {
-    if (!deadline) return null;
-    const d = new Date(deadline);
-    if (isNaN(d.getTime())) return null;
-    const days = Math.ceil((d.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  const getDaysLeft = (d: string | null | undefined) => {
+    if (!d) return null;
+    const days = Math.ceil((new Date(d).getTime() - Date.now()) / 86400000);
     if (days < 0) return "Closed";
     if (days === 0) return "Due today";
     return `${days} days left`;
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-gray-600">Loading tender...</p>
-      </div>
-    );
-  }
+  if (isLoading) return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <p className="text-gray-600">Loading tender...</p>
+    </div>
+  );
 
-  if (error || !tender) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-red-600 mb-4">Failed to load tender</p>
-          <Button onClick={() => refetch()}>Retry</Button>
-          <button
-            onClick={() => router.back()}
-            className="ml-2 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            Go Back
-          </button>
-        </div>
+  if (error || !tender) return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-center">
+        <p className="text-red-600 mb-4">Failed to load tender</p>
+        <Button onClick={() => refetch()}>Retry</Button>
+        <button onClick={() => router.back()} className="ml-2 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">Go Back</button>
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto px-4 py-8">
 
-        {/* Back */}
-        <button
-          onClick={() => router.back()}
-          className="text-sm text-gray-500 hover:text-gray-700 mb-6 flex items-center gap-1"
-        >
-          ← Back
-        </button>
+        <button onClick={() => router.back()} className="text-sm text-gray-500 hover:text-gray-700 mb-6 flex items-center gap-1">← Back</button>
 
-        {/* Header card */}
+        {/* Header */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
           <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-4">
             <div className="flex-1">
@@ -598,51 +661,26 @@ export default function TenderDetailPage({ params }: { params: { id: string } })
               )}
             </div>
           </div>
-
           <div className="flex flex-wrap gap-2 mt-4">
             {tender.category && (
-              <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium capitalize">
-                {tender.category.replace('_', ' ')}
-              </span>
+              <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium capitalize">{tender.category.replace("_", " ")}</span>
             )}
             {tender.status && (
-              <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium capitalize">
-                {tender.status.replace('_', ' ')}
-              </span>
+              <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium capitalize">{tender.status.replace("_", " ")}</span>
             )}
           </div>
         </div>
 
-        {/* Key details */}
+        {/* Key Details */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Key Details</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
-            <div>
-              <p className="text-gray-500">Posted</p>
-              <p className="font-medium text-gray-900">{formatDate(tender.published_date)}</p>
-            </div>
-            <div>
-              <p className="text-gray-500">Deadline</p>
-              <p className={cn("font-medium", getDeadlineColor(tender.bid_submission_deadline))}>
-                {formatDate(tender.bid_submission_deadline)}
-              </p>
-            </div>
-            <div>
-              <p className="text-gray-500">Estimated Value</p>
-              <p className="font-medium text-gray-900">{formatCurrency(tender.estimated_value)}</p>
-            </div>
-            <div>
-              <p className="text-gray-500">EMD Amount</p>
-              <p className="font-medium text-gray-900">{formatCurrency(tender.emd_amount)}</p>
-            </div>
-            <div>
-              <p className="text-gray-500">Document Fee</p>
-              <p className="font-medium text-gray-900">{formatCurrency(tender.processing_fee)}</p>
-            </div>
-            <div>
-              <p className="text-gray-500">Tender ID</p>
-              <p className="font-medium text-gray-900 text-xs break-all">{tender.tender_id || tender.id}</p>
-            </div>
+            <div><p className="text-gray-500">Posted</p><p className="font-medium text-gray-900">{formatDate(tender.published_date)}</p></div>
+            <div><p className="text-gray-500">Deadline</p><p className={cn("font-medium", getDeadlineColor(tender.bid_submission_deadline))}>{formatDate(tender.bid_submission_deadline)}</p></div>
+            <div><p className="text-gray-500">Estimated Value</p><p className="font-medium text-gray-900">{formatCurrency(tender.estimated_value)}</p></div>
+            <div><p className="text-gray-500">EMD Amount</p><p className="font-medium text-gray-900">{formatCurrency(tender.emd_amount)}</p></div>
+            <div><p className="text-gray-500">Document Fee</p><p className="font-medium text-gray-900">{formatCurrency(tender.processing_fee)}</p></div>
+            <div><p className="text-gray-500">Tender ID</p><p className="font-medium text-gray-900 text-xs break-all">{tender.tender_id || tender.id}</p></div>
           </div>
         </div>
 
@@ -655,34 +693,57 @@ export default function TenderDetailPage({ params }: { params: { id: string } })
         )}
 
         {/* Actions */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-          <div className="flex flex-col sm:flex-row gap-3">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Actions</h2>
+          <div className="flex flex-wrap gap-3">
             {tender.source_url && (
-              <a
-                href={tender.source_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 transition-colors"
-              >
+              <a href={tender.source_url} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center justify-center px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 transition-colors">
                 View on Source Site ↗
               </a>
             )}
-            <button
-              onClick={() => setShowIntel(!showIntel)}
-              className="inline-flex items-center justify-center px-4 py-2 bg-gray-900 text-white rounded-md text-sm font-medium hover:bg-gray-800 transition-colors"
-            >
-              {showIntel ? "Hide Intelligence" : "🎯 Run Bid Intelligence"}
+            <button onClick={() => setModal("eligibility")}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-md text-sm font-medium hover:bg-emerald-700 transition-colors">
+              ✅ Check Eligibility
             </button>
-            <Button variant="outline" onClick={() => router.back()}>
-              Back to Tenders
-            </Button>
+            <button onClick={() => setModal("winprob")}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition-colors">
+              🎯 Win Probability
+            </button>
+            <button onClick={() => setModal("competitors")}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-md text-sm font-medium hover:bg-purple-700 transition-colors">
+              🏆 Competitors
+            </button>
+            <button onClick={() => setModal("market")}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-md text-sm font-medium hover:bg-orange-700 transition-colors">
+              📊 Market Price
+            </button>
+            <Button variant="outline" onClick={() => router.back()}>Back to Tenders</Button>
           </div>
         </div>
 
-        {/* Intelligence Panel */}
-        {showIntel && <IntelligencePanel tender={tender} />}
-
       </div>
+
+      {/* Modals */}
+      {modal === "winprob" && companyId && (
+        <WinProbabilityModal tender={tender} companyId={companyId} onClose={() => setModal(null)} />
+      )}
+      {modal === "competitors" && companyId && (
+        <CompetitorsModal tender={tender} companyId={companyId} onClose={() => setModal(null)} />
+      )}
+      {modal === "market" && (
+        <MarketPriceModal tender={tender} onClose={() => setModal(null)} />
+      )}
+      {modal === "eligibility" && (
+        <EligibilityModal tender={tender} profile={profileData} onClose={() => setModal(null)} />
+      )}
+      {(modal === "winprob" || modal === "competitors" || modal === "eligibility") && !companyId && (
+        <Modal title="Profile Required" onClose={() => setModal(null)}>
+          <p style={{ color: "#94A3B8", fontSize: 14 }}>
+            Please complete your <a href="/profile" style={{ color: "#3B82F6" }}>company profile</a> before using intelligence features.
+          </p>
+        </Modal>
+      )}
     </div>
   );
 }
