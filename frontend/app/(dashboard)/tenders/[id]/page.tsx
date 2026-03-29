@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -103,6 +103,127 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
           <button onClick={onClose} className="text-gray-500 hover:text-gray-300 text-xl leading-none">✕</button>
         </div>
         <div className="p-6">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Track Bid Modal ──────────────────────────────────────────────────────────
+
+function TrackBidModal({ tender, companyId, onClose }: { tender: TenderDetail; companyId: string; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState({
+    bid_amount: tender.estimated_value ? String(Math.round(tender.estimated_value * 0.95)) : "",
+    emd_amount: tender.emd_amount ? String(tender.emd_amount) : "",
+    notes: "",
+  });
+
+  const mutation = useMutation({
+    mutationFn: () => {
+      const now = new Date();
+      const bidNumber = `BID-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+      return api.bids.create({
+        tender_id: parseInt(tender.id),
+        title: tender.title,
+        bid_amount: parseFloat(form.bid_amount),
+        emd_amount: form.emd_amount ? parseFloat(form.emd_amount) : undefined,
+        submission_deadline: tender.bid_submission_deadline
+          ? new Date(tender.bid_submission_deadline).toISOString()
+          : new Date(Date.now() + 7 * 86400000).toISOString(),
+        company_id: companyId,
+        bid_number: bidNumber,
+        notes: form.notes || undefined,
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bids"] });
+      onClose();
+    },
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+        onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-white font-semibold text-lg">Track this Bid</h2>
+              <p className="text-blue-100 text-sm mt-0.5 line-clamp-1">{tender.title}</p>
+            </div>
+            <button onClick={onClose} className="text-white/70 hover:text-white text-xl leading-none">✕</button>
+          </div>
+        </div>
+
+        {/* Form */}
+        <div className="px-6 py-5 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Your Bid Amount (₹) <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="number"
+              value={form.bid_amount}
+              onChange={e => setForm(f => ({ ...f, bid_amount: e.target.value }))}
+              placeholder="Enter your bid amount"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            {tender.estimated_value && (
+              <p className="text-xs text-gray-400 mt-1">Estimated value: {fmt(tender.estimated_value)}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">EMD Amount (₹)</label>
+            <input
+              type="number"
+              value={form.emd_amount}
+              onChange={e => setForm(f => ({ ...f, emd_amount: e.target.value }))}
+              placeholder="Earnest money deposit"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+            <textarea
+              value={form.notes}
+              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+              placeholder="Add any notes about this bid..."
+              rows={3}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            />
+          </div>
+
+          {mutation.isError && (
+            <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-3 py-2">
+              {(mutation.error as Error).message}
+            </div>
+          )}
+
+          {mutation.isSuccess && (
+            <div className="bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg px-3 py-2">
+              ✓ Bid tracked! View it in your <a href="/bids" className="underline font-medium">Bid Pipeline</a>.
+            </div>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="px-6 pb-5 flex gap-3">
+          <button onClick={onClose}
+            className="flex-1 border border-gray-200 text-gray-600 rounded-lg py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors">
+            Cancel
+          </button>
+          <button
+            onClick={() => mutation.mutate()}
+            disabled={!form.bid_amount || mutation.isPending || mutation.isSuccess}
+            className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg py-2.5 text-sm font-medium hover:from-blue-700 hover:to-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {mutation.isPending ? "Tracking..." : mutation.isSuccess ? "Tracked ✓" : "Start Tracking →"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -493,7 +614,6 @@ function EligibilityModal({ tender, profile, onClose }: { tender: TenderDetail; 
 
       {data && (
         <>
-          {/* Verdict banner */}
           <div style={{
             background: verdictColor(data.verdict) + "18",
             border: `1px solid ${verdictColor(data.verdict)}40`,
@@ -510,7 +630,6 @@ function EligibilityModal({ tender, profile, onClose }: { tender: TenderDetail; 
             </div>
           </div>
 
-          {/* Score bar */}
           <div style={{ background: "#1A1F2E", borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#64748B", marginBottom: 6 }}>
               <span>Eligibility Score</span><span>{data.score}/100</span>
@@ -520,7 +639,6 @@ function EligibilityModal({ tender, profile, onClose }: { tender: TenderDetail; 
             </div>
           </div>
 
-          {/* Criteria */}
           <div style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: "#94A3B8", marginBottom: 8, textTransform: "uppercase", letterSpacing: ".5px" }}>Eligibility Criteria</div>
             {data.criteria.map((c, i) => (
@@ -534,7 +652,6 @@ function EligibilityModal({ tender, profile, onClose }: { tender: TenderDetail; 
             ))}
           </div>
 
-          {/* Missing docs */}
           {data.missing_documents?.length > 0 && (
             <div style={{ background: "#F59E0B10", border: "1px solid #F59E0B30", borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: "#F59E0B", marginBottom: 8 }}>⚠ Missing Documents</div>
@@ -546,7 +663,6 @@ function EligibilityModal({ tender, profile, onClose }: { tender: TenderDetail; 
             </div>
           )}
 
-          {/* Recommendations */}
           {data.recommendations?.length > 0 && (
             <div style={{ background: "#3B82F610", border: "1px solid #3B82F630", borderRadius: 8, padding: "12px 14px" }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: "#3B82F6", marginBottom: 8 }}>💡 Recommendations</div>
@@ -574,7 +690,7 @@ function EligibilityModal({ tender, profile, onClose }: { tender: TenderDetail; 
 
 export default function TenderDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
-  const [modal, setModal] = useState<"winprob" | "competitors" | "market" | "eligibility" | null>(null);
+  const [modal, setModal] = useState<"winprob" | "competitors" | "market" | "eligibility" | "trackbid" | null>(null);
 
   const { data: rawData, isLoading, error, refetch } = useQuery({
     queryKey: ["tender", params.id],
@@ -718,6 +834,10 @@ export default function TenderDetailPage({ params }: { params: { id: string } })
               className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-md text-sm font-medium hover:bg-orange-700 transition-colors">
               📊 Market Price
             </button>
+            <button onClick={() => setModal("trackbid")}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-md text-sm font-medium hover:bg-gray-800 transition-colors">
+              📌 Track this Bid
+            </button>
             <Button variant="outline" onClick={() => router.back()}>Back to Tenders</Button>
           </div>
         </div>
@@ -737,10 +857,13 @@ export default function TenderDetailPage({ params }: { params: { id: string } })
       {modal === "eligibility" && (
         <EligibilityModal tender={tender} profile={profileData} onClose={() => setModal(null)} />
       )}
-      {(modal === "winprob" || modal === "competitors" || modal === "eligibility") && !companyId && (
+      {modal === "trackbid" && companyId && (
+        <TrackBidModal tender={tender} companyId={companyId} onClose={() => setModal(null)} />
+      )}
+      {(modal === "winprob" || modal === "competitors" || modal === "eligibility" || modal === "trackbid") && !companyId && (
         <Modal title="Profile Required" onClose={() => setModal(null)}>
           <p style={{ color: "#94A3B8", fontSize: 14 }}>
-            Please complete your <a href="/profile" style={{ color: "#3B82F6" }}>company profile</a> before using intelligence features.
+            Please complete your <a href="/profile" style={{ color: "#3B82F6" }}>company profile</a> before using this feature.
           </p>
         </Modal>
       )}
