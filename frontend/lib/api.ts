@@ -67,7 +67,27 @@ export const api = {
   delete: (endpoint: string) => request('DELETE', endpoint),
 
   bids: {
-    // ── Bid lifecycle (pipeline tracking) ────────────────────────────────────
+    // ── Bid pipeline / lifecycle ───────────────────────────────────────────────
+    stats: async () => {
+      const token = await getToken();
+      const res = await fetch(`${API_URL}/api/v1/bids/stats`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    transition: async (bidId: string, newStatus: string, reason?: string) => {
+      const token = await getToken();
+      const res = await fetch(`${API_URL}/api/v1/bids/${bidId}/transition`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_status: newStatus, reason }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    // ── Core CRUD ─────────────────────────────────────────────────────────────
+    get: (id: string) => request('GET', `/api/v1/bids/${id}`),
     list: async (params?: { search?: string; status?: string; page?: number; page_size?: number }) => {
       const token = await getToken();
       const qs = new URLSearchParams();
@@ -76,18 +96,12 @@ export const api = {
       if (params?.page) qs.set('page', String(params.page));
       if (params?.page_size) qs.set('page_size', String(params.page_size));
       const res = await fetch(`${API_URL}/api/v1/bids?${qs}`, {
-        headers: { Authorization: `Bearer ${await getToken()}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
-    stats: async () => {
-      const res = await fetch(`${API_URL}/api/v1/bids/stats`, {
-        headers: { Authorization: `Bearer ${await getToken()}` },
-      });
-      if (!res.ok) throw new Error(await res.text());
-      return res.json();
-    },
+    search: (params?: any) => request('GET', `/api/v1/bids${params ? '?' + new URLSearchParams(params) : ''}`),
     create: async (data: {
       tender_id: number;
       title: string;
@@ -98,48 +112,25 @@ export const api = {
       notes?: string;
       emd_amount?: number;
     }) => {
+      const token = await getToken();
       const res = await fetch(`${API_URL}/api/v1/bids`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${await getToken()}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
-    get: async (bidId: string) => {
-      const res = await fetch(`${API_URL}/api/v1/bids/${bidId}`, {
-        headers: { Authorization: `Bearer ${await getToken()}` },
-      });
-      if (!res.ok) throw new Error(await res.text());
-      return res.json();
-    },
-    update: async (bidId: string, data: Record<string, unknown>) => {
-      const res = await fetch(`${API_URL}/api/v1/bids/${bidId}`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${await getToken()}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      return res.json();
-    },
+    update: (id: string, data: any) => request('PATCH', `/api/v1/bids/${id}`, data),
     delete: async (bidId: string) => {
+      const token = await getToken();
       const res = await fetch(`${API_URL}/api/v1/bids/${bidId}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${await getToken()}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error(await res.text());
     },
-    transition: async (bidId: string, newStatus: string, reason?: string) => {
-      const res = await fetch(`${API_URL}/api/v1/bids/${bidId}/transition`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${await getToken()}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ new_status: newStatus, reason }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      return res.json();
-    },
-    // ── Legacy bid generation methods (kept for existing pages) ───────────────
-    search: (params?: any) => request('GET', `/api/v1/bids${params ? '?' + new URLSearchParams(params) : ''}`),
+    // ── Legacy methods (kept for existing pages) ───────────────────────────────
     updateStatus: (id: string, status: string) => request('POST', `/api/v1/bids/${id}/transition`, { new_status: status }),
     recordOutcome: (id: string, data: any) => request('POST', '/api/v1/outcomes', { bid_id: id, ...data }),
     generate: (id: string, lang?: string) => request('POST', `/api/v1/bids/${id}/generate`, { lang }),
@@ -171,11 +162,9 @@ export const api = {
   },
 
   companies: {
-    // GET — returns null (not 404) when no profile exists yet
+    get: (id: string) => request('GET', `/api/v1/company/${id}`),
     getProfile: () => request('GET', '/api/v1/company/profile').catch(() => null),
-    // POST — first-time profile creation
     createProfile: (data: any) => request('POST', '/api/v1/company/profile', data),
-    // PATCH — update existing profile
     updateProfile: (data: any) => request('PATCH', '/api/v1/company/profile', data),
   },
 
@@ -206,17 +195,43 @@ export const api = {
       request('PUT', `/api/v1/vault/documents/${id}`, data)
         .then((res: any) => res?.data ?? res),
     delete: (id: string) =>
-      request('DELETE', `/api/v1/vault/documents/${id}`)
+      request('DELETE', `/api/v1/vault/documents/${id}`),
+    deleteDocument: (id: string) =>
+      request('DELETE', `/api/v1/vault/documents/${id}`),
+    getCategories: () =>
+      request('GET', '/api/v1/vault/categories')
         .then((res: any) => res?.data ?? res),
-    download: async (id: string): Promise<string> => {
-      const token = await getToken();
-      const res = await fetch(`${API_URL}/api/v1/vault/${id}/download`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error(`API error: ${res.status}`);
-      const data = await res.json();
-      return data?.url ?? data?.data?.url ?? data;
-    },
+    download: (id: string) =>
+      request('GET', `/api/v1/vault/documents/${id}`)
+        .then((res: any) => res?.download_url ?? res?.data?.download_url ?? res),
+    getStats: () =>
+      request('GET', '/api/v1/vault/stats')
+        .then((res: any) => res?.data ?? res),
+  },
+
+  alerts: {
+    list: () => request('GET', '/api/v1/notifications').then((res: any) => res.data ?? []),
+    getActive: () => request('GET', '/api/v1/notifications?status=pending').then((res: any) => res.data ?? []),
+    markRead: (id: string) => request('PUT', `/api/v1/notifications/${id}`, { status: 'read' }),
+    markAllRead: () => Promise.resolve(),
+    delete: (id: string) => request('DELETE', `/api/v1/notifications/${id}`),
+    getPreferences: () => request('GET', '/api/v1/notifications/preferences'),
+    updatePreferences: (data: any) => request('PUT', '/api/v1/notifications/preferences', data),
+  },
+
+  profile: {
+    get: () => request('GET', '/api/v1/profile'),
+    update: (data: any) => request('PUT', '/api/v1/profile', data),
+    uploadAvatar: (data: any) => request('POST', '/api/v1/profile/avatar', data),
+  },
+
+  partner: {
+    getClients: () => request('GET', '/api/v1/ca/clients'),
+    getClient: (id: string) => request('GET', `/api/v1/ca/clients/${id}`),
+    addClient: (data: any) => request('POST', '/api/v1/ca/clients', data),
+    updateClient: (id: string, data: any) => request('PUT', `/api/v1/ca/clients/${id}`, data),
+    removeClient: (id: string) => request('DELETE', `/api/v1/ca/clients/${id}`),
+    getDashboard: () => request('GET', '/api/v1/ca/dashboard'),
   },
 
   intelligence: {
