@@ -14,12 +14,10 @@ from app.contexts.bid_lifecycle.models import (
 )
 
 
-# Request/Response Schemas
 class BidResponse(BaseModel):
-    """Bid response schema."""
     id: UUID
     company_id: UUID
-    tender_id: UUID
+    tender_id: int          # bigint in DB
     bid_number: str
     title: str
     description: str | None
@@ -28,7 +26,6 @@ class BidResponse(BaseModel):
     bid_security_amount: float | None
     submission_deadline: datetime
     submission_date: datetime | None
-    evaluation_start_date: datetime | None
     award_date: datetime | None
     status: BidStatus
     previous_status: BidStatus | None
@@ -44,21 +41,19 @@ class BidResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    # Computed properties
     can_edit: bool = False
     can_submit: bool = False
     can_withdraw: bool = False
     is_final_status: bool = False
-    days_since_submission: int | None
+    days_since_submission: int | None = None
     is_overdue_payment: bool = False
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
 
 
 class BidCreate(BaseModel):
-    """Bid creation schema."""
     company_id: UUID
-    tender_id: UUID
+    tender_id: int          # bigint in DB — NOT UUID
     bid_number: str
     title: str
     description: str | None = None
@@ -92,7 +87,6 @@ class BidCreate(BaseModel):
 
 
 class BidUpdate(BaseModel):
-    """Bid update schema."""
     title: str | None = None
     description: str | None = None
     bid_amount: float | None = None
@@ -111,17 +105,15 @@ class BidUpdate(BaseModel):
 
 
 class BidStatusTransition(BaseModel):
-    """Bid status transition schema."""
     new_status: BidStatus
     reason: str | None = None
     internal_notes: str | None = None
 
 
 class BidSearchFilters(BaseModel):
-    """Bid search filters."""
     search_query: str | None = None
     status: BidStatus | None = None
-    tender_id: UUID | None = None
+    tender_id: int | None = None     # bigint in DB — NOT UUID
     lead_bidder: str | None = None
     bid_manager: str | None = None
     min_amount: float | None = None
@@ -136,7 +128,6 @@ class BidSearchFilters(BaseModel):
 
 
 class BidListResponse(BaseModel):
-    """Bid list response."""
     bids: list[BidResponse]
     total: int
     page: int
@@ -146,7 +137,6 @@ class BidListResponse(BaseModel):
 
 
 class BidStatsResponse(BaseModel):
-    """Bid statistics response."""
     total_bids: int
     draft_bids: int
     reviewing_bids: int
@@ -165,9 +155,7 @@ class BidStatsResponse(BaseModel):
     wins_this_month: int
 
 
-# Outcome Schemas
 class BidOutcomeRecordResponse(BaseModel):
-    """Bid outcome record response."""
     id: UUID
     bid_id: UUID
     outcome: BidOutcome
@@ -199,7 +187,6 @@ class BidOutcomeRecordResponse(BaseModel):
 
 
 class BidOutcomeRecordCreate(BaseModel):
-    """Bid outcome record creation schema."""
     bid_id: UUID
     outcome: BidOutcome
     our_price: Decimal | None = None
@@ -224,7 +211,6 @@ class BidOutcomeRecordCreate(BaseModel):
 
 
 class BidOutcomeRecordUpdate(BaseModel):
-    """Bid outcome record update schema."""
     loss_reason: LossReason | None = None
     loss_reason_details: str | None = None
     winning_bidder: str | None = None
@@ -246,9 +232,7 @@ class BidOutcomeRecordUpdate(BaseModel):
     verified_by: str | None = None
 
 
-# Payment Schemas
 class BidPaymentResponse(BaseModel):
-    """Bid payment response."""
     id: UUID
     bid_id: UUID
     payment_type: str
@@ -267,7 +251,6 @@ class BidPaymentResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    # Computed properties
     is_overdue: bool = False
     days_overdue: int = 0
     outstanding_amount: float = 0.0
@@ -276,7 +259,6 @@ class BidPaymentResponse(BaseModel):
 
 
 class BidPaymentCreate(BaseModel):
-    """Bid payment creation schema."""
     bid_id: UUID
     payment_type: str
     payment_amount: float
@@ -295,7 +277,6 @@ class BidPaymentCreate(BaseModel):
 
 
 class BidPaymentUpdate(BaseModel):
-    """Bid payment update schema."""
     status: PaymentStatus | None = None
     paid_amount: float | None = None
     paid_date: datetime | None = None
@@ -305,9 +286,7 @@ class BidPaymentUpdate(BaseModel):
     notes: str | None = None
 
 
-# Follow-up Schemas
 class BidFollowUpResponse(BaseModel):
-    """Bid follow-up response."""
     id: UUID
     bid_id: UUID
     payment_id: UUID | None
@@ -326,7 +305,6 @@ class BidFollowUpResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    # Computed properties
     is_overdue: bool = False
     days_overdue: int = 0
 
@@ -334,7 +312,6 @@ class BidFollowUpResponse(BaseModel):
 
 
 class BidFollowUpCreate(BaseModel):
-    """Bid follow-up creation schema."""
     bid_id: UUID
     payment_id: UUID | None = None
     follow_up_type: str
@@ -348,7 +325,6 @@ class BidFollowUpCreate(BaseModel):
 
 
 class BidFollowUpUpdate(BaseModel):
-    """Bid follow-up update schema."""
     status: str | None = None
     completed_date: datetime | None = None
     response: str | None = None
@@ -356,9 +332,7 @@ class BidFollowUpUpdate(BaseModel):
     reminder_sent: bool | None = None
 
 
-# Analysis Schemas
 class LossAnalysisRequest(BaseModel):
-    """Loss analysis request."""
     bid_id: UUID
     include_competitor_analysis: bool = True
     include_pricing_analysis: bool = True
@@ -366,7 +340,6 @@ class LossAnalysisRequest(BaseModel):
 
 
 class LossAnalysisResponse(BaseModel):
-    """Loss analysis response."""
     bid_id: UUID
     analysis_summary: str
     key_factors: list[str]
@@ -379,39 +352,32 @@ class LossAnalysisResponse(BaseModel):
 
 
 class PaymentFollowUpRequest(BaseModel):
-    """Payment follow-up request."""
     days_overdue: int = 30
     include_overdue_only: bool = True
     send_notifications: bool = False
 
 
 class PaymentFollowUpResponse(BaseModel):
-    """Payment follow-up response."""
     payments_processed: int
     follow_ups_created: int
     notifications_sent: int
     processed_payment_ids: list[UUID]
 
 
-# Bulk Operations
 class BidBulkUpdate(BaseModel):
-    """Bulk bid update schema."""
     bid_ids: list[UUID]
     updates: BidUpdate
 
 
 class BidBulkStatusTransition(BaseModel):
-    """Bulk bid status transition schema."""
     bid_ids: list[UUID]
     new_status: BidStatus
     reason: str | None = None
     internal_notes: str | None = None
 
 
-# Export Schemas
 class BidExportRequest(BaseModel):
-    """Bid export request."""
-    format: str = "csv"  # csv, xlsx, json
+    format: str = "csv"
     filters: BidSearchFilters | None = None
     include_outcomes: bool = False
     include_payments: bool = False
@@ -419,7 +385,6 @@ class BidExportRequest(BaseModel):
 
 
 class BidExportResponse(BaseModel):
-    """Bid export response."""
     export_id: str
     format: str
     status: str
