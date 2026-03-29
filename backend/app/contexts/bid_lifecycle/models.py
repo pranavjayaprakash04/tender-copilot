@@ -58,12 +58,36 @@ class PaymentStatus(StrEnum):
     DISPUTED = "disputed"
 
 
+# Valid status transitions
+_TRANSITIONS: dict[str, list[str]] = {
+    BidStatus.DRAFT:                  [BidStatus.REVIEWING, BidStatus.WITHDRAWN, BidStatus.CANCELLED],
+    BidStatus.REVIEWING:              [BidStatus.SUBMITTED, BidStatus.DRAFT, BidStatus.WITHDRAWN, BidStatus.CANCELLED],
+    BidStatus.SUBMITTED:              [BidStatus.UNDER_EVALUATION, BidStatus.WITHDRAWN],
+    BidStatus.UNDER_EVALUATION:       [BidStatus.TECHNALLY_QUALIFIED, BidStatus.LOST, BidStatus.DISQUALIFIED],
+    BidStatus.TECHNALLY_QUALIFIED:    [BidStatus.FINANCIALLY_QUALIFIED, BidStatus.LOST],
+    BidStatus.FINANCIALLY_QUALIFIED:  [BidStatus.AWARDED, BidStatus.LOST],
+    BidStatus.AWARDED:                [BidStatus.WON, BidStatus.LOST],
+    BidStatus.ON_HOLD:                [BidStatus.DRAFT, BidStatus.CANCELLED],
+    # Terminal states — no further transitions
+    BidStatus.WON:          [],
+    BidStatus.LOST:         [],
+    BidStatus.WITHDRAWN:    [],
+    BidStatus.DISQUALIFIED: [],
+    BidStatus.CANCELLED:    [],
+}
+
+_FINAL_STATUSES = {
+    BidStatus.WON, BidStatus.LOST, BidStatus.WITHDRAWN,
+    BidStatus.DISQUALIFIED, BidStatus.CANCELLED,
+}
+
+
 class Bid(Base):
     __tablename__ = "bids"
 
     id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, primary_key=True, default=func.uuid_generate_v4())
     company_id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
-    tender_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)  # FK removed: tenders.id is bigint, not UUID
+    tender_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     bid_number: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -90,6 +114,39 @@ class Bid(Base):
     outcomes: Mapped[list[BidOutcomeRecord]] = relationship("BidOutcomeRecord", back_populates="bid", cascade="all, delete-orphan")
     payments: Mapped[list[BidPayment]] = relationship("BidPayment", back_populates="bid", cascade="all, delete-orphan")
     follow_ups: Mapped[list[BidFollowUp]] = relationship("BidFollowUp", back_populates="bid", cascade="all, delete-orphan")
+
+    # ── Helper methods ─────────────────────────────────────────────────────────
+
+    def can_transition_to(self, new_status: str) -> bool:
+        """Return True if this bid can move to new_status from its current status."""
+        allowed = _TRANSITIONS.get(str(self.status), [])
+        return new_status in allowed
+
+    @property
+    def can_edit(self) -> bool:
+        return str(self.status) in {BidStatus.DRAFT, BidStatus.REVIEWING, BidStatus.ON_HOLD}
+
+    @property
+    def can_submit(self) -> bool:
+        return str(self.status) == BidStatus.REVIEWING
+
+    @property
+    def can_withdraw(self) -> bool:
+        return str(self.status) in {BidStatus.DRAFT, BidStatus.REVIEWING, BidStatus.SUBMITTED}
+
+    @property
+    def is_final_status(self) -> bool:
+        return str(self.status) in _FINAL_STATUSES
+
+    @property
+    def days_since_submission(self) -> int | None:
+        if not self.submission_date:
+            return None
+        return (datetime.utcnow() - self.submission_date.replace(tzinfo=None)).days
+
+    @property
+    def is_overdue_payment(self) -> bool:
+        return False  # Evaluated via payments relationship if needed
 
 
 class BidOutcomeRecord(Base):
