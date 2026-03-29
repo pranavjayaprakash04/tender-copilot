@@ -1,224 +1,247 @@
-"use client";
-export const dynamic = "force-dynamic";
+import { createClient } from '@supabase/supabase-js';
 
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import api from "@/lib/api";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tender-copilot.onrender.com';
 
-type Alert = {
-  id: string;
-  title?: string;
-  subject?: string;
-  message: string;
-  notification_type?: string;
-  type?: string;
-  status: "pending" | "read" | "sent" | string;
-  created_at: string;
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+const getToken = async (): Promise<string | null> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token || null;
 };
 
-const TYPE_META: Record<string, { label: string; icon: string; color: string; bg: string }> = {
-  expiry:  { label: "Expiry",  icon: "⏰", color: "text-amber-700",  bg: "bg-amber-50 border-amber-200"   },
-  bid:     { label: "Bid",     icon: "📋", color: "text-blue-700",   bg: "bg-blue-50 border-blue-200"     },
-  tender:  { label: "Tender",  icon: "📢", color: "text-violet-700", bg: "bg-violet-50 border-violet-200" },
-  system:  { label: "System",  icon: "🔔", color: "text-gray-700",   bg: "bg-gray-50 border-gray-200"     },
+const request = async (method: string, endpoint: string, data?: any) => {
+  const token = await getToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`${API_URL}${endpoint}`, {
+    method,
+    headers,
+    ...(data ? { body: JSON.stringify(data) } : {}),
+  });
+
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
 };
 
-function getMeta(alert: Alert) {
-  const key = alert.notification_type ?? alert.type ?? "system";
-  if (key.includes("expiry") || key.includes("compliance")) return TYPE_META.expiry;
-  if (key.includes("bid"))    return TYPE_META.bid;
-  if (key.includes("tender")) return TYPE_META.tender;
-  return TYPE_META[key] ?? TYPE_META.system;
-}
+const uploadFile = async (endpoint: string, formData: FormData) => {
+  const token = await getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
 
-function getTitle(alert: Alert) {
-  return alert.title ?? alert.subject ?? "Notification";
-}
+  const res = await fetch(`${API_URL}${endpoint}`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
 
-function isUnread(alert: Alert) {
-  return alert.status === "pending" || alert.status === "sent";
-}
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+};
 
-function timeAgo(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
-}
+const mapTenderParams = (params?: Record<string, any>): Record<string, any> => {
+  if (!params) return {};
+  const mapped: Record<string, any> = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (value === '' || value === null || value === undefined) continue;
+    switch (key) {
+      case 'search':   mapped['search_query'] = value; break;
+      case 'deadline': mapped['deadline_days'] = value; break;
+      default:         mapped[key] = value;
+    }
+  }
+  return mapped;
+};
 
-export default function AlertsPage() {
-  const qc = useQueryClient();
-  const [filter, setFilter] = useState<"all" | "unread">("all");
+export const api = {
+  get: (endpoint: string) => request('GET', endpoint),
+  post: (endpoint: string, data: any) => request('POST', endpoint, data),
+  put: (endpoint: string, data: any) => request('PUT', endpoint, data),
+  delete: (endpoint: string) => request('DELETE', endpoint),
 
-  const { data: alerts = [], isLoading, isError } = useQuery<Alert[]>({
-    queryKey: ["alerts"],
-    queryFn: async () => {
-      const res = await api.alerts.list();
-      // Backend returns { notifications: [...], total, page, ... }
-      // Fall back to array if the shape ever changes
-      if (Array.isArray(res)) return res;
-      if (res && Array.isArray(res.notifications)) return res.notifications;
-      if (res && Array.isArray(res.items)) return res.items;
-      if (res && Array.isArray(res.data)) return res.data;
-      return [];
+  bids: {
+    // ── Bid pipeline / lifecycle ───────────────────────────────────────────────
+    stats: async () => {
+      const token = await getToken();
+      const res = await fetch(`${API_URL}/api/v1/bids/stats`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
     },
-    retry: 1,
-  });
-
-  const markRead = useMutation({
-    mutationFn: (id: string) => api.alerts.markRead(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["alerts"] }),
-  });
-
-  const markAllRead = useMutation({
-    mutationFn: async () => {
-      const unread = alerts.filter(isUnread);
-      await Promise.allSettled(unread.map((a) => api.alerts.markRead(a.id)));
+    transition: async (bidId: string, newStatus: string, reason?: string) => {
+      const token = await getToken();
+      const res = await fetch(`${API_URL}/api/v1/bids/${bidId}/transition`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_status: newStatus, reason }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["alerts"] }),
-  });
+    // ── Core CRUD ─────────────────────────────────────────────────────────────
+    get: (id: string) => request('GET', `/api/v1/bids/${id}`),
+    list: async (params?: { search?: string; status?: string; page?: number; page_size?: number }) => {
+      const token = await getToken();
+      const qs = new URLSearchParams();
+      if (params?.search) qs.set('search', params.search);
+      if (params?.status) qs.set('status', params.status);
+      if (params?.page) qs.set('page', String(params.page));
+      if (params?.page_size) qs.set('page_size', String(params.page_size));
+      const res = await fetch(`${API_URL}/api/v1/bids?${qs}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    search: (params?: any) => request('GET', `/api/v1/bids${params ? '?' + new URLSearchParams(params) : ''}`),
+    create: async (data: {
+      tender_id: number;
+      title: string;
+      bid_amount: number;
+      submission_deadline: string;
+      company_id: string;
+      bid_number: string;
+      notes?: string;
+      emd_amount?: number;
+    }) => {
+      const token = await getToken();
+      const res = await fetch(`${API_URL}/api/v1/bids`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    update: (id: string, data: any) => request('PATCH', `/api/v1/bids/${id}`, data),
+    delete: async (bidId: string) => {
+      const token = await getToken();
+      const res = await fetch(`${API_URL}/api/v1/bids/${bidId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(await res.text());
+    },
+    // ── Legacy methods (kept for existing pages) ───────────────────────────────
+    updateStatus: (id: string, status: string) => request('POST', `/api/v1/bids/${id}/transition`, { new_status: status }),
+    recordOutcome: (id: string, data: any) => request('POST', '/api/v1/outcomes', { bid_id: id, ...data }),
+    generate: (id: string, lang?: string) => request('POST', `/api/v1/bids/${id}/generate`, { lang }),
+    generateContent: (id: string, data?: any) => request('POST', `/api/v1/bids/${id}/generate`, data),
+    getStatus: (taskId: string) => request('GET', `/api/v1/bids/status/${taskId}`),
+    getAnalytics: (id: string) => request('GET', `/api/v1/bids/${id}/analytics`),
+    export: (id: string, format?: string) => request('GET', `/api/v1/bids/${id}/export${format ? '?format=' + format : ''}`),
+    getPreview: (id: string) => request('GET', `/api/v1/bids/${id}/preview`),
+    saveSection: (id: string, section: string, data: any) => request('PUT', `/api/v1/bids/${id}/sections/${section}`, data),
+  },
 
-  const deleteAlert = useMutation({
-    mutationFn: (id: string) => api.alerts.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["alerts"] }),
-  });
+  tenders: {
+    get: (id: string) => request('GET', `/api/v1/tenders/${id}`).then((res: any) => res.data ?? res),
+    list: (params?: any) => {
+      const mapped = mapTenderParams(params);
+      const qs = Object.keys(mapped).length ? '?' + new URLSearchParams(mapped) : '';
+      return request('GET', `/api/v1/tenders${qs}`).then((res: any) => res.tenders ?? res.data ?? res);
+    },
+    search: (params?: any) => {
+      const mapped = mapTenderParams(params);
+      const qs = Object.keys(mapped).length ? '?' + new URLSearchParams(mapped) : '';
+      return request('GET', `/api/v1/tenders${qs}`).then((res: any) => res.tenders ?? res.data ?? res);
+    },
+    create: (data: any) => request('POST', '/api/v1/tenders', data),
+    update: (id: string, data: any) => request('PUT', `/api/v1/tenders/${id}`, data),
+    delete: (id: string) => request('DELETE', `/api/v1/tenders/${id}`),
+    getMatches: (params?: any) => request('GET', `/api/v1/tenders/matches${params ? '?' + new URLSearchParams(params) : ''}`),
+    getSimilar: (id: string) => request('GET', `/api/v1/tenders/${id}/similar`),
+  },
 
-  const unreadCount = alerts.filter(isUnread).length;
-  const filtered = filter === "unread" ? alerts.filter(isUnread) : alerts;
+  companies: {
+    get: (id: string) => request('GET', `/api/v1/company/${id}`),
+    getProfile: () => request('GET', '/api/v1/company/profile').catch(() => null),
+    createProfile: (data: any) => request('POST', '/api/v1/company/profile', data),
+    updateProfile: (data: any) => request('PATCH', '/api/v1/company/profile', data),
+  },
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-3xl mx-auto px-4 py-8">
+  auth: {
+    login: (data: any) => request('POST', '/api/v1/auth/login', data),
+    register: (data: any) => request('POST', '/api/v1/auth/register', data),
+    me: () => request('GET', '/api/v1/auth/me'),
+    logout: () => request('POST', '/api/v1/auth/logout'),
+  },
 
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold text-gray-900">Alerts</h1>
-            {unreadCount > 0 && (
-              <span className="inline-flex items-center justify-center h-6 min-w-6 px-1.5 rounded-full bg-blue-600 text-white text-xs font-semibold">
-                {unreadCount}
-              </span>
-            )}
-          </div>
-          {unreadCount > 0 && (
-            <button
-              onClick={() => markAllRead.mutate()}
-              disabled={markAllRead.isPending}
-              className="text-sm font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50"
-            >
-              {markAllRead.isPending ? "Marking…" : "Mark all read"}
-            </button>
-          )}
-        </div>
+  compliance: {
+    list: (params?: any) =>
+      request('GET', `/api/v1/vault/documents${params ? '?' + new URLSearchParams(params) : ''}`)
+        .then((res: any) => res?.data ?? res),
+    get: (id: string) =>
+      request('GET', `/api/v1/vault/${id}`)
+        .then((res: any) => res?.data ?? res),
+    getDocuments: (params?: any) =>
+      request('GET', `/api/v1/vault/documents${params ? '?' + new URLSearchParams(params) : ''}`)
+        .then((res: any) => res?.data ?? res),
+    upload: (formData: FormData, docType: string = 'other') =>
+      uploadFile(`/api/v1/vault/upload?doc_type=${encodeURIComponent(docType)}`, formData)
+        .then((res: any) => res?.data ?? res),
+    uploadDocument: (formData: FormData, docType: string = 'other') =>
+      uploadFile(`/api/v1/vault/upload?doc_type=${encodeURIComponent(docType)}`, formData)
+        .then((res: any) => res?.data ?? res),
+    update: (id: string, data: any) =>
+      request('PUT', `/api/v1/vault/documents/${id}`, data)
+        .then((res: any) => res?.data ?? res),
+    delete: (id: string) =>
+      request('DELETE', `/api/v1/vault/documents/${id}`),
+    deleteDocument: (id: string) =>
+      request('DELETE', `/api/v1/vault/documents/${id}`),
+    getCategories: () =>
+      request('GET', '/api/v1/vault/categories')
+        .then((res: any) => res?.data ?? res),
+    download: (id: string) =>
+      request('GET', `/api/v1/vault/documents/${id}`)
+        .then((res: any) => res?.download_url ?? res?.data?.download_url ?? res),
+    getStats: () =>
+      request('GET', '/api/v1/vault/stats')
+        .then((res: any) => res?.data ?? res),
+  },
 
-        {/* Filter tabs */}
-        <div className="flex gap-1 mb-5 bg-white border border-gray-200 rounded-lg p-1 w-fit">
-          {(["all", "unread"] as const).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors capitalize ${
-                filter === f
-                  ? "bg-gray-900 text-white"
-                  : "text-gray-600 hover:text-gray-900"
-              }`}
-            >
-              {f}
-              {f === "unread" && unreadCount > 0 && ` (${unreadCount})`}
-            </button>
-          ))}
-        </div>
+  alerts: {
+    list: () => request('GET', '/api/v1/notifications').then((res: any) => res.data ?? []),
+    getActive: () => request('GET', '/api/v1/notifications?status=pending').then((res: any) => res.data ?? []),
+    markRead: (id: string) => request('PUT', `/api/v1/notifications/${id}`, { status: 'read' }),
+    markAllRead: () => Promise.resolve(),
+    delete: (id: string) => request('DELETE', `/api/v1/notifications/${id}`),
+    getPreferences: () => request('GET', '/api/v1/notifications/preferences'),
+    updatePreferences: (data: any) => request('PUT', '/api/v1/notifications/preferences', data),
+  },
 
-        {/* Content */}
-        {isLoading ? (
-          <div className="space-y-3">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="bg-white border border-gray-200 rounded-xl p-4 animate-pulse">
-                <div className="flex gap-3">
-                  <div className="w-9 h-9 rounded-full bg-gray-200" />
-                  <div className="flex-1 space-y-2">
-                    <div className="h-4 bg-gray-200 rounded w-1/3" />
-                    <div className="h-3 bg-gray-100 rounded w-2/3" />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : isError ? (
-          <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
-            <div className="text-3xl mb-3">⚠️</div>
-            <p className="text-gray-700 font-medium">Couldn't load alerts</p>
-            <p className="text-gray-500 text-sm mt-1">Check your connection and try again.</p>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="bg-white border border-gray-200 rounded-xl p-12 text-center">
-            <div className="text-4xl mb-4">🔔</div>
-            <p className="text-gray-700 font-semibold text-lg">
-              {filter === "unread" ? "No unread alerts" : "No alerts yet"}
-            </p>
-            <p className="text-gray-400 text-sm mt-1">
-              {filter === "unread"
-                ? "You're all caught up."
-                : "Alerts for expiring documents, bid deadlines, and new tenders will appear here."}
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {filtered.map((alert) => {
-              const meta = getMeta(alert);
-              const unread = isUnread(alert);
-              return (
-                <div
-                  key={alert.id}
-                  className={`relative bg-white border rounded-xl p-4 transition-all group ${
-                    unread ? "border-blue-200 shadow-sm shadow-blue-50" : "border-gray-200"
-                  }`}
-                >
-                  {unread && (
-                    <span className="absolute top-4 right-4 w-2 h-2 rounded-full bg-blue-500" />
-                  )}
-                  <div className="flex gap-3 pr-6">
-                    <div className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-base border ${meta.bg}`}>
-                      {meta.icon}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start gap-2 flex-wrap">
-                        <p className={`text-sm font-semibold ${unread ? "text-gray-900" : "text-gray-700"}`}>
-                          {getTitle(alert)}
-                        </p>
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${meta.bg} ${meta.color}`}>
-                          {meta.label}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">{alert.message}</p>
-                      <div className="flex items-center gap-3 mt-2">
-                        <span className="text-xs text-gray-400">{timeAgo(alert.created_at)}</span>
-                        {unread && (
-                          <button
-                            onClick={() => markRead.mutate(alert.id)}
-                            className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-                          >
-                            Mark read
-                          </button>
-                        )}
-                        <button
-                          onClick={() => deleteAlert.mutate(alert.id)}
-                          className="text-xs text-gray-400 hover:text-red-500 font-medium opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          Dismiss
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+  profile: {
+    get: () => request('GET', '/api/v1/profile'),
+    update: (data: any) => request('PUT', '/api/v1/profile', data),
+    uploadAvatar: (data: any) => request('POST', '/api/v1/profile/avatar', data),
+  },
+
+  partner: {
+    getClients: () => request('GET', '/api/v1/ca/clients'),
+    getClient: (id: string) => request('GET', `/api/v1/ca/clients/${id}`),
+    addClient: (data: any) => request('POST', '/api/v1/ca/clients', data),
+    updateClient: (id: string, data: any) => request('PUT', `/api/v1/ca/clients/${id}`, data),
+    removeClient: (id: string) => request('DELETE', `/api/v1/ca/clients/${id}`),
+    getDashboard: () => request('GET', '/api/v1/ca/dashboard'),
+  },
+
+  intelligence: {
+    getWinProbability: (data: any) =>
+      request('POST', '/api/v1/intelligence/bid/win-probability', data),
+    getCompetitorAnalysis: (data: any) =>
+      request('POST', '/api/v1/intelligence/bid/analyze-competitors', data),
+    getMarketPrice: (category: string) =>
+      request('GET', `/api/v1/intelligence/bid/market-price/${encodeURIComponent(category)}`),
+  },
+};
+
+export default api;
