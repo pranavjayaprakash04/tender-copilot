@@ -79,6 +79,26 @@ interface EligibilityResponse {
   summary: string;
 }
 
+interface ChecklistItem {
+  id: string;
+  name: string;
+  description: string;
+  required: boolean;
+  status: "have" | "missing" | "unknown";
+  in_vault: boolean;
+  notes?: string | null;
+}
+
+interface DocumentChecklistResponse {
+  tender_id: string;
+  checklist: ChecklistItem[];
+  total: number;
+  have_count: number;
+  missing_count: number;
+  readiness_score: number;
+  summary: string;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const fmt = (n: number) =>
@@ -146,7 +166,6 @@ function TrackBidModal({ tender, companyId, onClose }: { tender: TenderDetail; c
       onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
         onClick={e => e.stopPropagation()}>
-        {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
@@ -156,8 +175,6 @@ function TrackBidModal({ tender, companyId, onClose }: { tender: TenderDetail; c
             <button onClick={onClose} className="text-white/70 hover:text-white text-xl leading-none">✕</button>
           </div>
         </div>
-
-        {/* Form */}
         <div className="px-6 py-5 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -174,7 +191,6 @@ function TrackBidModal({ tender, companyId, onClose }: { tender: TenderDetail; c
               <p className="text-xs text-gray-400 mt-1">Estimated value: {fmt(tender.estimated_value)}</p>
             )}
           </div>
-
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">EMD Amount (₹)</label>
             <input
@@ -185,7 +201,6 @@ function TrackBidModal({ tender, companyId, onClose }: { tender: TenderDetail; c
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
             <textarea
@@ -196,21 +211,17 @@ function TrackBidModal({ tender, companyId, onClose }: { tender: TenderDetail; c
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
             />
           </div>
-
           {mutation.isError && (
             <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-3 py-2">
               {(mutation.error as Error).message}
             </div>
           )}
-
           {mutation.isSuccess && (
             <div className="bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg px-3 py-2">
               ✓ Bid tracked! View it in your <a href="/bids" className="underline font-medium">Bid Pipeline</a>.
             </div>
           )}
         </div>
-
-        {/* Actions */}
         <div className="px-6 pb-5 flex gap-3">
           <button onClick={onClose}
             className="flex-1 border border-gray-200 text-gray-600 rounded-lg py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors">
@@ -314,7 +325,6 @@ function WinProbabilityModal({ tender, companyId, onClose }: { tender: TenderDet
               )}
             </div>
           </div>
-
           {data.recommended_range && (
             <div className="i-range">
               <div style={{ fontSize: 10, color: "#475569", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 8 }}>Recommended Bid Range</div>
@@ -331,7 +341,6 @@ function WinProbabilityModal({ tender, companyId, onClose }: { tender: TenderDet
               </div>
             </div>
           )}
-
           {data.factors?.length > 0 && (
             <div className="i-factors">
               <div style={{ fontSize: 11, fontWeight: 600, color: "#94A3B8", marginBottom: 10 }}>Key Factors</div>
@@ -686,11 +695,176 @@ function EligibilityModal({ tender, profile, onClose }: { tender: TenderDetail; 
   );
 }
 
+// ─── Document Checklist Modal ─────────────────────────────────────────────────
+
+function DocumentChecklistModal({ tender, onClose }: { tender: TenderDetail; onClose: () => void }) {
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
+
+  const mutation = useMutation<DocumentChecklistResponse, Error>({
+    mutationFn: () =>
+      api.post("/api/v1/intelligence/document-checklist", {
+        tender_id: tender.id,
+        tender_title: tender.title,
+        tender_category: tender.category,
+        estimated_value: tender.estimated_value,
+        tender_location: tender.state,
+        description: tender.description,
+        lang: "en",
+      }),
+    onSuccess: (data) => {
+      // Pre-check items that are already in vault
+      const initial: Record<string, boolean> = {};
+      data.checklist.forEach((item) => {
+        if (item.status === "have" || item.in_vault) {
+          initial[item.id] = true;
+        }
+      });
+      setChecked(initial);
+    },
+  });
+
+  const data = mutation.data;
+
+  const toggleCheck = (id: string) => {
+    setChecked((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const checkedCount = Object.values(checked).filter(Boolean).length;
+  const total = data?.checklist.length ?? 0;
+  const readiness = total > 0 ? Math.round((checkedCount / total) * 100) : 0;
+
+  const readinessColor = readiness >= 80 ? "#10B981" : readiness >= 50 ? "#F59E0B" : "#EF4444";
+
+  return (
+    <Modal title="📋 Document Checklist" onClose={onClose}>
+      <style>{`@keyframes ispin{to{transform:rotate(360deg)}}`}</style>
+
+      {!data && !mutation.isPending && (
+        <>
+          <p style={{ color: "#94A3B8", fontSize: 13, marginBottom: 16 }}>
+            AI will generate a required document checklist for this tender and match against your Vault.
+          </p>
+          <button
+            onClick={() => mutation.mutate()}
+            style={{ padding: "10px 20px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none", background: "#6366F1", color: "#fff" }}
+          >
+            Generate Checklist
+          </button>
+        </>
+      )}
+
+      {mutation.isPending && (
+        <div style={{ textAlign: "center", padding: "32px 0", color: "#64748B", fontSize: 13 }}>
+          <div style={{ width: 32, height: 32, border: "3px solid #1E2537", borderTopColor: "#6366F1", borderRadius: "50%", animation: "ispin .7s linear infinite", margin: "0 auto 12px" }} />
+          Generating checklist…
+        </div>
+      )}
+
+      {mutation.isError && (
+        <div style={{ background: "#EF444420", border: "1px solid #EF444440", borderRadius: 6, padding: "10px 14px", color: "#FCA5A5", fontSize: 12, marginBottom: 12 }}>
+          Failed to generate checklist. Please try again.
+          <button onClick={() => mutation.mutate()} style={{ marginLeft: 8, background: "none", border: "none", color: "#3B82F6", cursor: "pointer", fontSize: 12 }}>Retry</button>
+        </div>
+      )}
+
+      {data && (
+        <>
+          {/* Readiness score */}
+          <div style={{ background: readinessColor + "18", border: `1px solid ${readinessColor}40`, borderRadius: 10, padding: "14px 18px", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: readinessColor }}>Readiness Score</div>
+              <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 3 }}>{data.summary}</div>
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 28, fontWeight: 800, color: readinessColor, fontFamily: "monospace" }}>{readiness}%</div>
+              <div style={{ fontSize: 10, color: "#64748B" }}>{checkedCount}/{total} docs</div>
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          <div style={{ height: 6, background: "#1E2537", borderRadius: 3, marginBottom: 16 }}>
+            <div style={{ height: 6, borderRadius: 3, background: readinessColor, width: `${readiness}%`, transition: "width 0.5s ease" }} />
+          </div>
+
+          {/* Stats row */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+            <div style={{ flex: 1, background: "#10B98115", border: "1px solid #10B98130", borderRadius: 8, padding: "10px", textAlign: "center" }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: "#10B981", fontFamily: "monospace" }}>{checkedCount}</div>
+              <div style={{ fontSize: 10, color: "#64748B", textTransform: "uppercase", letterSpacing: ".5px" }}>Have</div>
+            </div>
+            <div style={{ flex: 1, background: "#EF444415", border: "1px solid #EF444430", borderRadius: 8, padding: "10px", textAlign: "center" }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: "#EF4444", fontFamily: "monospace" }}>{total - checkedCount}</div>
+              <div style={{ fontSize: 10, color: "#64748B", textTransform: "uppercase", letterSpacing: ".5px" }}>Missing</div>
+            </div>
+            <div style={{ flex: 1, background: "#3B82F615", border: "1px solid #3B82F630", borderRadius: 8, padding: "10px", textAlign: "center" }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: "#3B82F6", fontFamily: "monospace" }}>{total}</div>
+              <div style={{ fontSize: 10, color: "#64748B", textTransform: "uppercase", letterSpacing: ".5px" }}>Total</div>
+            </div>
+          </div>
+
+          {/* Checklist items */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {data.checklist.map((item) => {
+              const isChecked = !!checked[item.id];
+              const borderColor = isChecked ? "#10B98140" : item.required ? "#EF444430" : "#1E2537";
+              const bgColor = isChecked ? "#10B98108" : "#1A1F2E";
+
+              return (
+                <div
+                  key={item.id}
+                  style={{ background: bgColor, border: `1px solid ${borderColor}`, borderRadius: 8, padding: "12px 14px", cursor: "pointer", transition: "all 0.15s" }}
+                  onClick={() => toggleCheck(item.id)}
+                >
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                    {/* Checkbox */}
+                    <div style={{
+                      width: 18, height: 18, borderRadius: 4, border: `2px solid ${isChecked ? "#10B981" : "#475569"}`,
+                      background: isChecked ? "#10B981" : "transparent", display: "flex", alignItems: "center",
+                      justifyContent: "center", flexShrink: 0, marginTop: 1, transition: "all 0.15s"
+                    }}>
+                      {isChecked && <span style={{ color: "#fff", fontSize: 11, fontWeight: 700 }}>✓</span>}
+                    </div>
+
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: isChecked ? "#10B981" : "#E2E8F0" }}>
+                          {item.name}
+                        </span>
+                        {item.required && (
+                          <span style={{ fontSize: 9, fontWeight: 700, color: "#EF4444", textTransform: "uppercase", letterSpacing: ".5px" }}>Required</span>
+                        )}
+                        {item.in_vault && (
+                          <span style={{ fontSize: 9, fontWeight: 700, color: "#10B981", textTransform: "uppercase", letterSpacing: ".5px", background: "#10B98115", padding: "1px 6px", borderRadius: 10 }}>In Vault</span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 11, color: "#64748B", lineHeight: 1.4 }}>{item.description}</div>
+                      {item.notes && (
+                        <div style={{ fontSize: 10, color: "#F59E0B", marginTop: 4 }}>💡 {item.notes}</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <button
+            onClick={() => mutation.mutate()}
+            style={{ marginTop: 16, padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1px solid #1E2537", background: "transparent", color: "#94A3B8" }}
+          >
+            Regenerate
+          </button>
+        </>
+      )}
+    </Modal>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function TenderDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
-  const [modal, setModal] = useState<"winprob" | "competitors" | "market" | "eligibility" | "trackbid" | null>(null);
+  const [modal, setModal] = useState<"winprob" | "competitors" | "market" | "eligibility" | "trackbid" | "checklist" | null>(null);
 
   const { data: rawData, isLoading, error, refetch } = useQuery({
     queryKey: ["tender", params.id],
@@ -834,6 +1008,10 @@ export default function TenderDetailPage({ params }: { params: { id: string } })
               className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-md text-sm font-medium hover:bg-orange-700 transition-colors">
               📊 Market Price
             </button>
+            <button onClick={() => setModal("checklist")}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-md text-sm font-medium hover:bg-violet-700 transition-colors">
+              📋 Doc Checklist
+            </button>
             <button onClick={() => setModal("trackbid")}
               className="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-md text-sm font-medium hover:bg-gray-800 transition-colors">
               📌 Track this Bid
@@ -856,6 +1034,9 @@ export default function TenderDetailPage({ params }: { params: { id: string } })
       )}
       {modal === "eligibility" && (
         <EligibilityModal tender={tender} profile={profileData} onClose={() => setModal(null)} />
+      )}
+      {modal === "checklist" && (
+        <DocumentChecklistModal tender={tender} onClose={() => setModal(null)} />
       )}
       {modal === "trackbid" && companyId && (
         <TrackBidModal tender={tender} companyId={companyId} onClose={() => setModal(null)} />
