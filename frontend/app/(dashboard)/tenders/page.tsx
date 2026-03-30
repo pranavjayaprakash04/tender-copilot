@@ -107,7 +107,7 @@ function calculateMatchScore(tender: Tender, profile: CompanyProfile | null): nu
     }
   }
 
-  // Location match (30 pts) — only score the tender's location field, not procuring_entity
+  // Location match (30 pts)
   const tenderState = resolveState(tender.state);
   const companyState = resolveState(profile.location);
   if (tenderState && companyState) {
@@ -116,7 +116,6 @@ function calculateMatchScore(tender: Tender, profile: CompanyProfile | null): nu
     } else if (tenderState.includes(companyState) || companyState.includes(tenderState)) {
       score += 15;
     }
-    // 0 for different state
   }
 
   // Capabilities keyword match (20 pts)
@@ -204,7 +203,7 @@ export default function TendersPage() {
     staleTime: 60_000,
   });
 
-  const { data: profileRaw } = useQuery({
+  const { data: profileRaw, isLoading: profileLoading } = useQuery({
     queryKey: ["company-profile"],
     queryFn: () => api.companies.getProfile(),
     staleTime: 300_000,
@@ -230,6 +229,25 @@ export default function TendersPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-6">Tenders</h1>
+
+        {/* Profile setup banner */}
+        {!profile && !profileLoading && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-amber-500 text-xl">⚠️</span>
+              <div>
+                <p className="text-sm font-semibold text-amber-800">Complete your company profile</p>
+                <p className="text-xs text-amber-600">Set up your profile to enable bid matching, Bid Intelligence, and Alerts.</p>
+              </div>
+            </div>
+            <a
+              href="/profile"
+              className="px-4 py-2 bg-amber-500 text-white text-sm font-medium rounded-lg hover:bg-amber-600 transition-colors whitespace-nowrap"
+            >
+              Set up profile →
+            </a>
+          </div>
+        )}
 
         {/* Filters */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
