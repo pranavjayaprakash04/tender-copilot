@@ -2,14 +2,15 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+
 const navLinks = [
   { href: "/tenders", label: "Tenders" },
   { href: "/bids", label: "Bids" },
-  { href: "/intelligence", label: "Intelligence" },
   { href: "/vault", label: "Vault" },
   { href: "/alerts", label: "Alerts" },
   { href: "/profile", label: "Profile" },
 ];
+
 export default function DashboardLayout({
   children,
 }: {
