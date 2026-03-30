@@ -1,165 +1,73 @@
-from __future__ import annotations
-
-import json
-from datetime import datetime
-from typing import Any
 from uuid import UUID
-
-import structlog
-
-from app.contexts.tender_intelligence.repository import (
-    DocumentChunkRepository,
-    TenderDocumentRepository,
-)
-from app.contexts.tender_intelligence.schemas import (
-    ChecklistItem,
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.contexts.user_management.schemas import UserResponse
+from app.database import get_async_session as get_session
+from app.dependencies import get_current_company_id, get_current_user_id
+from app.infrastructure.groq_client import GroqClient
+from .repository import DocumentChunkRepository, TenderDocumentRepository
+from .schemas import (
+    ClauseExtractionRequest,
+    ClauseExtractionResponse,
     DocumentChecklistRequest,
     DocumentChecklistResponse,
+    RiskDetectionRequest,
+    RiskDetectionResponse,
+    TenderExplainRequest,
     TenderExplainResponse,
 )
-from app.infrastructure.groq_client import GroqClient, GroqModel
-from app.shared.exceptions import NotFoundException
-from app.shared.lang_context import LangContext
+from .service import TenderIntelligenceService
 
-logger = structlog.get_logger()
+router = APIRouter(prefix="/intelligence", tags=["tender_intelligence"])
 
 
-class TenderIntelligenceService:
-    def __init__(
-        self,
-        document_repo: TenderDocumentRepository,
-        chunk_repo: DocumentChunkRepository,
-        groq_client: GroqClient,
-    ) -> None:
-        self._document_repo = document_repo
-        self._chunk_repo = chunk_repo
-        self._groq = groq_client
+def get_service(session: AsyncSession = Depends(get_session)) -> TenderIntelligenceService:
+    return TenderIntelligenceService(
+        document_repo=TenderDocumentRepository(session),
+        chunk_repo=DocumentChunkRepository(session),
+        groq_client=GroqClient(),
+    )
 
-    async def explain_tender(self, tender_id: UUID, lang: str, company_id: UUID) -> TenderExplainResponse:
-        document = await self._document_repo.get_by_tender_id(tender_id, company_id)
-        if not document:
-            raise NotFoundException(f"Tender document {tender_id} not found")
-        chunks = await self._chunk_repo.get_by_document(document.id, company_id)
-        if not chunks:
-            raise NotFoundException(f"No chunks found for document {document.id}")
-        combined_text = "\n\n".join(chunk.chunk_text for chunk in chunks[:5])
-        explanation = await self._generate_explanation_with_ai(combined_text, lang)
-        return TenderExplainResponse(
-            tender_id=tender_id,
-            summary=explanation["summary"],
-            key_requirements=explanation["key_requirements"],
-            eligibility=explanation["eligibility"],
-            red_flags=explanation["red_flags"],
-            lang=lang,
-        )
 
-    async def _generate_explanation_with_ai(self, text: str, lang: str) -> dict[str, Any]:
-        lang_context = LangContext.from_lang(lang)
-        system_prompt = "You are a tender expert. Explain tender documents in simple, clear language."
-        user_prompt = f"Explain this tender document in {lang}:\n{text[:5000]}\nReturn as JSON with summary, key_requirements, eligibility, and red_flags arrays."
-        try:
-            await self._groq.complete(
-                model=GroqModel.PRIMARY, system_prompt=system_prompt, user_prompt=user_prompt,
-                lang=lang_context, trace_id=f"explain-tender-{datetime.utcnow().isoformat()}", temperature=0.3,
-            )
-            explanation = {
-                "summary": "This tender seeks qualified vendors for procurement services.",
-                "key_requirements": ["Minimum 3 years experience", "Valid certifications required", "Financial stability proof"],
-                "eligibility": ["Registered MSME", "GST compliant", "Local presence required"],
-                "red_flags": ["Very short timeline", "Heavy penalty clauses", "Complex documentation"],
-            }
-            logger.info("tender_explained", lang=lang)
-            return explanation
-        except Exception as e:
-            logger.error("tender_explanation_failed", error=str(e))
-            raise
+@router.post("/explain", response_model=TenderExplainResponse)
+async def explain_tender(
+    request: TenderExplainRequest,
+    _current_user: UserResponse = Depends(get_current_user_id),
+    company_id: UUID = Depends(get_current_company_id),
+    service: TenderIntelligenceService = Depends(get_service),
+) -> TenderExplainResponse:
+    """Explain tender in natural language."""
+    return await service.explain_tender(request.tender_id, request.lang, company_id)
 
-    async def generate_document_checklist(self, request: DocumentChecklistRequest, company_id: UUID) -> DocumentChecklistResponse:
-        vault_doc_names: list[str] = []
-        try:
-            vault_docs = await self._document_repo.get_vault_documents(company_id)
-            vault_doc_names = [doc.name.lower() for doc in vault_docs] if vault_docs else []
-        except Exception:
-            vault_doc_names = []
 
-        checklist_items = await self._generate_checklist_with_ai(request, vault_doc_names)
-        have_count = sum(1 for item in checklist_items if item.status == "have")
-        missing_count = sum(1 for item in checklist_items if item.status == "missing")
-        total = len(checklist_items)
-        readiness_score = int((have_count / total) * 100) if total > 0 else 0
+@router.post("/extract-clauses", response_model=ClauseExtractionResponse)
+async def extract_clauses(
+    request: ClauseExtractionRequest,
+    _current_user: UserResponse = Depends(get_current_user_id),
+    company_id: UUID = Depends(get_current_company_id),
+    service: TenderIntelligenceService = Depends(get_service),
+) -> ClauseExtractionResponse:
+    """Extract key clauses from tender document."""
+    return await service.extract_clauses(request.tender_id, request.lang, company_id)
 
-        if readiness_score >= 80:
-            summary = "You are well prepared for this tender."
-        elif readiness_score >= 50:
-            summary = "You have most documents ready. A few critical ones are missing."
-        else:
-            summary = "Several required documents are missing. Start gathering them early."
 
-        return DocumentChecklistResponse(
-            tender_id=request.tender_id, checklist=checklist_items, total=total,
-            have_count=have_count, missing_count=missing_count, readiness_score=readiness_score, summary=summary,
-        )
+@router.post("/detect-risks", response_model=RiskDetectionResponse)
+async def detect_risks(
+    request: RiskDetectionRequest,
+    _current_user: UserResponse = Depends(get_current_user_id),
+    company_id: UUID = Depends(get_current_company_id),
+    service: TenderIntelligenceService = Depends(get_service),
+) -> RiskDetectionResponse:
+    """Detect risks and compliance issues in tender."""
+    return await service.detect_risks(request.tender_id, request.lang, company_id)
 
-    async def _generate_checklist_with_ai(self, request: DocumentChecklistRequest, vault_doc_names: list[str]) -> list[ChecklistItem]:
-        system_prompt = (
-            "You are an Indian government tender expert. "
-            "Generate a precise list of documents required to bid on a tender. "
-            "Return ONLY valid JSON, no explanation, no markdown."
-        )
-        user_prompt = f"""
-Tender: {request.tender_title}
-Category: {request.tender_category or "General"}
-Estimated Value: {request.estimated_value or "Not specified"}
-Location: {request.tender_location or "India"}
-Description: {(request.description or "")[:1000]}
-Documents already in vault: {", ".join(vault_doc_names) if vault_doc_names else "None"}
 
-Generate a checklist of 8-12 documents typically required for this type of tender in India.
-Return ONLY this JSON structure:
-{{
-  "checklist": [
-    {{"id": "doc_1", "name": "GST Registration Certificate", "description": "Valid GST registration certificate", "required": true, "in_vault": false, "status": "missing", "notes": null}}
-  ]
-}}
-"""
-        try:
-            response = await self._groq.complete(
-                model=GroqModel.PRIMARY, system_prompt=system_prompt, user_prompt=user_prompt,
-                lang=LangContext.from_lang(request.lang),
-                trace_id=f"checklist-{request.tender_id}-{datetime.utcnow().isoformat()}", temperature=0.2,
-            )
-            raw = response.strip()
-            if raw.startswith("```"):
-                raw = raw.split("```")[1]
-                if raw.startswith("json"):
-                    raw = raw[4:]
-            parsed = json.loads(raw)
-            items = parsed.get("checklist", [])
-            return [
-                ChecklistItem(
-                    id=item.get("id", f"doc_{i}"), name=item.get("name", "Unknown Document"),
-                    description=item.get("description", ""), required=item.get("required", True),
-                    in_vault=item.get("in_vault", False), status=item.get("status", "missing"), notes=item.get("notes"),
-                )
-                for i, item in enumerate(items)
-            ]
-        except Exception as e:
-            logger.error("checklist_generation_failed", error=str(e))
-            defaults = [
-                ("GST Registration Certificate", "Valid GST registration certificate"),
-                ("PAN Card", "Company PAN card copy"),
-                ("Udyam / MSME Certificate", "MSME registration certificate if applicable"),
-                ("Audited Balance Sheet", "Last 3 years audited financial statements"),
-                ("Bank Solvency Certificate", "Certificate from bank confirming solvency"),
-                ("Experience Certificate", "Work experience certificates from previous clients"),
-                ("EMD / Bid Security", "Earnest money deposit document"),
-                ("Power of Attorney", "Authorisation letter for signatory"),
-            ]
-            return [
-                ChecklistItem(
-                    id=f"doc_{i}", name=name, description=desc, required=True,
-                    in_vault=any(name.lower()[:6] in v for v in vault_doc_names),
-                    status="have" if any(name.lower()[:6] in v for v in vault_doc_names) else "missing", notes=None,
-                )
-                for i, (name, desc) in enumerate(defaults)
-            ]
+@router.post("/document-checklist", response_model=DocumentChecklistResponse)
+async def document_checklist(
+    request: DocumentChecklistRequest,
+    _current_user: UserResponse = Depends(get_current_user_id),
+    company_id: UUID = Depends(get_current_company_id),
+    service: TenderIntelligenceService = Depends(get_service),
+) -> DocumentChecklistResponse:
+    """Generate document checklist for a tender and match against vault."""
+    return await service.generate_document_checklist(request, company_id)
