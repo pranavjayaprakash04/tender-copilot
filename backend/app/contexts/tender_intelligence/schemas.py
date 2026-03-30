@@ -1,22 +1,15 @@
-from datetime import datetime
+from __future__ import annotations
+
+from typing import Literal
 from uuid import UUID
+from pydantic import BaseModel
 
-from pydantic import BaseModel, ConfigDict, field_validator
 
+# ─── Existing Schemas ──────────────────────────────────────────────────────────
 
 class TenderExplainRequest(BaseModel):
     tender_id: UUID
     lang: str = "en"
-
-    model_config = ConfigDict(extra="forbid")
-
-    @field_validator("lang")
-    @classmethod
-    def validate_lang(cls, v: str) -> str:
-        allowed = {"en", "ta"}
-        if v not in allowed:
-            raise ValueError(f"lang must be one of {allowed}")
-        return v
 
 
 class TenderExplainResponse(BaseModel):
@@ -27,59 +20,57 @@ class TenderExplainResponse(BaseModel):
     red_flags: list[str]
     lang: str
 
-    model_config = ConfigDict(from_attributes=True)
-
 
 class ClauseExtractionRequest(BaseModel):
     tender_id: UUID
     lang: str = "en"
 
-    model_config = ConfigDict(extra="forbid")
-
-    @field_validator("lang")
-    @classmethod
-    def validate_lang(cls, v: str) -> str:
-        allowed = {"en", "ta"}
-        if v not in allowed:
-            raise ValueError(f"lang must be one of {allowed}")
-        return v
-
 
 class ClauseExtractionResponse(BaseModel):
     tender_id: UUID
     clauses: list[dict]
-    extracted_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
+    lang: str
 
 
 class RiskDetectionRequest(BaseModel):
     tender_id: UUID
     lang: str = "en"
 
-    model_config = ConfigDict(extra="forbid")
-
-    @field_validator("lang")
-    @classmethod
-    def validate_lang(cls, v: str) -> str:
-        allowed = {"en", "ta"}
-        if v not in allowed:
-            raise ValueError(f"lang must be one of {allowed}")
-        return v
-
 
 class RiskDetectionResponse(BaseModel):
     tender_id: UUID
-    risk_level: str
     risks: list[dict]
+    risk_score: int
     lang: str
 
-    model_config = ConfigDict(from_attributes=True)
 
-    @field_validator("risk_level")
-    @classmethod
-    def validate_risk_level(cls, v: str) -> str:
-        allowed = {"low", "medium", "high", "critical"}
-        if v not in allowed:
-            raise ValueError(f"risk_level must be one of {allowed}")
-        return v
+# ─── Document Checklist Schemas ────────────────────────────────────────────────
+
+class ChecklistItem(BaseModel):
+    id: str
+    name: str
+    description: str
+    required: bool
+    status: Literal["have", "missing", "unknown"]
+    in_vault: bool
+    notes: str | None = None
+
+
+class DocumentChecklistRequest(BaseModel):
+    tender_id: str
+    tender_title: str
+    tender_category: str | None = None
+    estimated_value: float | None = None
+    tender_location: str | None = None
+    description: str | None = None
+    lang: str = "en"
+
+
+class DocumentChecklistResponse(BaseModel):
+    tender_id: str
+    checklist: list[ChecklistItem]
+    total: int
+    have_count: int
+    missing_count: int
+    readiness_score: int
+    summary: str
