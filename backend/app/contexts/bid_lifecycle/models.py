@@ -42,6 +42,19 @@ class BidOutcome(StrEnum):
     CANCELLED = "cancelled"
 
 
+class LossReason(StrEnum):
+    PRICE_TOO_HIGH = "price_too_high"
+    TECHNICAL_SHORTFALL = "technical_shortfall"
+    EXPERIENCE_INSUFFICIENT = "experience_insufficient"
+    COMPLIANCE_FAILURE = "compliance_failure"
+    LATE_SUBMISSION = "late_submission"
+    DISQUALIFIED = "disqualified"
+    BETTER_COMPETITOR = "better_competitor"
+    SCOPE_MISMATCH = "scope_mismatch"
+    FINANCIAL_CAPACITY = "financial_capacity"
+    OTHER = "other"
+
+
 class PaymentStatus(StrEnum):
     PENDING = "pending"
     PARTIALLY_PAID = "partially_paid"
