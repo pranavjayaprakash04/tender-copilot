@@ -29,13 +29,13 @@ class TenderIntelligenceService:
 
     def __init__(
         self,
-        document_repo: TenderDocumentRepository,
-        chunk_repo: DocumentChunkRepository,
-        groq_client: GroqClient,
+        document_repo: TenderDocumentRepository | None = None,
+        chunk_repo: DocumentChunkRepository | None = None,
+        groq_client: GroqClient | None = None,
     ) -> None:
-        self._document_repo = document_repo
-        self._chunk_repo = chunk_repo
-        self._groq = groq_client
+        self._document_repo = document_repo or TenderDocumentRepository()
+        self._chunk_repo = chunk_repo or DocumentChunkRepository()
+        self._groq = groq_client or GroqClient()
 
     async def explain_tender(
         self,
