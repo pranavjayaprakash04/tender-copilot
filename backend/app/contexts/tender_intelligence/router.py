@@ -1,13 +1,12 @@
 from uuid import UUID
-
 from fastapi import APIRouter, Depends
-
 from app.contexts.user_management.schemas import UserResponse
 from app.dependencies import get_current_company_id, get_current_user_id
-
 from .schemas import (
     ClauseExtractionRequest,
     ClauseExtractionResponse,
+    DocumentChecklistRequest,
+    DocumentChecklistResponse,
     RiskDetectionRequest,
     RiskDetectionResponse,
     TenderExplainRequest,
@@ -49,3 +48,14 @@ async def detect_risks(
     """Detect risks and compliance issues in tender."""
     service = TenderIntelligenceService()
     return await service.detect_risks(request.tender_id, request.lang, company_id)
+
+
+@router.post("/document-checklist", response_model=DocumentChecklistResponse)
+async def document_checklist(
+    request: DocumentChecklistRequest,
+    _current_user: UserResponse = Depends(get_current_user_id),
+    company_id: UUID = Depends(get_current_company_id),
+) -> DocumentChecklistResponse:
+    """Generate document checklist for a tender and match against vault."""
+    service = TenderIntelligenceService()
+    return await service.generate_document_checklist(request, company_id)
