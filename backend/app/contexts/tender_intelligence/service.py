@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 from uuid import UUID
 
 import structlog
@@ -45,6 +45,93 @@ class _ExplainGroqResponse(BaseModel):
     key_requirements: list[str] = []
     eligibility: list[str] = []
     red_flags: list[str] = []
+
+
+# ─── Category-based document templates ────────────────────────────────────────
+
+_CATEGORY_DOCS: dict[str, list[tuple[str, str, str | None]]] = {
+    "works": [
+        ("GST Registration Certificate", "Valid GST registration certificate", None),
+        ("PAN Card", "Company PAN card copy", None),
+        ("Udyam / MSME Certificate", "MSME registration certificate if applicable", None),
+        ("Contractor Registration Certificate", "Valid contractor registration with appropriate class", "Must match tender value category"),
+        ("Audited Balance Sheet", "Last 3 years audited financial statements", None),
+        ("Bank Solvency Certificate", "Certificate from bank confirming solvency", None),
+        ("Experience Certificate", "Work completion certificates from previous similar projects", "Must show experience in similar civil works"),
+        ("EMD / Bid Security", "Earnest money deposit in prescribed format", None),
+        ("Performance Security", "Bank guarantee or FDR for performance security", None),
+        ("Power of Attorney", "Authorisation letter for signatory", None),
+    ],
+    "services": [
+        ("GST Registration Certificate", "Valid GST registration certificate", None),
+        ("PAN Card", "Company PAN card copy", None),
+        ("Udyam / MSME Certificate", "MSME registration certificate if applicable", None),
+        ("Audited Balance Sheet", "Last 3 years audited financial statements", None),
+        ("Bank Solvency Certificate", "Certificate from bank confirming financial capacity", None),
+        ("Experience Certificate", "Certificates from previous clients for similar services", "Must demonstrate relevant service experience"),
+        ("Technical Qualification Certificate", "Proof of technical qualifications and certifications", None),
+        ("EMD / Bid Security", "Earnest money deposit document", None),
+        ("Staff Qualification Documents", "CVs and certificates of key personnel to be deployed", None),
+        ("Power of Attorney", "Authorisation letter for signatory", None),
+    ],
+    "goods": [
+        ("GST Registration Certificate", "Valid GST registration certificate", None),
+        ("PAN Card", "Company PAN card copy", None),
+        ("Udyam / MSME Certificate", "MSME registration certificate if applicable", None),
+        ("Manufacturer/Dealer Authorization", "Authorization from manufacturer if applicable", None),
+        ("Audited Balance Sheet", "Last 3 years audited financial statements", None),
+        ("Product Specifications / Brochure", "Technical specifications and product brochure", None),
+        ("Sample / Test Report", "Product sample or third-party test report", "May be required for quality verification"),
+        ("EMD / Bid Security", "Earnest money deposit document", None),
+        ("Experience Certificate", "Supply orders from previous clients", None),
+        ("Power of Attorney", "Authorisation letter for signatory", None),
+    ],
+    "it": [
+        ("GST Registration Certificate", "Valid GST registration certificate", None),
+        ("PAN Card", "Company PAN card copy", None),
+        ("Udyam / MSME Certificate", "MSME registration certificate if applicable", None),
+        ("ISO/CMM Certification", "ISO 9001 or CMMI certification if applicable", None),
+        ("Audited Balance Sheet", "Last 3 years audited financial statements", None),
+        ("Past Project Experience", "Work orders and completion certificates for similar IT projects", None),
+        ("Technical Team Profiles", "CVs of key technical staff to be deployed", None),
+        ("EMD / Bid Security", "Earnest money deposit document", None),
+        ("OEM Authorization", "Authorization from OEM for products to be supplied", "Required if reselling hardware/software"),
+        ("Power of Attorney", "Authorisation letter for signatory", None),
+    ],
+    "consultancy": [
+        ("GST Registration Certificate", "Valid GST registration certificate", None),
+        ("PAN Card", "Company PAN card copy", None),
+        ("Firm Registration Certificate", "Certificate of incorporation / firm registration", None),
+        ("Audited Balance Sheet", "Last 3 years audited financial statements", None),
+        ("Relevant Experience Certificate", "Completion certificates for similar consultancy assignments", None),
+        ("Key Personnel CVs", "Detailed CVs of team leader and key experts", "Must meet minimum qualification criteria"),
+        ("Technical Proposal", "Detailed technical approach and methodology", None),
+        ("Financial Proposal (BOQ)", "Itemised financial proposal / BOQ", None),
+        ("EMD / Bid Security", "Earnest money deposit document", None),
+        ("Power of Attorney", "Authorisation letter for signatory", None),
+    ],
+}
+
+_DEFAULT_DOCS = _CATEGORY_DOCS["services"]
+
+
+def _get_docs_for_category(category: str | None, title: str) -> list[tuple[str, str, str | None]]:
+    if not category:
+        category = ""
+    cat = category.lower()
+    title_lower = title.lower()
+
+    if any(k in cat or k in title_lower for k in ["work", "civil", "construction", "road", "bridge", "building"]):
+        return _CATEGORY_DOCS["works"]
+    if any(k in cat or k in title_lower for k in ["it", "software", "hardware", "computer", "digital", "cyber", "network"]):
+        return _CATEGORY_DOCS["it"]
+    if any(k in cat or k in title_lower for k in ["consult", "advisory", "study", "survey", "design"]):
+        return _CATEGORY_DOCS["consultancy"]
+    if any(k in cat or k in title_lower for k in ["good", "supply", "purchase", "procurement", "equipment", "material"]):
+        return _CATEGORY_DOCS["goods"]
+    if "service" in cat or "service" in title_lower:
+        return _CATEGORY_DOCS["services"]
+    return _DEFAULT_DOCS
 
 
 # ─── Service ───────────────────────────────────────────────────────────────────
@@ -105,9 +192,8 @@ Return JSON with these fields: summary (string), key_requirements (array of stri
     async def generate_document_checklist(
         self, request: DocumentChecklistRequest, company_id: UUID
     ) -> DocumentChecklistResponse:
-        vault_doc_names: list[str] = []
+        checklist_items = self._generate_checklist_from_category(request)
 
-        checklist_items = await self._generate_checklist_with_ai(request, vault_doc_names)
         have_count = sum(1 for item in checklist_items if item.status == "have")
         missing_count = sum(1 for item in checklist_items if item.status == "missing")
         total = len(checklist_items)
@@ -120,6 +206,8 @@ Return JSON with these fields: summary (string), key_requirements (array of stri
         else:
             summary = "Several required documents are missing. Start gathering them early."
 
+        logger.info("checklist_generated", tender_id=request.tender_id, total=total, category=request.tender_category)
+
         return DocumentChecklistResponse(
             tender_id=request.tender_id,
             checklist=checklist_items,
@@ -130,70 +218,8 @@ Return JSON with these fields: summary (string), key_requirements (array of stri
             summary=summary,
         )
 
-    async def _generate_checklist_with_ai(
-        self, request: DocumentChecklistRequest, vault_doc_names: list[str]
-    ) -> list[ChecklistItem]:
-        system_prompt = (
-            "You are an Indian government tender expert. "
-            "Generate a precise list of documents required to bid on a tender. "
-            "Return ONLY valid JSON."
-        )
-        user_prompt = f"""Generate a document checklist for this tender:
-
-Tender: {request.tender_title}
-Category: {request.tender_category or "General"}
-Estimated Value: {request.estimated_value or "Not specified"}
-Location: {request.tender_location or "India"}
-Description: {(request.description or "")[:1000]}
-
-Return JSON with a "checklist" array of 8-12 items. Each item must have:
-- id (string like "doc_1")
-- name (document name)
-- description (what this document is)
-- required (true/false)
-- in_vault (false)
-- status ("missing")
-- notes (optional tip or null)"""
-
-        import traceback
-        try:
-            logger.info("calling_groq_checklist", tender_id=request.tender_id)
-            result = await self._groq.complete(
-                model=GroqModel.FAST,
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                output_schema=_ChecklistGroqResponse,
-                trace_id=f"checklist-{request.tender_id}",
-                temperature=0.2,
-            )
-            logger.info("groq_checklist_done", count=len(result.checklist))
-            if result.checklist:
-                return [
-                    ChecklistItem(
-                        id=item.id,
-                        name=item.name,
-                        description=item.description,
-                        required=item.required,
-                        in_vault=item.in_vault,
-                        status=item.status,
-                        notes=item.notes,
-                    )
-                    for item in result.checklist
-                ]
-        except Exception as e:
-            logger.error("checklist_generation_failed", error=str(e), tb=traceback.format_exc())
-
-        # Fallback defaults
-        defaults = [
-            ("GST Registration Certificate", "Valid GST registration certificate"),
-            ("PAN Card", "Company PAN card copy"),
-            ("Udyam / MSME Certificate", "MSME registration certificate if applicable"),
-            ("Audited Balance Sheet", "Last 3 years audited financial statements"),
-            ("Bank Solvency Certificate", "Certificate from bank confirming solvency"),
-            ("Experience Certificate", "Work experience certificates from previous clients"),
-            ("EMD / Bid Security", "Earnest money deposit document"),
-            ("Power of Attorney", "Authorisation letter for signatory"),
-        ]
+    def _generate_checklist_from_category(self, request: DocumentChecklistRequest) -> list[ChecklistItem]:
+        docs = _get_docs_for_category(request.tender_category, request.tender_title)
         return [
             ChecklistItem(
                 id=f"doc_{i}",
@@ -202,7 +228,7 @@ Return JSON with a "checklist" array of 8-12 items. Each item must have:
                 required=True,
                 in_vault=False,
                 status="missing",
-                notes=None,
+                notes=note,
             )
-            for i, (name, desc) in enumerate(defaults)
+            for i, (name, desc, note) in enumerate(docs)
         ]
