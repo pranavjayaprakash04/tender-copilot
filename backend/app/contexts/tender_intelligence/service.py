@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 import structlog
+from pydantic import BaseModel
 
 from app.contexts.tender_intelligence.repository import (
     DocumentChunkRepository,
@@ -23,6 +24,31 @@ from app.shared.lang_context import LangContext
 
 logger = structlog.get_logger()
 
+
+# ─── Groq Output Schemas ───────────────────────────────────────────────────────
+
+class _ChecklistItemRaw(BaseModel):
+    id: str = "doc_0"
+    name: str = "Unknown Document"
+    description: str = ""
+    required: bool = True
+    in_vault: bool = False
+    status: Literal["have", "missing", "unknown"] = "missing"
+    notes: str | None = None
+
+
+class _ChecklistGroqResponse(BaseModel):
+    checklist: list[_ChecklistItemRaw] = []
+
+
+class _ExplainGroqResponse(BaseModel):
+    summary: str = ""
+    key_requirements: list[str] = []
+    eligibility: list[str] = []
+    red_flags: list[str] = []
+
+
+# ─── Service ───────────────────────────────────────────────────────────────────
 
 class TenderIntelligenceService:
     def __init__(
@@ -46,35 +72,40 @@ class TenderIntelligenceService:
         explanation = await self._generate_explanation_with_ai(combined_text, lang)
         return TenderExplainResponse(
             tender_id=tender_id,
-            summary=explanation["summary"],
-            key_requirements=explanation["key_requirements"],
-            eligibility=explanation["eligibility"],
-            red_flags=explanation["red_flags"],
+            summary=explanation.summary,
+            key_requirements=explanation.key_requirements,
+            eligibility=explanation.eligibility,
+            red_flags=explanation.red_flags,
             lang=lang,
         )
 
-    async def _generate_explanation_with_ai(self, text: str, lang: str) -> dict[str, Any]:
-        lang_context = LangContext.from_lang(lang)
+    async def _generate_explanation_with_ai(self, text: str, lang: str) -> _ExplainGroqResponse:
         system_prompt = "You are a tender expert. Explain tender documents in simple, clear language."
-        user_prompt = f"Explain this tender document in {lang}:\n{text[:5000]}\nReturn as JSON with summary, key_requirements, eligibility, and red_flags arrays."
+        user_prompt = f"""Explain this tender document in {lang}:
+
+{text[:5000]}
+
+Return JSON with these fields: summary (string), key_requirements (array of strings), eligibility (array of strings), red_flags (array of strings)."""
         try:
-            await self._groq.complete(
-                model=GroqModel.PRIMARY, system_prompt=system_prompt, user_prompt=user_prompt,
-                lang=lang_context, trace_id=f"explain-tender-{datetime.utcnow().isoformat()}", temperature=0.3,
+            result = await self._groq.complete(
+                model=GroqModel.PRIMARY,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                output_schema=_ExplainGroqResponse,
+                trace_id=f"explain-tender-{datetime.utcnow().isoformat()}",
+                temperature=0.3,
             )
-            explanation = {
-                "summary": "This tender seeks qualified vendors for procurement services.",
-                "key_requirements": ["Minimum 3 years experience", "Valid certifications required", "Financial stability proof"],
-                "eligibility": ["Registered MSME", "GST compliant", "Local presence required"],
-                "red_flags": ["Very short timeline", "Heavy penalty clauses", "Complex documentation"],
-            }
             logger.info("tender_explained", lang=lang)
-            return explanation
+            return result
         except Exception as e:
             logger.error("tender_explanation_failed", error=str(e))
             raise
 
-    async def generate_document_checklist(self, request: DocumentChecklistRequest, company_id: UUID) -> DocumentChecklistResponse:
+    # ─── Document Checklist ────────────────────────────────────────────────────
+
+    async def generate_document_checklist(
+        self, request: DocumentChecklistRequest, company_id: UUID
+    ) -> DocumentChecklistResponse:
         vault_doc_names: list[str] = []
         try:
             vault_docs = await self._document_repo.get_vault_documents(company_id)
@@ -96,55 +127,66 @@ class TenderIntelligenceService:
             summary = "Several required documents are missing. Start gathering them early."
 
         return DocumentChecklistResponse(
-            tender_id=request.tender_id, checklist=checklist_items, total=total,
-            have_count=have_count, missing_count=missing_count, readiness_score=readiness_score, summary=summary,
+            tender_id=request.tender_id,
+            checklist=checklist_items,
+            total=total,
+            have_count=have_count,
+            missing_count=missing_count,
+            readiness_score=readiness_score,
+            summary=summary,
         )
 
-    async def _generate_checklist_with_ai(self, request: DocumentChecklistRequest, vault_doc_names: list[str]) -> list[ChecklistItem]:
+    async def _generate_checklist_with_ai(
+        self, request: DocumentChecklistRequest, vault_doc_names: list[str]
+    ) -> list[ChecklistItem]:
         system_prompt = (
             "You are an Indian government tender expert. "
             "Generate a precise list of documents required to bid on a tender. "
-            "Return ONLY valid JSON, no explanation, no markdown."
+            "Return ONLY valid JSON."
         )
-        user_prompt = f"""
+        vault_str = ", ".join(vault_doc_names) if vault_doc_names else "None"
+        user_prompt = f"""Generate a document checklist for this tender:
+
 Tender: {request.tender_title}
 Category: {request.tender_category or "General"}
 Estimated Value: {request.estimated_value or "Not specified"}
 Location: {request.tender_location or "India"}
 Description: {(request.description or "")[:1000]}
-Documents already in vault: {", ".join(vault_doc_names) if vault_doc_names else "None"}
+Documents already in vault: {vault_str}
 
-Generate a checklist of 8-12 documents typically required for this type of tender in India.
-Return ONLY this JSON structure:
-{{
-  "checklist": [
-    {{"id": "doc_1", "name": "GST Registration Certificate", "description": "Valid GST registration certificate", "required": true, "in_vault": false, "status": "missing", "notes": null}}
-  ]
-}}
-"""
+Return JSON with a "checklist" array of 8-12 items. Each item must have:
+- id (string like "doc_1")
+- name (document name)
+- description (what this document is)
+- required (true/false)
+- in_vault (true if it matches any vault document, false otherwise)
+- status ("have" if in_vault is true, "missing" otherwise)
+- notes (optional tip or null)"""
+
         try:
-            response = await self._groq.complete(
-                model=GroqModel.PRIMARY, system_prompt=system_prompt, user_prompt=user_prompt,
-                lang=LangContext.from_lang(request.lang),
-                trace_id=f"checklist-{request.tender_id}-{datetime.utcnow().isoformat()}", temperature=0.2,
+            result = await self._groq.complete(
+                model=GroqModel.PRIMARY,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                output_schema=_ChecklistGroqResponse,
+                trace_id=f"checklist-{request.tender_id}-{datetime.utcnow().isoformat()}",
+                temperature=0.2,
             )
-            raw = response.strip()
-            if raw.startswith("```"):
-                raw = raw.split("```")[1]
-                if raw.startswith("json"):
-                    raw = raw[4:]
-            parsed = json.loads(raw)
-            items = parsed.get("checklist", [])
             return [
                 ChecklistItem(
-                    id=item.get("id", f"doc_{i}"), name=item.get("name", "Unknown Document"),
-                    description=item.get("description", ""), required=item.get("required", True),
-                    in_vault=item.get("in_vault", False), status=item.get("status", "missing"), notes=item.get("notes"),
+                    id=item.id,
+                    name=item.name,
+                    description=item.description,
+                    required=item.required,
+                    in_vault=item.in_vault,
+                    status=item.status,
+                    notes=item.notes,
                 )
-                for i, item in enumerate(items)
+                for item in result.checklist
             ]
         except Exception as e:
             logger.error("checklist_generation_failed", error=str(e))
+            # Fallback defaults
             defaults = [
                 ("GST Registration Certificate", "Valid GST registration certificate"),
                 ("PAN Card", "Company PAN card copy"),
@@ -157,9 +199,13 @@ Return ONLY this JSON structure:
             ]
             return [
                 ChecklistItem(
-                    id=f"doc_{i}", name=name, description=desc, required=True,
+                    id=f"doc_{i}",
+                    name=name,
+                    description=desc,
+                    required=True,
                     in_vault=any(name.lower()[:6] in v for v in vault_doc_names),
-                    status="have" if any(name.lower()[:6] in v for v in vault_doc_names) else "missing", notes=None,
+                    status="have" if any(name.lower()[:6] in v for v in vault_doc_names) else "missing",
+                    notes=None,
                 )
                 for i, (name, desc) in enumerate(defaults)
             ]
