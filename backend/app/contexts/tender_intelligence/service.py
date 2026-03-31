@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
@@ -139,7 +138,6 @@ Return JSON with these fields: summary (string), key_requirements (array of stri
             "Generate a precise list of documents required to bid on a tender. "
             "Return ONLY valid JSON."
         )
-        vault_str = ", ".join(vault_doc_names) if vault_doc_names else "None"
         user_prompt = f"""Generate a document checklist for this tender:
 
 Tender: {request.tender_title}
@@ -147,60 +145,64 @@ Category: {request.tender_category or "General"}
 Estimated Value: {request.estimated_value or "Not specified"}
 Location: {request.tender_location or "India"}
 Description: {(request.description or "")[:1000]}
-Documents already in vault: {vault_str}
 
 Return JSON with a "checklist" array of 8-12 items. Each item must have:
 - id (string like "doc_1")
 - name (document name)
 - description (what this document is)
 - required (true/false)
-- in_vault (true if it matches any vault document, false otherwise)
-- status ("have" if in_vault is true, "missing" otherwise)
+- in_vault (false)
+- status ("missing")
 - notes (optional tip or null)"""
 
+        import traceback
         try:
+            logger.info("calling_groq_checklist", tender_id=request.tender_id)
             result = await self._groq.complete(
-                model=GroqModel.PRIMARY,
+                model=GroqModel.FAST,
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 output_schema=_ChecklistGroqResponse,
-                trace_id=f"checklist-{request.tender_id}-{datetime.utcnow().isoformat()}",
+                trace_id=f"checklist-{request.tender_id}",
                 temperature=0.2,
             )
-            return [
-                ChecklistItem(
-                    id=item.id,
-                    name=item.name,
-                    description=item.description,
-                    required=item.required,
-                    in_vault=item.in_vault,
-                    status=item.status,
-                    notes=item.notes,
-                )
-                for item in result.checklist
-            ]
+            logger.info("groq_checklist_done", count=len(result.checklist))
+            if result.checklist:
+                return [
+                    ChecklistItem(
+                        id=item.id,
+                        name=item.name,
+                        description=item.description,
+                        required=item.required,
+                        in_vault=item.in_vault,
+                        status=item.status,
+                        notes=item.notes,
+                    )
+                    for item in result.checklist
+                ]
         except Exception as e:
-            logger.error("checklist_generation_failed", error=str(e))
-            # Fallback defaults
-            defaults = [
-                ("GST Registration Certificate", "Valid GST registration certificate"),
-                ("PAN Card", "Company PAN card copy"),
-                ("Udyam / MSME Certificate", "MSME registration certificate if applicable"),
-                ("Audited Balance Sheet", "Last 3 years audited financial statements"),
-                ("Bank Solvency Certificate", "Certificate from bank confirming solvency"),
-                ("Experience Certificate", "Work experience certificates from previous clients"),
-                ("EMD / Bid Security", "Earnest money deposit document"),
-                ("Power of Attorney", "Authorisation letter for signatory"),
-            ]
-            return [
-                ChecklistItem(
-                    id=f"doc_{i}",
-                    name=name,
-                    description=desc,
-                    required=True,
-                    in_vault=any(name.lower()[:6] in v for v in vault_doc_names),
-                    status="have" if any(name.lower()[:6] in v for v in vault_doc_names) else "missing",
-                    notes=None,
-                )
-                for i, (name, desc) in enumerate(defaults)
-            ]
+            logger.error("checklist_generation_failed", error=str(e), tb=traceback.format_exc())
+
+        # Fallback defaults
+        defaults = [
+            ("GST Registration Certificate", "Valid GST registration certificate"),
+            ("PAN Card", "Company PAN card copy"),
+            ("Udyam / MSME Certificate", "MSME registration certificate if applicable"),
+            ("Audited Balance Sheet", "Last 3 years audited financial statements"),
+            ("Bank Solvency Certificate", "Certificate from bank confirming solvency"),
+            ("Experience Certificate", "Work experience certificates from previous clients"),
+            ("EMD / Bid Security", "Earnest money deposit document"),
+            ("Power of Attorney", "Authorisation letter for signatory"),
+        ]
+        return [
+            ChecklistItem(
+                id=f"doc_{i}",
+                name=name,
+                description=desc,
+                required=True,
+                in_vault=False,
+                status="missing",
+                notes=None,
+            )
+            for i, (name, desc) in enumerate(defaults)
+        ]
