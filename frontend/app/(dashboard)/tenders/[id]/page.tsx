@@ -99,10 +99,48 @@ interface DocumentChecklistResponse {
   summary: string;
 }
 
+interface PriceBand {
+  label: string;
+  min: number;
+  max: number;
+  win_rate_estimate: number;
+  description: string;
+}
+
+interface PriceTrendPoint {
+  label: string;
+  avg: number;
+  min: number;
+  max: number;
+}
+
+interface PriceIntelligenceResponse {
+  tender_id: string;
+  category: string | null;
+  market_avg: number | null;
+  market_min: number | null;
+  market_max: number | null;
+  sample_count: number;
+  price_to_win_score: number;
+  price_to_win_label: string;
+  optimal_price: number | null;
+  our_bid_amount: number | null;
+  our_position_pct: number | null;
+  bands: PriceBand[];
+  trend: PriceTrendPoint[];
+  insights: string[];
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
+
+const fmtShort = (n: number) => {
+  if (n >= 1_00_00_000) return `₹${(n / 1_00_00_000).toFixed(1)}Cr`;
+  if (n >= 1_00_000) return `₹${(n / 1_00_000).toFixed(1)}L`;
+  return fmt(n);
+};
 
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
 const winColor = (p: number) => p >= 0.7 ? "#10B981" : p >= 0.4 ? "#F59E0B" : "#EF4444";
@@ -712,27 +750,19 @@ function DocumentChecklistModal({ tender, onClose }: { tender: TenderDetail; onC
         lang: "en",
       }),
     onSuccess: (data) => {
-      // Pre-check items that are already in vault
       const initial: Record<string, boolean> = {};
       data.checklist.forEach((item) => {
-        if (item.status === "have" || item.in_vault) {
-          initial[item.id] = true;
-        }
+        if (item.status === "have" || item.in_vault) initial[item.id] = true;
       });
       setChecked(initial);
     },
   });
 
   const data = mutation.data;
-
-  const toggleCheck = (id: string) => {
-    setChecked((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
-
+  const toggleCheck = (id: string) => setChecked((prev) => ({ ...prev, [id]: !prev[id] }));
   const checkedCount = Object.values(checked).filter(Boolean).length;
   const total = data?.checklist.length ?? 0;
   const readiness = total > 0 ? Math.round((checkedCount / total) * 100) : 0;
-
   const readinessColor = readiness >= 80 ? "#10B981" : readiness >= 50 ? "#F59E0B" : "#EF4444";
 
   return (
@@ -744,10 +774,8 @@ function DocumentChecklistModal({ tender, onClose }: { tender: TenderDetail; onC
           <p style={{ color: "#94A3B8", fontSize: 13, marginBottom: 16 }}>
             AI will generate a required document checklist for this tender and match against your Vault.
           </p>
-          <button
-            onClick={() => mutation.mutate()}
-            style={{ padding: "10px 20px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none", background: "#6366F1", color: "#fff" }}
-          >
+          <button onClick={() => mutation.mutate()}
+            style={{ padding: "10px 20px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none", background: "#6366F1", color: "#fff" }}>
             Generate Checklist
           </button>
         </>
@@ -769,7 +797,6 @@ function DocumentChecklistModal({ tender, onClose }: { tender: TenderDetail; onC
 
       {data && (
         <>
-          {/* Readiness score */}
           <div style={{ background: readinessColor + "18", border: `1px solid ${readinessColor}40`, borderRadius: 10, padding: "14px 18px", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: readinessColor }}>Readiness Score</div>
@@ -780,80 +807,285 @@ function DocumentChecklistModal({ tender, onClose }: { tender: TenderDetail; onC
               <div style={{ fontSize: 10, color: "#64748B" }}>{checkedCount}/{total} docs</div>
             </div>
           </div>
-
-          {/* Progress bar */}
           <div style={{ height: 6, background: "#1E2537", borderRadius: 3, marginBottom: 16 }}>
             <div style={{ height: 6, borderRadius: 3, background: readinessColor, width: `${readiness}%`, transition: "width 0.5s ease" }} />
           </div>
-
-          {/* Stats row */}
           <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-            <div style={{ flex: 1, background: "#10B98115", border: "1px solid #10B98130", borderRadius: 8, padding: "10px", textAlign: "center" }}>
-              <div style={{ fontSize: 18, fontWeight: 700, color: "#10B981", fontFamily: "monospace" }}>{checkedCount}</div>
-              <div style={{ fontSize: 10, color: "#64748B", textTransform: "uppercase", letterSpacing: ".5px" }}>Have</div>
-            </div>
-            <div style={{ flex: 1, background: "#EF444415", border: "1px solid #EF444430", borderRadius: 8, padding: "10px", textAlign: "center" }}>
-              <div style={{ fontSize: 18, fontWeight: 700, color: "#EF4444", fontFamily: "monospace" }}>{total - checkedCount}</div>
-              <div style={{ fontSize: 10, color: "#64748B", textTransform: "uppercase", letterSpacing: ".5px" }}>Missing</div>
-            </div>
-            <div style={{ flex: 1, background: "#3B82F615", border: "1px solid #3B82F630", borderRadius: 8, padding: "10px", textAlign: "center" }}>
-              <div style={{ fontSize: 18, fontWeight: 700, color: "#3B82F6", fontFamily: "monospace" }}>{total}</div>
-              <div style={{ fontSize: 10, color: "#64748B", textTransform: "uppercase", letterSpacing: ".5px" }}>Total</div>
-            </div>
+            {[
+              { val: checkedCount, label: "Have", color: "#10B981" },
+              { val: total - checkedCount, label: "Missing", color: "#EF4444" },
+              { val: total, label: "Total", color: "#3B82F6" },
+            ].map(({ val, label, color }) => (
+              <div key={label} style={{ flex: 1, background: color + "15", border: `1px solid ${color}30`, borderRadius: 8, padding: 10, textAlign: "center" }}>
+                <div style={{ fontSize: 18, fontWeight: 700, color, fontFamily: "monospace" }}>{val}</div>
+                <div style={{ fontSize: 10, color: "#64748B", textTransform: "uppercase", letterSpacing: ".5px" }}>{label}</div>
+              </div>
+            ))}
           </div>
-
-          {/* Checklist items */}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {data.checklist.map((item) => {
               const isChecked = !!checked[item.id];
-              const borderColor = isChecked ? "#10B98140" : item.required ? "#EF444430" : "#1E2537";
-              const bgColor = isChecked ? "#10B98108" : "#1A1F2E";
-
               return (
-                <div
-                  key={item.id}
-                  style={{ background: bgColor, border: `1px solid ${borderColor}`, borderRadius: 8, padding: "12px 14px", cursor: "pointer", transition: "all 0.15s" }}
-                  onClick={() => toggleCheck(item.id)}
-                >
+                <div key={item.id}
+                  style={{ background: isChecked ? "#10B98108" : "#1A1F2E", border: `1px solid ${isChecked ? "#10B98140" : item.required ? "#EF444430" : "#1E2537"}`, borderRadius: 8, padding: "12px 14px", cursor: "pointer", transition: "all 0.15s" }}
+                  onClick={() => toggleCheck(item.id)}>
                   <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                    {/* Checkbox */}
-                    <div style={{
-                      width: 18, height: 18, borderRadius: 4, border: `2px solid ${isChecked ? "#10B981" : "#475569"}`,
-                      background: isChecked ? "#10B981" : "transparent", display: "flex", alignItems: "center",
-                      justifyContent: "center", flexShrink: 0, marginTop: 1, transition: "all 0.15s"
-                    }}>
+                    <div style={{ width: 18, height: 18, borderRadius: 4, border: `2px solid ${isChecked ? "#10B981" : "#475569"}`, background: isChecked ? "#10B981" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
                       {isChecked && <span style={{ color: "#fff", fontSize: 11, fontWeight: 700 }}>✓</span>}
                     </div>
-
-                    <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ flex: 1 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: isChecked ? "#10B981" : "#E2E8F0" }}>
-                          {item.name}
-                        </span>
-                        {item.required && (
-                          <span style={{ fontSize: 9, fontWeight: 700, color: "#EF4444", textTransform: "uppercase", letterSpacing: ".5px" }}>Required</span>
-                        )}
-                        {item.in_vault && (
-                          <span style={{ fontSize: 9, fontWeight: 700, color: "#10B981", textTransform: "uppercase", letterSpacing: ".5px", background: "#10B98115", padding: "1px 6px", borderRadius: 10 }}>In Vault</span>
-                        )}
+                        <span style={{ fontSize: 13, fontWeight: 600, color: isChecked ? "#10B981" : "#E2E8F0" }}>{item.name}</span>
+                        {item.required && <span style={{ fontSize: 9, fontWeight: 700, color: "#EF4444", textTransform: "uppercase" }}>Required</span>}
+                        {item.in_vault && <span style={{ fontSize: 9, fontWeight: 700, color: "#10B981", background: "#10B98115", padding: "1px 6px", borderRadius: 10 }}>In Vault</span>}
                       </div>
-                      <div style={{ fontSize: 11, color: "#64748B", lineHeight: 1.4 }}>{item.description}</div>
-                      {item.notes && (
-                        <div style={{ fontSize: 10, color: "#F59E0B", marginTop: 4 }}>💡 {item.notes}</div>
-                      )}
+                      <div style={{ fontSize: 11, color: "#64748B" }}>{item.description}</div>
+                      {item.notes && <div style={{ fontSize: 10, color: "#F59E0B", marginTop: 4 }}>💡 {item.notes}</div>}
                     </div>
                   </div>
                 </div>
               );
             })}
           </div>
-
-          <button
-            onClick={() => mutation.mutate()}
-            style={{ marginTop: 16, padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1px solid #1E2537", background: "transparent", color: "#94A3B8" }}
-          >
+          <button onClick={() => mutation.mutate()}
+            style={{ marginTop: 16, padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1px solid #1E2537", background: "transparent", color: "#94A3B8" }}>
             Regenerate
           </button>
+        </>
+      )}
+    </Modal>
+  );
+}
+
+// ─── Price Intelligence Modal ─────────────────────────────────────────────────
+
+function PriceIntelligenceModal({ tender, companyId, onClose }: { tender: TenderDetail; companyId: string; onClose: () => void }) {
+  const [bidAmount, setBidAmount] = useState(
+    tender.estimated_value ? String(Math.round(tender.estimated_value * 0.92)) : ""
+  );
+
+  const mutation = useMutation<PriceIntelligenceResponse, Error>({
+    mutationFn: () =>
+      api.post("/api/v1/intelligence/bid/price-intelligence", {
+        tender_id: tender.id,
+        company_id: companyId,
+        our_bid_amount: bidAmount ? parseFloat(bidAmount) : null,
+      }),
+  });
+
+  const data = mutation.data;
+
+  const scoreColor = (s: number) => s >= 80 ? "#10B981" : s >= 55 ? "#F59E0B" : "#EF4444";
+  const bandColors = ["#10B981", "#3B82F6", "#F59E0B", "#EF4444"];
+
+  // Simple SVG trend chart
+  const TrendChart = ({ trend }: { trend: PriceTrendPoint[] }) => {
+    const W = 480, H = 100, PAD = 32;
+    const avgs = trend.map(t => t.avg);
+    const mins = trend.map(t => t.min);
+    const maxs = trend.map(t => t.max);
+    const allVals = [...avgs, ...mins, ...maxs];
+    const lo = Math.min(...allVals);
+    const hi = Math.max(...allVals);
+    const range = hi - lo || 1;
+    const xScale = (i: number) => PAD + (i / (trend.length - 1)) * (W - PAD * 2);
+    const yScale = (v: number) => H - 12 - ((v - lo) / range) * (H - 24);
+
+    const avgPath = trend.map((t, i) => `${i === 0 ? "M" : "L"}${xScale(i)},${yScale(t.avg)}`).join(" ");
+    const areaPath = [
+      ...trend.map((t, i) => `${i === 0 ? "M" : "L"}${xScale(i)},${yScale(t.max)}`),
+      ...trend.map((t, i) => `L${xScale(trend.length - 1 - i)},${yScale(trend[trend.length - 1 - i].min)}`),
+      "Z",
+    ].join(" ");
+
+    return (
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: 100 }}>
+        <defs>
+          <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#3B82F6" stopOpacity="0.03" />
+          </linearGradient>
+        </defs>
+        <path d={areaPath} fill="url(#trendGrad)" />
+        <path d={avgPath} fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        {trend.map((t, i) => (
+          <circle key={i} cx={xScale(i)} cy={yScale(t.avg)} r="3" fill="#3B82F6" />
+        ))}
+        {trend.map((t, i) => (
+          <text key={i} x={xScale(i)} y={H - 1} textAnchor="middle" fontSize="9" fill="#475569">{t.label}</text>
+        ))}
+      </svg>
+    );
+  };
+
+  return (
+    <Modal title="💰 Price Intelligence" onClose={onClose}>
+      <style>{`
+        .pi-input{width:100%;padding:9px 12px;background:#1A1F2E;border:1px solid #1E2537;border-radius:8px;color:#E2E8F0;font-size:13px;outline:none}
+        .pi-input:focus{border-color:#F59E0B}
+        .pi-btn{padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;background:#F59E0B;color:#111;transition:opacity .15s;margin-top:10px}
+        .pi-btn:hover{opacity:.85}
+        .pi-btn:disabled{opacity:.4;cursor:not-allowed}
+        .pi-btn--sm{padding:7px 14px;font-size:12px;background:transparent;border:1px solid #1E2537;color:#94A3B8;margin-top:14px}
+        .pi-spinner{width:13px;height:13px;border:2px solid #1E2537;border-top-color:#F59E0B;border-radius:50%;animation:pispin .7s linear infinite;display:inline-block;vertical-align:middle;margin-right:6px}
+        @keyframes pispin{to{transform:rotate(360deg)}}
+        .pi-card{background:#1A1F2E;border:1px solid #1E2537;border-radius:8px;padding:14px;margin-top:10px}
+        .pi-section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#475569;margin-bottom:10px}
+      `}</style>
+
+      {/* Bid input */}
+      <div style={{ marginBottom: 4 }}>
+        <label style={{ fontSize: 12, color: "#64748B", display: "block", marginBottom: 6 }}>
+          Your intended bid amount <span style={{ color: "#F59E0B" }}>*</span>
+        </label>
+        <input
+          className="pi-input"
+          type="number"
+          placeholder="Enter your bid amount in ₹"
+          value={bidAmount}
+          onChange={e => setBidAmount(e.target.value)}
+        />
+        {tender.estimated_value && (
+          <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
+            Tender estimate: {fmt(tender.estimated_value)} · Pre-filled at 92% (optimal zone)
+          </div>
+        )}
+      </div>
+      <button className="pi-btn" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
+        {mutation.isPending ? <><span className="pi-spinner" />Analysing…</> : data ? "Re-analyse" : "Analyse Pricing"}
+      </button>
+
+      {mutation.isError && (
+        <div style={{ background: "#EF444420", border: "1px solid #EF444440", borderRadius: 6, padding: "10px 14px", color: "#FCA5A5", fontSize: 12, marginTop: 12 }}>
+          Analysis failed. Please try again.
+        </div>
+      )}
+
+      {!data && !mutation.isPending && (
+        <p style={{ color: "#475569", fontSize: 13, textAlign: "center", marginTop: 28 }}>
+          Enter your bid amount and click Analyse Pricing
+        </p>
+      )}
+
+      {data && (
+        <>
+          {/* Price-to-Win Score */}
+          {data.our_bid_amount && (
+            <div style={{
+              background: scoreColor(data.price_to_win_score) + "14",
+              border: `1px solid ${scoreColor(data.price_to_win_score)}35`,
+              borderRadius: 10, padding: "16px 18px", marginTop: 16,
+              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
+            }}>
+              <div>
+                <div style={{ fontSize: 11, color: "#64748B", marginBottom: 4 }}>Price-to-Win Score</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: scoreColor(data.price_to_win_score) }}>{data.price_to_win_label}</div>
+                {data.optimal_price && (
+                  <div style={{ fontSize: 11, color: "#64748B", marginTop: 5 }}>
+                    Optimal target: <span style={{ color: "#F1F5F9", fontFamily: "monospace" }}>{fmt(data.optimal_price)}</span>
+                  </div>
+                )}
+              </div>
+              <div style={{ textAlign: "center", flexShrink: 0 }}>
+                <div style={{ fontSize: 36, fontWeight: 800, color: scoreColor(data.price_to_win_score), fontFamily: "monospace", lineHeight: 1 }}>
+                  {data.price_to_win_score}
+                </div>
+                <div style={{ fontSize: 10, color: "#64748B" }}>/ 100</div>
+              </div>
+            </div>
+          )}
+
+          {/* Market stats */}
+          {data.market_avg && (
+            <div className="pi-card">
+              <div className="pi-section-title">Market Benchmarks — {data.category}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+                {[
+                  { label: "Market Min", value: fmtShort(data.market_min!), color: "#10B981" },
+                  { label: "Market Avg", value: fmtShort(data.market_avg), color: "#F1F5F9" },
+                  { label: "Market Max", value: fmtShort(data.market_max!), color: "#EF4444" },
+                ].map(({ label, value, color }) => (
+                  <div key={label} style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color, fontFamily: "monospace" }}>{value}</div>
+                    <div style={{ fontSize: 10, color: "#475569" }}>{label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Position bar */}
+              {data.our_position_pct !== null && data.our_position_pct !== undefined && (
+                <>
+                  <div style={{ fontSize: 10, color: "#475569", marginBottom: 6 }}>Your bid position in market range</div>
+                  <div style={{ position: "relative", height: 8, background: "#1E2537", borderRadius: 4, marginBottom: 4 }}>
+                    <div style={{ position: "absolute", height: 8, borderRadius: 4, background: "linear-gradient(90deg,#10B981,#3B82F6,#F59E0B,#EF4444)", width: "100%", opacity: 0.3 }} />
+                    <div style={{
+                      position: "absolute", top: -3, width: 14, height: 14, borderRadius: "50%",
+                      background: scoreColor(data.price_to_win_score), border: "2px solid #0F1117",
+                      left: `calc(${(data.our_position_pct * 100).toFixed(1)}% - 7px)`,
+                      transition: "left 0.8s ease",
+                    }} />
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "#475569" }}>
+                    <span>Min (L1)</span><span>Avg</span><span>Max</span>
+                  </div>
+                </>
+              )}
+
+              {data.sample_count > 0 && (
+                <div style={{ fontSize: 11, color: "#475569", marginTop: 8 }}>Based on {data.sample_count} similar tenders</div>
+              )}
+            </div>
+          )}
+
+          {/* Trend chart */}
+          {data.trend?.length > 0 && (
+            <div className="pi-card">
+              <div className="pi-section-title">Price Trend — {data.category}</div>
+              <TrendChart trend={data.trend} />
+              <div style={{ fontSize: 10, color: "#475569", marginTop: 4 }}>Blue line = market avg · Shaded area = min–max range</div>
+            </div>
+          )}
+
+          {/* Price bands */}
+          {data.bands?.length > 0 && (
+            <div className="pi-card">
+              <div className="pi-section-title">Price Bands</div>
+              {data.bands.map((band, i) => (
+                <div key={i} style={{
+                  display: "flex", alignItems: "center", gap: 10, padding: "9px 0",
+                  borderBottom: i < data.bands.length - 1 ? "1px solid #1E2537" : "none",
+                }}>
+                  <div style={{ width: 3, height: 36, borderRadius: 2, background: bandColors[i], flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: bandColors[i], marginBottom: 2 }}>{band.label}</div>
+                    <div style={{ fontSize: 10, color: "#475569" }}>{fmtShort(band.min)} – {fmtShort(band.max)}</div>
+                    <div style={{ fontSize: 10, color: "#64748B", marginTop: 1 }}>{band.description}</div>
+                  </div>
+                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: bandColors[i], fontFamily: "monospace" }}>
+                      {(band.win_rate_estimate * 100).toFixed(0)}%
+                    </div>
+                    <div style={{ fontSize: 9, color: "#475569" }}>win rate</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Insights */}
+          {data.insights?.length > 0 && (
+            <div className="pi-card">
+              <div className="pi-section-title">💡 Insights</div>
+              {data.insights.map((ins, i) => (
+                <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 8, fontSize: 12, color: "#94A3B8", lineHeight: 1.5 }}>
+                  <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#F59E0B", flexShrink: 0, marginTop: 5, display: "inline-block" }} />
+                  {ins}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <button className="pi-btn pi-btn--sm" onClick={() => mutation.mutate()}>Re-analyse</button>
         </>
       )}
     </Modal>
@@ -864,7 +1096,7 @@ function DocumentChecklistModal({ tender, onClose }: { tender: TenderDetail; onC
 
 export default function TenderDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
-  const [modal, setModal] = useState<"winprob" | "competitors" | "market" | "eligibility" | "trackbid" | "checklist" | null>(null);
+  const [modal, setModal] = useState<"winprob" | "competitors" | "market" | "eligibility" | "trackbid" | "checklist" | "priceintel" | null>(null);
 
   const { data: rawData, isLoading, error, refetch } = useQuery({
     queryKey: ["tender", params.id],
@@ -1008,6 +1240,10 @@ export default function TenderDetailPage({ params }: { params: { id: string } })
               className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-md text-sm font-medium hover:bg-orange-700 transition-colors">
               📊 Market Price
             </button>
+            <button onClick={() => setModal("priceintel")}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-500 text-gray-900 rounded-md text-sm font-medium hover:bg-yellow-400 transition-colors">
+              💰 Price Intel
+            </button>
             <button onClick={() => setModal("checklist")}
               className="inline-flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-md text-sm font-medium hover:bg-violet-700 transition-colors">
               📋 Doc Checklist
@@ -1038,10 +1274,13 @@ export default function TenderDetailPage({ params }: { params: { id: string } })
       {modal === "checklist" && (
         <DocumentChecklistModal tender={tender} onClose={() => setModal(null)} />
       )}
+      {modal === "priceintel" && companyId && (
+        <PriceIntelligenceModal tender={tender} companyId={companyId} onClose={() => setModal(null)} />
+      )}
       {modal === "trackbid" && companyId && (
         <TrackBidModal tender={tender} companyId={companyId} onClose={() => setModal(null)} />
       )}
-      {(modal === "winprob" || modal === "competitors" || modal === "eligibility" || modal === "trackbid") && !companyId && (
+      {(modal === "winprob" || modal === "competitors" || modal === "eligibility" || modal === "trackbid" || modal === "priceintel") && !companyId && (
         <Modal title="Profile Required" onClose={() => setModal(null)}>
           <p style={{ color: "#94A3B8", fontSize: 14 }}>
             Please complete your <a href="/profile" style={{ color: "#3B82F6" }}>company profile</a> before using this feature.
