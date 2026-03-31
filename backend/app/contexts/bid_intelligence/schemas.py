@@ -68,6 +68,11 @@ class MarketPriceResponse(BaseModel):
 
 # ── Price Intelligence ────────────────────────────────────────────────────────
 
+class PriceTrendPoint(BaseModel):
+    label: str          # e.g. "Jan", "Feb", or a period label
+    value: float        # normalised 0–1 or absolute price
+
+
 class PriceBand(BaseModel):
     label: str          # e.g. "Aggressive", "Competitive", "Safe", "Premium"
     min_pct: float      # lower bound as % of market avg  (e.g. 0.80)
