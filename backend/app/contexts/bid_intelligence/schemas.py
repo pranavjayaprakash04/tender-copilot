@@ -1,9 +1,7 @@
 from __future__ import annotations
-
 from datetime import datetime
 from typing import Any
 from uuid import UUID
-
 from pydantic import BaseModel, ConfigDict, field_validator
 
 
@@ -36,6 +34,7 @@ class CompetitorAnalysisResponse(BaseModel):
     recommended_price: float | None
     analysis_lang: str
     generated_at: datetime
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -52,6 +51,7 @@ class WinProbabilityResponse(BaseModel):
     factors: list[str]
     market_avg: float | None
     recommended_range: dict[str, Any] | None
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -62,4 +62,51 @@ class MarketPriceResponse(BaseModel):
     max_price: float
     sample_count: int
     last_refreshed: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ── Price Intelligence ────────────────────────────────────────────────────────
+
+class PriceBand(BaseModel):
+    label: str          # e.g. "Aggressive", "Competitive", "Safe", "Premium"
+    min_pct: float      # lower bound as % of market avg  (e.g. 0.80)
+    max_pct: float      # upper bound as % of market avg  (e.g. 0.95)
+    win_rate_estimate: float   # 0–1
+    description: str
+
+
+class PriceIntelligenceRequest(BaseModel):
+    tender_id: str
+    company_id: UUID
+
+
+class PriceIntelligenceResponse(BaseModel):
+    tender_id: str
+
+    # Core market numbers
+    market_avg: float
+    market_min: float
+    market_max: float
+    optimal_price: float        # 92 % of market avg
+    sample_count: int
+
+    # Score 0–100: how well the tender value sits vs optimal
+    price_to_win_score: float
+    tender_value: float | None  # the tender's own estimated value if available
+
+    # Where the tender value sits in the min–max spectrum (0–1)
+    market_position: float
+
+    # Four standard price bands
+    price_bands: list[PriceBand]
+
+    # Plain-English insights
+    insights: list[str]
+
+    # Spread-based pseudo trend points (6 values normalised to 0–1)
+    trend_points: list[float]
+
+    generated_at: datetime
+
     model_config = ConfigDict(from_attributes=True)
