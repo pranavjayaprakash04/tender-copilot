@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 from datetime import datetime
 from typing import Any
 from uuid import UUID
+
 from pydantic import BaseModel, ConfigDict, field_validator
 
 
@@ -69,49 +71,40 @@ class MarketPriceResponse(BaseModel):
 # ── Price Intelligence ────────────────────────────────────────────────────────
 
 class PriceTrendPoint(BaseModel):
-    label: str          # e.g. "Jan", "Feb", or a period label
-    value: float        # normalised 0–1 or absolute price
+    label: str
+    avg: float
+    min: float
+    max: float
 
 
 class PriceBand(BaseModel):
-    label: str          # e.g. "Aggressive", "Competitive", "Safe", "Premium"
-    min_pct: float      # lower bound as % of market avg  (e.g. 0.80)
-    max_pct: float      # upper bound as % of market avg  (e.g. 0.95)
-    win_rate_estimate: float   # 0–1
+    label: str
+    min: float
+    max: float
+    win_rate_estimate: float
     description: str
 
 
 class PriceIntelligenceRequest(BaseModel):
     tender_id: str
     company_id: UUID
+    our_bid_amount: float | None = None
 
 
 class PriceIntelligenceResponse(BaseModel):
     tender_id: str
-
-    # Core market numbers
-    market_avg: float
-    market_min: float
-    market_max: float
-    optimal_price: float        # 92 % of market avg
+    category: str | None
+    market_avg: float | None
+    market_min: float | None
+    market_max: float | None
     sample_count: int
-
-    # Score 0–100: how well the tender value sits vs optimal
     price_to_win_score: float
-    tender_value: float | None  # the tender's own estimated value if available
-
-    # Where the tender value sits in the min–max spectrum (0–1)
-    market_position: float
-
-    # Four standard price bands
-    price_bands: list[PriceBand]
-
-    # Plain-English insights
+    price_to_win_label: str
+    optimal_price: float | None
+    our_bid_amount: float | None
+    our_position_pct: float | None
+    bands: list[PriceBand]
+    trend: list[PriceTrendPoint]
     insights: list[str]
-
-    # Spread-based pseudo trend points (6 values normalised to 0–1)
-    trend_points: list[float]
-
-    generated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
