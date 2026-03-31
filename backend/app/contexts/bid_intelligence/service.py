@@ -74,6 +74,7 @@ class BidIntelligenceService:
             return None
 
     async def _get_market_price(self, category: str) -> MarketPrice | None:
+        """Broad category market price (used by win probability & market price endpoints)."""
         try:
             result = await self.session.execute(
                 text("""
@@ -107,6 +108,52 @@ class BidIntelligenceService:
         except Exception as e:
             logger.error("_get_market_price_error", category=category, error=str(e))
             return None
+
+    async def _get_market_price_filtered(
+        self, category: str, ref_value: float
+    ) -> MarketPrice | None:
+        """
+        Market price filtered to tenders within ±70% of ref_value.
+        This prevents mixing ₹590 vehicle hires with ₹2000Cr contracts
+        in broad categories like 'Services'.
+        """
+        try:
+            low = ref_value * 0.30
+            high = ref_value * 1.70
+            result = await self.session.execute(
+                text("""
+                    SELECT
+                        tender_category,
+                        'filtered'                      AS portal,
+                        SUM(avg_estimated_value * sample_count)
+                            / NULLIF(SUM(sample_count), 0) AS avg_estimated_value,
+                        MIN(min_value)                  AS min_value,
+                        MAX(max_value)                  AS max_value,
+                        SUM(sample_count)               AS sample_count,
+                        MAX(last_refreshed)             AS last_refreshed
+                    FROM market_prices
+                    WHERE LOWER(tender_category) = LOWER(:category)
+                      AND avg_estimated_value BETWEEN :low AND :high
+                    GROUP BY tender_category
+                """),
+                {"category": category, "low": low, "high": high},
+            )
+            row = result.mappings().first()
+            if not row or row["avg_estimated_value"] is None:
+                # Fall back to unfiltered if filtered yields nothing
+                return await self._get_market_price(category)
+            mp = MarketPrice()
+            mp.tender_category = row["tender_category"]
+            mp.portal = row["portal"]
+            mp.avg_estimated_value = float(row["avg_estimated_value"])
+            mp.min_value = float(row["min_value"])
+            mp.max_value = float(row["max_value"])
+            mp.sample_count = int(row["sample_count"])
+            mp.last_refreshed = row["last_refreshed"]
+            return mp
+        except Exception as e:
+            logger.error("_get_market_price_filtered_error", category=category, error=str(e))
+            return await self._get_market_price(category)
 
     # ─── Competitor Analysis ───────────────────────────────────────────────────
 
@@ -273,7 +320,16 @@ Return ONLY valid JSON:
         category = tender.get("category") if tender else None
         tender_est_value = float(tender["estimated_value"]) if tender and tender.get("estimated_value") else None
 
-        market_price = await self._get_market_price(category) if category else None
+        # Use the bid amount or tender estimate as the reference value for filtering
+        ref_value = req.our_bid_amount or tender_est_value
+
+        # Fetch market data — filtered by value range if we have a reference
+        if category and ref_value:
+            market_price = await self._get_market_price_filtered(category, ref_value)
+        elif category:
+            market_price = await self._get_market_price(category)
+        else:
+            market_price = None
 
         # Use market data or fall back to tender estimated value for estimates
         if market_price:
@@ -288,7 +344,6 @@ Return ONLY valid JSON:
             mkt_max = tender_est_value * 1.40
             sample_count = 0
         else:
-            # No data at all — return empty shell
             return PriceIntelligenceResponse(
                 tender_id=req.tender_id,
                 category=category,
@@ -308,13 +363,13 @@ Return ONLY valid JSON:
 
         spread = mkt_max - mkt_min if mkt_max > mkt_min else mkt_avg * 0.5
 
-        # ── Optimal price: 8% below market avg (historically sweet spot for L1) ──
+        # Optimal price: 8% below market avg (historically sweet spot for L1)
         optimal_price = round(mkt_avg * 0.92)
 
         # ── Price-to-win score ────────────────────────────────────────────────
         our_bid = req.our_bid_amount
         if our_bid:
-            deviation = (our_bid - optimal_price) / optimal_price  # negative = cheaper
+            deviation = (our_bid - optimal_price) / optimal_price
             if deviation < -0.20:
                 score = 40
                 label = "Too Low — Risk of Quality Concerns"
@@ -369,83 +424,49 @@ Return ONLY valid JSON:
         ]
 
         # ── Simulated trend (6 data points derived from market spread) ────────
-        # We don't have time-series data, so we simulate a realistic trend
-        # using the spread as volatility proxy.
-        volatility = spread / mkt_avg  # normalised spread
+        volatility = spread / mkt_avg
         trend: list[PriceTrendPoint] = [
-            PriceTrendPoint(
-                label="18m ago",
-                avg=round(mkt_avg * (1 - volatility * 0.18)),
-                min=round(mkt_min * 0.92),
-                max=round(mkt_max * 0.90),
-            ),
-            PriceTrendPoint(
-                label="12m ago",
-                avg=round(mkt_avg * (1 - volatility * 0.10)),
-                min=round(mkt_min * 0.95),
-                max=round(mkt_max * 0.93),
-            ),
-            PriceTrendPoint(
-                label="9m ago",
-                avg=round(mkt_avg * (1 - volatility * 0.06)),
-                min=round(mkt_min * 0.97),
-                max=round(mkt_max * 0.96),
-            ),
-            PriceTrendPoint(
-                label="6m ago",
-                avg=round(mkt_avg * (1 - volatility * 0.03)),
-                min=round(mkt_min * 0.98),
-                max=round(mkt_max * 0.98),
-            ),
-            PriceTrendPoint(
-                label="3m ago",
-                avg=round(mkt_avg * (1 - volatility * 0.01)),
-                min=round(mkt_min),
-                max=round(mkt_max * 0.99),
-            ),
-            PriceTrendPoint(
-                label="Now",
-                avg=round(mkt_avg),
-                min=round(mkt_min),
-                max=round(mkt_max),
-            ),
+            PriceTrendPoint(label="18m ago", avg=round(mkt_avg * (1 - volatility * 0.18)), min=round(mkt_min * 0.92), max=round(mkt_max * 0.90)),
+            PriceTrendPoint(label="12m ago", avg=round(mkt_avg * (1 - volatility * 0.10)), min=round(mkt_min * 0.95), max=round(mkt_max * 0.93)),
+            PriceTrendPoint(label="9m ago",  avg=round(mkt_avg * (1 - volatility * 0.06)), min=round(mkt_min * 0.97), max=round(mkt_max * 0.96)),
+            PriceTrendPoint(label="6m ago",  avg=round(mkt_avg * (1 - volatility * 0.03)), min=round(mkt_min * 0.98), max=round(mkt_max * 0.98)),
+            PriceTrendPoint(label="3m ago",  avg=round(mkt_avg * (1 - volatility * 0.01)), min=round(mkt_min),        max=round(mkt_max * 0.99)),
+            PriceTrendPoint(label="Now",     avg=round(mkt_avg),                            min=round(mkt_min),        max=round(mkt_max)),
         ]
 
         # ── Insights ──────────────────────────────────────────────────────────
         insights: list[str] = []
 
-        # Market spread insight
         spread_pct = (mkt_max - mkt_min) / mkt_avg * 100
         if spread_pct > 80:
-            insights.append(f"High price variance ({spread_pct:.0f}%) — this category has many diverse bids. Focus on technical quality over price.")
+            insights.append(f"Moderate-to-high price variance ({spread_pct:.0f}%) in this category. Focus on technical quality alongside pricing.")
         elif spread_pct > 40:
             insights.append(f"Moderate price variance ({spread_pct:.0f}%) — pricing discipline matters. Stay within the competitive band.")
         else:
-            insights.append(f"Low price variance ({spread_pct:.0f}%) — this is a mature market. Small price differences can be decisive.")
+            insights.append(f"Low price variance ({spread_pct:.0f}%) — mature market. Small price differences can be decisive.")
 
-        # Our bid vs market
         if our_bid:
             diff_pct = (our_bid - mkt_avg) / mkt_avg * 100
-            if diff_pct < -15:
+            direction = "below" if diff_pct < 0 else "above"
+            if abs(diff_pct) < 5:
+                insights.append(f"Your bid is very close to market average ({abs(diff_pct):.1f}% {direction}) — well positioned.")
+            elif diff_pct < -15:
                 insights.append(f"Your bid is {abs(diff_pct):.1f}% below market average — strong L1 contender but verify cost coverage.")
-            elif diff_pct < 5:
-                insights.append(f"Your bid is well-positioned — {abs(diff_pct):.1f}% {'below' if diff_pct < 0 else 'above'} market average.")
-            else:
+            elif diff_pct > 15:
                 insights.append(f"Your bid is {diff_pct:.1f}% above market average — consider revising to improve win probability.")
+            else:
+                insights.append(f"Your bid is {abs(diff_pct):.1f}% {direction} market average.")
 
-        # Tender value vs market
         if tender_est_value and market_price:
             tv_diff = (tender_est_value - mkt_avg) / mkt_avg * 100
             if abs(tv_diff) > 20:
                 insights.append(f"Tender estimated value is {abs(tv_diff):.0f}% {'above' if tv_diff > 0 else 'below'} category average — this tender may have unique scope.")
 
-        # Sample count insight
         if sample_count < 10:
             insights.append("Limited market data available. Price bands are indicative — validate against similar recent tenders.")
         elif sample_count > 50:
             insights.append(f"Strong data confidence: based on {sample_count} similar tenders in this category.")
 
-        # Optimal tip
         insights.append(f"Optimal bid target: ₹{optimal_price:,.0f} (8% below market avg) — historically the L1 sweet spot for Indian government tenders.")
 
         return PriceIntelligenceResponse(
