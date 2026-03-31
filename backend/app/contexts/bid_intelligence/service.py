@@ -74,7 +74,7 @@ class BidIntelligenceService:
             return None
 
     async def _get_market_price(self, category: str) -> MarketPrice | None:
-        """Broad category market price (used by win probability & market price endpoints)."""
+        """Broad category market price — used by win probability & market price endpoints."""
         try:
             result = await self.session.execute(
                 text("""
@@ -109,13 +109,13 @@ class BidIntelligenceService:
             logger.error("_get_market_price_error", category=category, error=str(e))
             return None
 
-    async def _get_market_price_filtered(
+    async def _get_price_intel_from_tenders(
         self, category: str, ref_value: float
-    ) -> MarketPrice | None:
+    ) -> dict | None:
         """
-        Market price filtered to tenders within ±70% of ref_value.
-        This prevents mixing ₹590 vehicle hires with ₹2000Cr contracts
-        in broad categories like 'Services'.
+        Query the tenders table directly for tenders in the same category
+        and within ±70% of ref_value. This gives meaningful min/avg/max
+        without the category-wide outlier problem in market_prices.
         """
         try:
             low = ref_value * 0.30
@@ -123,37 +123,29 @@ class BidIntelligenceService:
             result = await self.session.execute(
                 text("""
                     SELECT
-                        tender_category,
-                        'filtered'                      AS portal,
-                        SUM(avg_estimated_value * sample_count)
-                            / NULLIF(SUM(sample_count), 0) AS avg_estimated_value,
-                        MIN(min_value)                  AS min_value,
-                        MAX(max_value)                  AS max_value,
-                        SUM(sample_count)               AS sample_count,
-                        MAX(last_refreshed)             AS last_refreshed
-                    FROM market_prices
-                    WHERE LOWER(tender_category) = LOWER(:category)
-                      AND avg_estimated_value BETWEEN :low AND :high
-                    GROUP BY tender_category
+                        AVG(estimated_value::float)   AS avg_value,
+                        MIN(estimated_value::float)   AS min_value,
+                        MAX(estimated_value::float)   AS max_value,
+                        COUNT(*)                      AS sample_count
+                    FROM tenders
+                    WHERE LOWER(category) = LOWER(:category)
+                      AND estimated_value IS NOT NULL
+                      AND estimated_value::float BETWEEN :low AND :high
                 """),
                 {"category": category, "low": low, "high": high},
             )
             row = result.mappings().first()
-            if not row or row["avg_estimated_value"] is None:
-                # Fall back to unfiltered if filtered yields nothing
-                return await self._get_market_price(category)
-            mp = MarketPrice()
-            mp.tender_category = row["tender_category"]
-            mp.portal = row["portal"]
-            mp.avg_estimated_value = float(row["avg_estimated_value"])
-            mp.min_value = float(row["min_value"])
-            mp.max_value = float(row["max_value"])
-            mp.sample_count = int(row["sample_count"])
-            mp.last_refreshed = row["last_refreshed"]
-            return mp
+            if not row or row["sample_count"] == 0 or row["avg_value"] is None:
+                return None
+            return {
+                "avg_value": float(row["avg_value"]),
+                "min_value": float(row["min_value"]),
+                "max_value": float(row["max_value"]),
+                "sample_count": int(row["sample_count"]),
+            }
         except Exception as e:
-            logger.error("_get_market_price_filtered_error", category=category, error=str(e))
-            return await self._get_market_price(category)
+            logger.error("_get_price_intel_from_tenders_error", error=str(e))
+            return None
 
     # ─── Competitor Analysis ───────────────────────────────────────────────────
 
@@ -320,25 +312,21 @@ Return ONLY valid JSON:
         category = tender.get("category") if tender else None
         tender_est_value = float(tender["estimated_value"]) if tender and tender.get("estimated_value") else None
 
-        # Use the bid amount or tender estimate as the reference value for filtering
+        # Reference value for range filtering: prefer bid amount, fall back to tender estimate
         ref_value = req.our_bid_amount or tender_est_value
 
-        # Fetch market data — filtered by value range if we have a reference
+        # ── Fetch market data from tenders table (value-range filtered) ───────
+        market_data = None
         if category and ref_value:
-            market_price = await self._get_market_price_filtered(category, ref_value)
-        elif category:
-            market_price = await self._get_market_price(category)
-        else:
-            market_price = None
+            market_data = await self._get_price_intel_from_tenders(category, ref_value)
 
-        # Use market data or fall back to tender estimated value for estimates
-        if market_price:
-            mkt_avg = float(market_price.avg_estimated_value)
-            mkt_min = float(market_price.min_value)
-            mkt_max = float(market_price.max_value)
-            sample_count = market_price.sample_count
+        # ── Fall back to tender estimate if no tenders data ───────────────────
+        if market_data:
+            mkt_avg = market_data["avg_value"]
+            mkt_min = market_data["min_value"]
+            mkt_max = market_data["max_value"]
+            sample_count = market_data["sample_count"]
         elif tender_est_value:
-            # Synthesise reasonable market bounds from tender value
             mkt_avg = tender_est_value
             mkt_min = tender_est_value * 0.70
             mkt_max = tender_est_value * 1.40
@@ -362,8 +350,6 @@ Return ONLY valid JSON:
             )
 
         spread = mkt_max - mkt_min if mkt_max > mkt_min else mkt_avg * 0.5
-
-        # Optimal price: 8% below market avg (historically sweet spot for L1)
         optimal_price = round(mkt_avg * 0.92)
 
         # ── Price-to-win score ────────────────────────────────────────────────
@@ -423,7 +409,7 @@ Return ONLY valid JSON:
             ),
         ]
 
-        # ── Simulated trend (6 data points derived from market spread) ────────
+        # ── Simulated trend (6 points from spread volatility) ─────────────────
         volatility = spread / mkt_avg
         trend: list[PriceTrendPoint] = [
             PriceTrendPoint(label="18m ago", avg=round(mkt_avg * (1 - volatility * 0.18)), min=round(mkt_min * 0.92), max=round(mkt_max * 0.90)),
@@ -439,7 +425,7 @@ Return ONLY valid JSON:
 
         spread_pct = (mkt_max - mkt_min) / mkt_avg * 100
         if spread_pct > 80:
-            insights.append(f"Moderate-to-high price variance ({spread_pct:.0f}%) in this category. Focus on technical quality alongside pricing.")
+            insights.append(f"Moderate-to-high price variance ({spread_pct:.0f}%) among similar-sized tenders in this category.")
         elif spread_pct > 40:
             insights.append(f"Moderate price variance ({spread_pct:.0f}%) — pricing discipline matters. Stay within the competitive band.")
         else:
@@ -457,15 +443,17 @@ Return ONLY valid JSON:
             else:
                 insights.append(f"Your bid is {abs(diff_pct):.1f}% {direction} market average.")
 
-        if tender_est_value and market_price:
+        if tender_est_value and market_data:
             tv_diff = (tender_est_value - mkt_avg) / mkt_avg * 100
             if abs(tv_diff) > 20:
-                insights.append(f"Tender estimated value is {abs(tv_diff):.0f}% {'above' if tv_diff > 0 else 'below'} category average — this tender may have unique scope.")
+                insights.append(f"Tender estimated value is {abs(tv_diff):.0f}% {'above' if tv_diff > 0 else 'below'} similar tenders — this tender may have unique scope.")
 
-        if sample_count < 10:
-            insights.append("Limited market data available. Price bands are indicative — validate against similar recent tenders.")
-        elif sample_count > 50:
-            insights.append(f"Strong data confidence: based on {sample_count} similar tenders in this category.")
+        if sample_count < 5:
+            insights.append("Very few similar tenders found. Price bands are indicative — validate against recent tenders manually.")
+        elif sample_count < 20:
+            insights.append(f"Based on {sample_count} similar-sized tenders in this category.")
+        else:
+            insights.append(f"Strong data confidence: based on {sample_count} similar-sized tenders in this category.")
 
         insights.append(f"Optimal bid target: ₹{optimal_price:,.0f} (8% below market avg) — historically the L1 sweet spot for Indian government tenders.")
 
