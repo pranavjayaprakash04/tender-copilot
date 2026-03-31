@@ -107,11 +107,6 @@ Return JSON with these fields: summary (string), key_requirements (array of stri
         self, request: DocumentChecklistRequest, company_id: UUID
     ) -> DocumentChecklistResponse:
         vault_doc_names: list[str] = []
-        try:
-            vault_docs = await self._document_repo.get_vault_documents(company_id)
-            vault_doc_names = [doc.name.lower() for doc in vault_docs] if vault_docs else []
-        except Exception:
-            vault_doc_names = []
 
         checklist_items = await self._generate_checklist_with_ai(request, vault_doc_names)
         have_count = sum(1 for item in checklist_items if item.status == "have")
