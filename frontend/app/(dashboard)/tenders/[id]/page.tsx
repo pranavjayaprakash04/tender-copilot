@@ -617,14 +617,12 @@ function EligibilityModal({ tender, profile, onClose }: { tender: TenderDetail; 
   });
 
   const data = mutation.data;
-
   const verdictColor = (v: string) => {
     if (v?.includes("Highly")) return "#10B981";
     if (v?.includes("Likely")) return "#3B82F6";
     if (v?.includes("Marginally")) return "#F59E0B";
     return "#EF4444";
   };
-
   const statusIcon = (s: string) => s === "pass" ? "✓" : s === "warning" ? "⚠" : "✗";
   const statusColor = (s: string) => s === "pass" ? "#10B981" : s === "warning" ? "#F59E0B" : "#EF4444";
 
@@ -635,15 +633,12 @@ function EligibilityModal({ tender, profile, onClose }: { tender: TenderDetail; 
           <p style={{ color: "#94A3B8", fontSize: 13, marginBottom: 16 }}>
             AI will check if <strong style={{ color: "#E2E8F0" }}>{profile?.name || "your company"}</strong> is eligible to bid on this tender based on your profile.
           </p>
-          <button
-            onClick={() => mutation.mutate()}
-            style={{ padding: "10px 20px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none", background: "#10B981", color: "#fff" }}
-          >
+          <button onClick={() => mutation.mutate()}
+            style={{ padding: "10px 20px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none", background: "#10B981", color: "#fff" }}>
             Check Eligibility
           </button>
         </>
       )}
-
       {mutation.isPending && (
         <div style={{ textAlign: "center", padding: "32px 0", color: "#64748B", fontSize: 13 }}>
           <div style={{ width: 32, height: 32, border: "3px solid #1E2537", borderTopColor: "#10B981", borderRadius: "50%", animation: "ispin .7s linear infinite", margin: "0 auto 12px" }} />
@@ -651,22 +646,15 @@ function EligibilityModal({ tender, profile, onClose }: { tender: TenderDetail; 
           <style>{`@keyframes ispin{to{transform:rotate(360deg)}}`}</style>
         </div>
       )}
-
       {mutation.isError && (
         <div style={{ background: "#EF444420", border: "1px solid #EF444440", borderRadius: 6, padding: "10px 14px", color: "#FCA5A5", fontSize: 12, marginBottom: 12 }}>
           Analysis failed. Please try again.
           <button onClick={() => mutation.mutate()} style={{ marginLeft: 8, background: "none", border: "none", color: "#3B82F6", cursor: "pointer", fontSize: 12 }}>Retry</button>
         </div>
       )}
-
       {data && (
         <>
-          <div style={{
-            background: verdictColor(data.verdict) + "18",
-            border: `1px solid ${verdictColor(data.verdict)}40`,
-            borderRadius: 10, padding: "16px 20px", marginBottom: 16,
-            display: "flex", alignItems: "center", justifyContent: "space-between"
-          }}>
+          <div style={{ background: verdictColor(data.verdict) + "18", border: `1px solid ${verdictColor(data.verdict)}40`, borderRadius: 10, padding: "16px 20px", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div>
               <div style={{ fontSize: 18, fontWeight: 700, color: verdictColor(data.verdict) }}>{data.verdict}</div>
               <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 4, maxWidth: 340 }}>{data.summary}</div>
@@ -676,16 +664,12 @@ function EligibilityModal({ tender, profile, onClose }: { tender: TenderDetail; 
               <div style={{ fontSize: 10, color: "#64748B", textTransform: "uppercase", letterSpacing: ".5px" }}>Score</div>
             </div>
           </div>
-
           <div style={{ background: "#1A1F2E", borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#64748B", marginBottom: 6 }}>
-              <span>Eligibility Score</span><span>{data.score}/100</span>
-            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#64748B", marginBottom: 6 }}><span>Eligibility Score</span><span>{data.score}/100</span></div>
             <div style={{ height: 8, background: "#1E2537", borderRadius: 4 }}>
               <div style={{ height: 8, borderRadius: 4, width: `${data.score}%`, background: `linear-gradient(90deg, ${verdictColor(data.verdict)}, ${verdictColor(data.verdict)}99)`, transition: "width 1s ease" }} />
             </div>
           </div>
-
           <div style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: "#94A3B8", marginBottom: 8, textTransform: "uppercase", letterSpacing: ".5px" }}>Eligibility Criteria</div>
             {data.criteria.map((c, i) => (
@@ -698,7 +682,6 @@ function EligibilityModal({ tender, profile, onClose }: { tender: TenderDetail; 
               </div>
             ))}
           </div>
-
           {data.missing_documents?.length > 0 && (
             <div style={{ background: "#F59E0B10", border: "1px solid #F59E0B30", borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: "#F59E0B", marginBottom: 8 }}>⚠ Missing Documents</div>
@@ -709,7 +692,6 @@ function EligibilityModal({ tender, profile, onClose }: { tender: TenderDetail; 
               ))}
             </div>
           )}
-
           {data.recommendations?.length > 0 && (
             <div style={{ background: "#3B82F610", border: "1px solid #3B82F630", borderRadius: 8, padding: "12px 14px" }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: "#3B82F6", marginBottom: 8 }}>💡 Recommendations</div>
@@ -720,13 +702,7 @@ function EligibilityModal({ tender, profile, onClose }: { tender: TenderDetail; 
               ))}
             </div>
           )}
-
-          <button
-            onClick={() => mutation.mutate()}
-            style={{ marginTop: 14, padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1px solid #1E2537", background: "transparent", color: "#94A3B8" }}
-          >
-            Re-check
-          </button>
+          <button onClick={() => mutation.mutate()} style={{ marginTop: 14, padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1px solid #1E2537", background: "transparent", color: "#94A3B8" }}>Re-check</button>
         </>
       )}
     </Modal>
@@ -768,33 +744,24 @@ function DocumentChecklistModal({ tender, onClose }: { tender: TenderDetail; onC
   return (
     <Modal title="📋 Document Checklist" onClose={onClose}>
       <style>{`@keyframes ispin{to{transform:rotate(360deg)}}`}</style>
-
       {!data && !mutation.isPending && (
         <>
-          <p style={{ color: "#94A3B8", fontSize: 13, marginBottom: 16 }}>
-            AI will generate a required document checklist for this tender and match against your Vault.
-          </p>
-          <button onClick={() => mutation.mutate()}
-            style={{ padding: "10px 20px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none", background: "#6366F1", color: "#fff" }}>
-            Generate Checklist
-          </button>
+          <p style={{ color: "#94A3B8", fontSize: 13, marginBottom: 16 }}>AI will generate a required document checklist for this tender and match against your Vault.</p>
+          <button onClick={() => mutation.mutate()} style={{ padding: "10px 20px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none", background: "#6366F1", color: "#fff" }}>Generate Checklist</button>
         </>
       )}
-
       {mutation.isPending && (
         <div style={{ textAlign: "center", padding: "32px 0", color: "#64748B", fontSize: 13 }}>
           <div style={{ width: 32, height: 32, border: "3px solid #1E2537", borderTopColor: "#6366F1", borderRadius: "50%", animation: "ispin .7s linear infinite", margin: "0 auto 12px" }} />
           Generating checklist…
         </div>
       )}
-
       {mutation.isError && (
         <div style={{ background: "#EF444420", border: "1px solid #EF444440", borderRadius: 6, padding: "10px 14px", color: "#FCA5A5", fontSize: 12, marginBottom: 12 }}>
           Failed to generate checklist. Please try again.
           <button onClick={() => mutation.mutate()} style={{ marginLeft: 8, background: "none", border: "none", color: "#3B82F6", cursor: "pointer", fontSize: 12 }}>Retry</button>
         </div>
       )}
-
       {data && (
         <>
           <div style={{ background: readinessColor + "18", border: `1px solid ${readinessColor}40`, borderRadius: 10, padding: "14px 18px", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -811,11 +778,7 @@ function DocumentChecklistModal({ tender, onClose }: { tender: TenderDetail; onC
             <div style={{ height: 6, borderRadius: 3, background: readinessColor, width: `${readiness}%`, transition: "width 0.5s ease" }} />
           </div>
           <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-            {[
-              { val: checkedCount, label: "Have", color: "#10B981" },
-              { val: total - checkedCount, label: "Missing", color: "#EF4444" },
-              { val: total, label: "Total", color: "#3B82F6" },
-            ].map(({ val, label, color }) => (
+            {[{ val: checkedCount, label: "Have", color: "#10B981" }, { val: total - checkedCount, label: "Missing", color: "#EF4444" }, { val: total, label: "Total", color: "#3B82F6" }].map(({ val, label, color }) => (
               <div key={label} style={{ flex: 1, background: color + "15", border: `1px solid ${color}30`, borderRadius: 8, padding: 10, textAlign: "center" }}>
                 <div style={{ fontSize: 18, fontWeight: 700, color, fontFamily: "monospace" }}>{val}</div>
                 <div style={{ fontSize: 10, color: "#64748B", textTransform: "uppercase", letterSpacing: ".5px" }}>{label}</div>
@@ -826,9 +789,7 @@ function DocumentChecklistModal({ tender, onClose }: { tender: TenderDetail; onC
             {data.checklist.map((item) => {
               const isChecked = !!checked[item.id];
               return (
-                <div key={item.id}
-                  style={{ background: isChecked ? "#10B98108" : "#1A1F2E", border: `1px solid ${isChecked ? "#10B98140" : item.required ? "#EF444430" : "#1E2537"}`, borderRadius: 8, padding: "12px 14px", cursor: "pointer", transition: "all 0.15s" }}
-                  onClick={() => toggleCheck(item.id)}>
+                <div key={item.id} style={{ background: isChecked ? "#10B98108" : "#1A1F2E", border: `1px solid ${isChecked ? "#10B98140" : item.required ? "#EF444430" : "#1E2537"}`, borderRadius: 8, padding: "12px 14px", cursor: "pointer", transition: "all 0.15s" }} onClick={() => toggleCheck(item.id)}>
                   <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
                     <div style={{ width: 18, height: 18, borderRadius: 4, border: `2px solid ${isChecked ? "#10B981" : "#475569"}`, background: isChecked ? "#10B981" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
                       {isChecked && <span style={{ color: "#fff", fontSize: 11, fontWeight: 700 }}>✓</span>}
@@ -847,10 +808,7 @@ function DocumentChecklistModal({ tender, onClose }: { tender: TenderDetail; onC
               );
             })}
           </div>
-          <button onClick={() => mutation.mutate()}
-            style={{ marginTop: 16, padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1px solid #1E2537", background: "transparent", color: "#94A3B8" }}>
-            Regenerate
-          </button>
+          <button onClick={() => mutation.mutate()} style={{ marginTop: 16, padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1px solid #1E2537", background: "transparent", color: "#94A3B8" }}>Regenerate</button>
         </>
       )}
     </Modal>
@@ -863,6 +821,7 @@ function PriceIntelligenceModal({ tender, companyId, onClose }: { tender: Tender
   const [bidAmount, setBidAmount] = useState(
     tender.estimated_value ? String(Math.round(tender.estimated_value * 0.92)) : ""
   );
+  const [hasAnalysed, setHasAnalysed] = useState(false);
 
   const mutation = useMutation<PriceIntelligenceResponse, Error>({
     mutationFn: () =>
@@ -871,33 +830,25 @@ function PriceIntelligenceModal({ tender, companyId, onClose }: { tender: Tender
         company_id: companyId,
         our_bid_amount: bidAmount ? parseFloat(bidAmount) : null,
       }),
+    onSuccess: () => setHasAnalysed(true),
   });
 
   const data = mutation.data;
-
   const scoreColor = (s: number) => s >= 80 ? "#10B981" : s >= 55 ? "#F59E0B" : "#EF4444";
   const bandColors = ["#10B981", "#3B82F6", "#F59E0B", "#EF4444"];
 
-  // Simple SVG trend chart
   const TrendChart = ({ trend }: { trend: PriceTrendPoint[] }) => {
     const W = 480, H = 100, PAD = 32;
-    const avgs = trend.map(t => t.avg);
-    const mins = trend.map(t => t.min);
-    const maxs = trend.map(t => t.max);
-    const allVals = [...avgs, ...mins, ...maxs];
-    const lo = Math.min(...allVals);
-    const hi = Math.max(...allVals);
-    const range = hi - lo || 1;
+    const allVals = [...trend.map(t => t.avg), ...trend.map(t => t.min), ...trend.map(t => t.max)];
+    const lo = Math.min(...allVals), hi = Math.max(...allVals), range = hi - lo || 1;
     const xScale = (i: number) => PAD + (i / (trend.length - 1)) * (W - PAD * 2);
     const yScale = (v: number) => H - 12 - ((v - lo) / range) * (H - 24);
-
     const avgPath = trend.map((t, i) => `${i === 0 ? "M" : "L"}${xScale(i)},${yScale(t.avg)}`).join(" ");
     const areaPath = [
       ...trend.map((t, i) => `${i === 0 ? "M" : "L"}${xScale(i)},${yScale(t.max)}`),
       ...trend.map((t, i) => `L${xScale(trend.length - 1 - i)},${yScale(trend[trend.length - 1 - i].min)}`),
       "Z",
     ].join(" ");
-
     return (
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: 100 }}>
         <defs>
@@ -908,12 +859,8 @@ function PriceIntelligenceModal({ tender, companyId, onClose }: { tender: Tender
         </defs>
         <path d={areaPath} fill="url(#trendGrad)" />
         <path d={avgPath} fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        {trend.map((t, i) => (
-          <circle key={i} cx={xScale(i)} cy={yScale(t.avg)} r="3" fill="#3B82F6" />
-        ))}
-        {trend.map((t, i) => (
-          <text key={i} x={xScale(i)} y={H - 1} textAnchor="middle" fontSize="9" fill="#475569">{t.label}</text>
-        ))}
+        {trend.map((t, i) => <circle key={i} cx={xScale(i)} cy={yScale(t.avg)} r="3" fill="#3B82F6" />)}
+        {trend.map((t, i) => <text key={i} x={xScale(i)} y={H - 1} textAnchor="middle" fontSize="9" fill="#475569">{t.label}</text>)}
       </svg>
     );
   };
@@ -933,26 +880,25 @@ function PriceIntelligenceModal({ tender, companyId, onClose }: { tender: Tender
         .pi-section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#475569;margin-bottom:10px}
       `}</style>
 
-      {/* Bid input */}
       <div style={{ marginBottom: 4 }}>
         <label style={{ fontSize: 12, color: "#64748B", display: "block", marginBottom: 6 }}>
           Your intended bid amount <span style={{ color: "#F59E0B" }}>*</span>
         </label>
-        <input
-          className="pi-input"
-          type="number"
-          placeholder="Enter your bid amount in ₹"
-          value={bidAmount}
-          onChange={e => setBidAmount(e.target.value)}
-        />
-        {tender.estimated_value && (
+        <input className="pi-input" type="number" placeholder="Enter your bid amount in ₹"
+          value={bidAmount} onChange={e => setBidAmount(e.target.value)} />
+        {tender.estimated_value ? (
           <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
             Tender estimate: {fmt(tender.estimated_value)} · Pre-filled at 92% (optimal zone)
           </div>
+        ) : (
+          <div style={{ fontSize: 11, color: "#F59E0B", marginTop: 4 }}>
+            ⚠ No tender estimate available — enter your bid amount to analyse
+          </div>
         )}
       </div>
-      <button className="pi-btn" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
-        {mutation.isPending ? <><span className="pi-spinner" />Analysing…</> : data ? "Re-analyse" : "Analyse Pricing"}
+
+      <button className="pi-btn" disabled={mutation.isPending || !bidAmount} onClick={() => mutation.mutate()}>
+        {mutation.isPending ? <><span className="pi-spinner" />Analysing…</> : hasAnalysed ? "Re-analyse" : "Analyse Pricing"}
       </button>
 
       {mutation.isError && (
@@ -961,22 +907,28 @@ function PriceIntelligenceModal({ tender, companyId, onClose }: { tender: Tender
         </div>
       )}
 
-      {!data && !mutation.isPending && (
+      {data && !data.market_avg && (
+        <div style={{ background: "#F59E0B10", border: "1px solid #F59E0B30", borderRadius: 8, padding: "14px 16px", marginTop: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#F59E0B", marginBottom: 6 }}>⚠ Not enough similar tenders found</div>
+          <div style={{ fontSize: 12, color: "#94A3B8", lineHeight: 1.6 }}>
+            No tenders with a similar value range were found in the <strong style={{ color: "#E2E8F0" }}>{data.category}</strong> category.
+          </div>
+          <div style={{ fontSize: 11, color: "#64748B", marginTop: 8 }}>
+            💡 Try the <strong style={{ color: "#E2E8F0" }}>Market Price</strong> button for a broader category overview.
+          </div>
+        </div>
+      )}
+
+      {!hasAnalysed && !mutation.isPending && (
         <p style={{ color: "#475569", fontSize: 13, textAlign: "center", marginTop: 28 }}>
-          Enter your bid amount and click Analyse Pricing
+          {bidAmount ? "Click Analyse Pricing to see market intelligence" : "Enter your bid amount and click Analyse Pricing"}
         </p>
       )}
 
-      {data && (
+      {data && data.market_avg && (
         <>
-          {/* Price-to-Win Score */}
           {data.our_bid_amount && (
-            <div style={{
-              background: scoreColor(data.price_to_win_score) + "14",
-              border: `1px solid ${scoreColor(data.price_to_win_score)}35`,
-              borderRadius: 10, padding: "16px 18px", marginTop: 16,
-              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
-            }}>
+            <div style={{ background: scoreColor(data.price_to_win_score) + "14", border: `1px solid ${scoreColor(data.price_to_win_score)}35`, borderRadius: 10, padding: "16px 18px", marginTop: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
               <div>
                 <div style={{ fontSize: 11, color: "#64748B", marginBottom: 4 }}>Price-to-Win Score</div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: scoreColor(data.price_to_win_score) }}>{data.price_to_win_label}</div>
@@ -987,74 +939,60 @@ function PriceIntelligenceModal({ tender, companyId, onClose }: { tender: Tender
                 )}
               </div>
               <div style={{ textAlign: "center", flexShrink: 0 }}>
-                <div style={{ fontSize: 36, fontWeight: 800, color: scoreColor(data.price_to_win_score), fontFamily: "monospace", lineHeight: 1 }}>
-                  {data.price_to_win_score}
-                </div>
+                <div style={{ fontSize: 36, fontWeight: 800, color: scoreColor(data.price_to_win_score), fontFamily: "monospace", lineHeight: 1 }}>{data.price_to_win_score}</div>
                 <div style={{ fontSize: 10, color: "#64748B" }}>/ 100</div>
               </div>
             </div>
           )}
 
-          {/* Market stats */}
-          {data.market_avg && (
-            <div className="pi-card">
-              <div className="pi-section-title">Market Benchmarks — {data.category}</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
-                {[
-                  { label: "Market Min", value: fmtShort(data.market_min!), color: "#10B981" },
-                  { label: "Market Avg", value: fmtShort(data.market_avg), color: "#F1F5F9" },
-                  { label: "Market Max", value: fmtShort(data.market_max!), color: "#EF4444" },
-                ].map(({ label, value, color }) => (
-                  <div key={label} style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color, fontFamily: "monospace" }}>{value}</div>
-                    <div style={{ fontSize: 10, color: "#475569" }}>{label}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Position bar */}
-              {data.our_position_pct !== null && data.our_position_pct !== undefined && (
-                <>
-                  <div style={{ fontSize: 10, color: "#475569", marginBottom: 6 }}>Your bid position in market range</div>
-                  <div style={{ position: "relative", height: 8, background: "#1E2537", borderRadius: 4, marginBottom: 4 }}>
-                    <div style={{ position: "absolute", height: 8, borderRadius: 4, background: "linear-gradient(90deg,#10B981,#3B82F6,#F59E0B,#EF4444)", width: "100%", opacity: 0.3 }} />
-                    <div style={{
-                      position: "absolute", top: -3, width: 14, height: 14, borderRadius: "50%",
-                      background: scoreColor(data.price_to_win_score), border: "2px solid #0F1117",
-                      left: `calc(${(data.our_position_pct * 100).toFixed(1)}% - 7px)`,
-                      transition: "left 0.8s ease",
-                    }} />
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "#475569" }}>
-                    <span>Min (L1)</span><span>Avg</span><span>Max</span>
-                  </div>
-                </>
-              )}
-
-              {data.sample_count > 0 && (
-                <div style={{ fontSize: 11, color: "#475569", marginTop: 8 }}>Based on {data.sample_count} similar tenders</div>
-              )}
+          <div className="pi-card">
+            <div className="pi-section-title">Market Benchmarks — {data.category}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+              {[
+                { label: "Market Min", value: fmtShort(data.market_min!), color: "#10B981" },
+                { label: "Market Avg", value: fmtShort(data.market_avg), color: "#F1F5F9" },
+                { label: "Market Max", value: fmtShort(data.market_max!), color: "#EF4444" },
+              ].map(({ label, value, color }) => (
+                <div key={label} style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color, fontFamily: "monospace" }}>{value}</div>
+                  <div style={{ fontSize: 10, color: "#475569" }}>{label}</div>
+                </div>
+              ))}
             </div>
-          )}
+            {data.our_position_pct !== null && data.our_position_pct !== undefined && (
+              <>
+                <div style={{ fontSize: 10, color: "#475569", marginBottom: 6 }}>Your bid position in market range</div>
+                <div style={{ position: "relative", height: 8, background: "#1E2537", borderRadius: 4, marginBottom: 4 }}>
+                  <div style={{ position: "absolute", height: 8, borderRadius: 4, background: "linear-gradient(90deg,#10B981,#3B82F6,#F59E0B,#EF4444)", width: "100%", opacity: 0.3 }} />
+                  <div style={{ position: "absolute", top: -3, width: 14, height: 14, borderRadius: "50%", background: scoreColor(data.price_to_win_score), border: "2px solid #0F1117", left: `calc(${(data.our_position_pct * 100).toFixed(1)}% - 7px)`, transition: "left 0.8s ease" }} />
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "#475569" }}>
+                  <span>Min (L1)</span><span>Avg</span><span>Max</span>
+                </div>
+              </>
+            )}
+            {data.sample_count > 0 && (
+              <div style={{ fontSize: 11, color: "#475569", marginTop: 8 }}>
+                Based on {data.sample_count} similar tenders · <span style={{ fontStyle: "italic" }}>Market benchmarks from live tender data</span>
+              </div>
+            )}
+          </div>
 
-          {/* Trend chart */}
           {data.trend?.length > 0 && (
             <div className="pi-card">
               <div className="pi-section-title">Price Trend — {data.category}</div>
               <TrendChart trend={data.trend} />
-              <div style={{ fontSize: 10, color: "#475569", marginTop: 4 }}>Blue line = market avg · Shaded area = min–max range</div>
+              <div style={{ fontSize: 10, color: "#475569", marginTop: 4 }}>
+                Blue line = market avg · Shaded area = min–max range · <span style={{ color: "#374151" }}>Trend is estimated from current spread</span>
+              </div>
             </div>
           )}
 
-          {/* Price bands */}
           {data.bands?.length > 0 && (
             <div className="pi-card">
               <div className="pi-section-title">Price Bands</div>
               {data.bands.map((band, i) => (
-                <div key={i} style={{
-                  display: "flex", alignItems: "center", gap: 10, padding: "9px 0",
-                  borderBottom: i < data.bands.length - 1 ? "1px solid #1E2537" : "none",
-                }}>
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: i < data.bands.length - 1 ? "1px solid #1E2537" : "none" }}>
                   <div style={{ width: 3, height: 36, borderRadius: 2, background: bandColors[i], flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 600, color: bandColors[i], marginBottom: 2 }}>{band.label}</div>
@@ -1062,17 +1000,14 @@ function PriceIntelligenceModal({ tender, companyId, onClose }: { tender: Tender
                     <div style={{ fontSize: 10, color: "#64748B", marginTop: 1 }}>{band.description}</div>
                   </div>
                   <div style={{ textAlign: "right", flexShrink: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: bandColors[i], fontFamily: "monospace" }}>
-                      {(band.win_rate_estimate * 100).toFixed(0)}%
-                    </div>
-                    <div style={{ fontSize: 9, color: "#475569" }}>win rate</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: bandColors[i], fontFamily: "monospace" }}>{(band.win_rate_estimate * 100).toFixed(0)}%</div>
+                    <div style={{ fontSize: 9, color: "#475569" }}>est. win rate</div>
                   </div>
                 </div>
               ))}
             </div>
           )}
 
-          {/* Insights */}
           {data.insights?.length > 0 && (
             <div className="pi-card">
               <div className="pi-section-title">💡 Insights</div>
@@ -1163,10 +1098,8 @@ export default function TenderDetailPage({ params }: { params: { id: string } })
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto px-4 py-8">
-
         <button onClick={() => router.back()} className="text-sm text-gray-500 hover:text-gray-700 mb-6 flex items-center gap-1">← Back</button>
 
-        {/* Header */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
           <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-4">
             <div className="flex-1">
@@ -1184,16 +1117,11 @@ export default function TenderDetailPage({ params }: { params: { id: string } })
             </div>
           </div>
           <div className="flex flex-wrap gap-2 mt-4">
-            {tender.category && (
-              <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium capitalize">{tender.category.replace("_", " ")}</span>
-            )}
-            {tender.status && (
-              <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium capitalize">{tender.status.replace("_", " ")}</span>
-            )}
+            {tender.category && <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium capitalize">{tender.category.replace("_", " ")}</span>}
+            {tender.status && <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium capitalize">{tender.status.replace("_", " ")}</span>}
           </div>
         </div>
 
-        {/* Key Details */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Key Details</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
@@ -1206,7 +1134,6 @@ export default function TenderDetailPage({ params }: { params: { id: string } })
           </div>
         </div>
 
-        {/* Description */}
         {tender.description && (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Description</h2>
@@ -1214,7 +1141,6 @@ export default function TenderDetailPage({ params }: { params: { id: string } })
           </div>
         )}
 
-        {/* Actions */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Actions</h2>
           <div className="flex flex-wrap gap-3">
@@ -1224,62 +1150,25 @@ export default function TenderDetailPage({ params }: { params: { id: string } })
                 View on Source Site ↗
               </a>
             )}
-            <button onClick={() => setModal("eligibility")}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-md text-sm font-medium hover:bg-emerald-700 transition-colors">
-              ✅ Check Eligibility
-            </button>
-            <button onClick={() => setModal("winprob")}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition-colors">
-              🎯 Win Probability
-            </button>
-            <button onClick={() => setModal("competitors")}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-md text-sm font-medium hover:bg-purple-700 transition-colors">
-              🏆 Competitors
-            </button>
-            <button onClick={() => setModal("market")}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-md text-sm font-medium hover:bg-orange-700 transition-colors">
-              📊 Market Price
-            </button>
-            <button onClick={() => setModal("priceintel")}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-500 text-gray-900 rounded-md text-sm font-medium hover:bg-yellow-400 transition-colors">
-              💰 Price Intel
-            </button>
-            <button onClick={() => setModal("checklist")}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-md text-sm font-medium hover:bg-violet-700 transition-colors">
-              📋 Doc Checklist
-            </button>
-            <button onClick={() => setModal("trackbid")}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-md text-sm font-medium hover:bg-gray-800 transition-colors">
-              📌 Track this Bid
-            </button>
+            <button onClick={() => setModal("eligibility")} className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-md text-sm font-medium hover:bg-emerald-700 transition-colors">✅ Check Eligibility</button>
+            <button onClick={() => setModal("winprob")} className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition-colors">🎯 Win Probability</button>
+            <button onClick={() => setModal("competitors")} className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-md text-sm font-medium hover:bg-purple-700 transition-colors">🏆 Competitors</button>
+            <button onClick={() => setModal("market")} className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-md text-sm font-medium hover:bg-orange-700 transition-colors">📊 Market Price</button>
+            <button onClick={() => setModal("priceintel")} className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-500 text-gray-900 rounded-md text-sm font-medium hover:bg-yellow-400 transition-colors">💰 Price Intel</button>
+            <button onClick={() => setModal("checklist")} className="inline-flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-md text-sm font-medium hover:bg-violet-700 transition-colors">📋 Doc Checklist</button>
+            <button onClick={() => setModal("trackbid")} className="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-md text-sm font-medium hover:bg-gray-800 transition-colors">📌 Track this Bid</button>
             <Button variant="outline" onClick={() => router.back()}>Back to Tenders</Button>
           </div>
         </div>
-
       </div>
 
-      {/* Modals */}
-      {modal === "winprob" && companyId && (
-        <WinProbabilityModal tender={tender} companyId={companyId} onClose={() => setModal(null)} />
-      )}
-      {modal === "competitors" && companyId && (
-        <CompetitorsModal tender={tender} companyId={companyId} onClose={() => setModal(null)} />
-      )}
-      {modal === "market" && (
-        <MarketPriceModal tender={tender} onClose={() => setModal(null)} />
-      )}
-      {modal === "eligibility" && (
-        <EligibilityModal tender={tender} profile={profileData} onClose={() => setModal(null)} />
-      )}
-      {modal === "checklist" && (
-        <DocumentChecklistModal tender={tender} onClose={() => setModal(null)} />
-      )}
-      {modal === "priceintel" && companyId && (
-        <PriceIntelligenceModal tender={tender} companyId={companyId} onClose={() => setModal(null)} />
-      )}
-      {modal === "trackbid" && companyId && (
-        <TrackBidModal tender={tender} companyId={companyId} onClose={() => setModal(null)} />
-      )}
+      {modal === "winprob" && companyId && <WinProbabilityModal tender={tender} companyId={companyId} onClose={() => setModal(null)} />}
+      {modal === "competitors" && companyId && <CompetitorsModal tender={tender} companyId={companyId} onClose={() => setModal(null)} />}
+      {modal === "market" && <MarketPriceModal tender={tender} onClose={() => setModal(null)} />}
+      {modal === "eligibility" && <EligibilityModal tender={tender} profile={profileData} onClose={() => setModal(null)} />}
+      {modal === "checklist" && <DocumentChecklistModal tender={tender} onClose={() => setModal(null)} />}
+      {modal === "priceintel" && companyId && <PriceIntelligenceModal tender={tender} companyId={companyId} onClose={() => setModal(null)} />}
+      {modal === "trackbid" && companyId && <TrackBidModal tender={tender} companyId={companyId} onClose={() => setModal(null)} />}
       {(modal === "winprob" || modal === "competitors" || modal === "eligibility" || modal === "trackbid" || modal === "priceintel") && !companyId && (
         <Modal title="Profile Required" onClose={() => setModal(null)}>
           <p style={{ color: "#94A3B8", fontSize: 14 }}>
