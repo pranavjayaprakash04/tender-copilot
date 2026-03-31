@@ -1,10 +1,15 @@
 from __future__ import annotations
+
 from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.contexts.bid_intelligence.schemas import (
     CompetitorAnalysisRequest,
     CompetitorAnalysisResponse,
+    PriceIntelligenceRequest,
+    PriceIntelligenceResponse,
     WinProbabilityRequest,
     WinProbabilityResponse,
 )
@@ -35,7 +40,7 @@ async def analyze_competitors(
     _company_id: str = Depends(get_current_company_id),
 ) -> CompetitorAnalysisResponse:
     try:
-        return await service.analyze_competitors(req)  # company_id is inside req
+        return await service.analyze_competitors(req)
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
@@ -48,7 +53,7 @@ async def calculate_win_probability(
     _company_id: str = Depends(get_current_company_id),
 ) -> WinProbabilityResponse:
     try:
-        return await service.calculate_win_probability(req)  # company_id is inside req
+        return await service.calculate_win_probability(req)
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
@@ -61,6 +66,19 @@ async def get_market_price(
     _company_id: str = Depends(get_current_company_id),
 ) -> dict[str, Any] | None:
     try:
-        return await service.get_market_price(category)  # no company_id needed
+        return await service.get_market_price(category)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.post("/price-intelligence", response_model=PriceIntelligenceResponse)
+async def get_price_intelligence(
+    req: PriceIntelligenceRequest,
+    service: BidIntelligenceService = Depends(get_bid_intelligence_service),
+    _current_user_id: str = Depends(get_current_user_id),
+    _company_id: str = Depends(get_current_company_id),
+) -> PriceIntelligenceResponse:
+    try:
+        return await service.get_price_intelligence(req)
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
