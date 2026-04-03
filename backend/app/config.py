@@ -33,7 +33,8 @@ class Settings(BaseSettings):
     # WhatsApp — Phase 4, optional until implemented
     WHATSAPP_ACCESS_TOKEN: Optional[str] = Field(default=None, description="WhatsApp Cloud API access token")
     WHATSAPP_PHONE_NUMBER_ID: Optional[str] = Field(default=None, description="WhatsApp phone number ID")
-    WHATSAPP_APP_SECRET: Optional[str] = Field(default=None, description="WhatsApp app secret for webhook verification")
+    WHATSAPP_APP_SECRET: Optional[str] = Field(default=None, description="WhatsApp app secret for HMAC-SHA256 webhook payload verification")
+    WHATSAPP_VERIFY_TOKEN: Optional[str] = Field(default=None, description="WhatsApp webhook verify token (hub.verify_token check)")
 
     # Resend
     RESEND_API_KEY: str = Field(..., description="Resend API key for email")

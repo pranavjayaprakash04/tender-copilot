@@ -4,9 +4,9 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    if (!body.tender_title && !body.tender_requirements) {
+    if (!body.tender_title && !body.tender_category) {
       return NextResponse.json(
-        { error: "tender_title is required" },
+        { error: "tender_title or tender_category is required" },
         { status: 400 }
       );
     }
@@ -15,39 +15,42 @@ export async function POST(req: NextRequest) {
       ? `Rs ${Number(body.estimated_value).toLocaleString("en-IN")}`
       : "not specified";
 
-    const prompt = `You are an Indian government tender eligibility expert specialising in MSME procurement. Check if a company is eligible to bid on this tender.
+    const bidStr = body.our_bid_amount
+      ? `Rs ${Number(body.our_bid_amount).toLocaleString("en-IN")}`
+      : "not provided";
+
+    const prompt = `You are an expert in Indian government tender bidding for MSMEs. Analyse the win probability for this tender bid.
 
 TENDER DETAILS:
-- Title: ${body.tender_title || "Government Tender"}
+- Title: ${body.tender_title || "Not specified"}
 - Category: ${body.tender_category || "Not specified"}
 - Estimated Value: ${valueStr}
 - Location: ${body.tender_location || "Pan India"}
 - Portal: ${(body.portal || "CPPP").toUpperCase()}
-- Requirements: ${body.tender_requirements || "Standard government tender requirements apply"}
 
-COMPANY PROFILE:
-- Company ID: ${body.company_id || "Not provided"}
-- Name: ${body.company_name || "MSME Company"}
-- Capabilities: ${Array.isArray(body.company_capabilities) ? body.company_capabilities.join(", ") : (body.company_capabilities || "Not specified")}
-- Certifications: ${Array.isArray(body.company_certifications) ? body.company_certifications.join(", ") : (body.company_certifications || "Not specified")}
-- Annual Turnover: ${body.annual_turnover ? "Rs " + Number(body.annual_turnover).toLocaleString("en-IN") : "Not specified"}
+COMPANY DETAILS:
+- Company: ${body.company_name || "MSME Company"}
+- Industry: ${body.company_industry || "Not specified"}
+- Our Bid Amount: ${bidStr}
 
-Analyse eligibility based on:
-1. Industry/category match with company capabilities
-2. Financial capacity (turnover vs tender value — typically 3x turnover needed)
-3. Registration requirements (GST, MSME/Udyam Registration)
-4. Technical capability match
-5. Experience requirements
-6. Geographic eligibility
-7. MSME-specific preferences under Public Procurement Policy
+Analyse based on:
+1. Bid competitiveness relative to estimated value
+2. Category competitiveness in Indian government tenders
+3. Typical number of bidders for this category/value range
+4. Geographic advantages/disadvantages
+5. MSME preferences in Indian government procurement (GeM, MSME Act)
 
 Return ONLY valid JSON:
 {
-  "eligible": true or false,
-  "score": number between 0 and 100,
-  "reasons": ["reason 1", "reason 2", "reason 3"],
-  "missing_requirements": ["requirement 1", "requirement 2"],
-  "recommendations": ["recommendation 1", "recommendation 2", "recommendation 3"]
+  "win_probability": number between 0 and 1,
+  "confidence": "high" | "medium" | "low",
+  "factors": ["factor 1", "factor 2", "factor 3", "factor 4"],
+  "market_avg": number or null (estimated average bid in INR),
+  "recommended_range": {
+    "min": number,
+    "max": number,
+    "optimal": number
+  } or null
 }`;
 
     const apiKey = process.env.GROQ_API_KEY;

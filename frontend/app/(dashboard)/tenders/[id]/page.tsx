@@ -181,7 +181,7 @@ function TrackBidModal({ tender, companyId, onClose }: { tender: TenderDetail; c
       const now = new Date();
       const bidNumber = `BID-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
       return api.bids.create({
-        tender_id: parseInt(tender.id),
+        tender_id: tender.id,
         title: tender.title,
         bid_amount: parseFloat(form.bid_amount),
         emd_amount: form.emd_amount ? parseFloat(form.emd_amount) : undefined,
@@ -305,12 +305,24 @@ function WinProbabilityModal({ tender, companyId, onClose }: { tender: TenderDet
   const [bidAmount, setBidAmount] = useState("");
 
   const mutation = useMutation<WinProbabilityResponse, Error>({
-    mutationFn: () =>
-      api.post("/api/v1/intelligence/bid/win-probability", {
-        tender_id: tender.id,
-        company_id: companyId,
-        our_bid_amount: bidAmount ? parseFloat(bidAmount) : null,
-      }),
+    mutationFn: async () => {
+      const res = await fetch("/api/win-probability", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tender_title: tender.title,
+          tender_category: tender.category,
+          estimated_value: tender.estimated_value,
+          tender_location: tender.state,
+          portal: tender.source,
+          our_bid_amount: bidAmount ? parseFloat(bidAmount) : undefined,
+          company_name: "",
+          company_industry: "",
+        }),
+      });
+      if (!res.ok) throw new Error("Win probability analysis failed");
+      return res.json();
+    },
   });
 
   const data = mutation.data;
@@ -715,16 +727,22 @@ function DocumentChecklistModal({ tender, onClose }: { tender: TenderDetail; onC
   const [checked, setChecked] = useState<Record<string, boolean>>({});
 
   const mutation = useMutation<DocumentChecklistResponse, Error>({
-    mutationFn: () =>
-      api.post("/api/v1/intelligence/document-checklist", {
-        tender_id: tender.id,
-        tender_title: tender.title,
-        tender_category: tender.category,
-        estimated_value: tender.estimated_value,
-        tender_location: tender.state,
-        description: tender.description,
-        lang: "en",
-      }),
+    mutationFn: async () => {
+      const res = await fetch("/api/document-checklist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tender_id: tender.id,
+          tender_title: tender.title,
+          tender_category: tender.category,
+          estimated_value: tender.estimated_value,
+          tender_location: tender.state,
+          description: tender.description,
+        }),
+      });
+      if (!res.ok) throw new Error("Document checklist generation failed");
+      return res.json();
+    },
     onSuccess: (data) => {
       const initial: Record<string, boolean> = {};
       data.checklist.forEach((item) => {
@@ -824,12 +842,21 @@ function PriceIntelligenceModal({ tender, companyId, onClose }: { tender: Tender
   const [hasAnalysed, setHasAnalysed] = useState(false);
 
   const mutation = useMutation<PriceIntelligenceResponse, Error>({
-    mutationFn: () =>
-      api.post("/api/v1/intelligence/bid/price-intelligence", {
-        tender_id: tender.id,
-        company_id: companyId,
-        our_bid_amount: bidAmount ? parseFloat(bidAmount) : null,
-      }),
+    mutationFn: async () => {
+      const res = await fetch("/api/price-intelligence", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tender_id: tender.id,
+          tender_title: tender.title,
+          tender_category: tender.category,
+          estimated_value: tender.estimated_value,
+          our_bid_amount: bidAmount ? parseFloat(bidAmount) : undefined,
+        }),
+      });
+      if (!res.ok) throw new Error("Price intelligence analysis failed");
+      return res.json();
+    },
     onSuccess: () => setHasAnalysed(true),
   });
 

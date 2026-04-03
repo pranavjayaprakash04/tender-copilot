@@ -242,7 +242,7 @@ async def send_bulk_whatsapp_messages(
             company_count=len(company_ids),
             task_id=task_result.id,
             message_type=message_type,
-            requested_by=current_user["id"],
+            requested_by=user_id,
         )
 
         return BaseResponse(
@@ -318,7 +318,7 @@ async def get_whatsapp_status(
             "whatsapp_status_retrieved",
             company_id=company_id,
             is_opted_in=status_response.is_opted_in,
-            requested_by=current_user["id"],
+            requested_by=user_id,
         )
 
         return BaseResponse(
@@ -368,7 +368,7 @@ async def get_whatsapp_stats(
             total_companies=stats_response.total_companies,
             opted_in_companies=stats_response.opted_in_companies,
             total_messages_sent=stats_response.total_messages_sent,
-            requested_by=current_user["id"],
+            requested_by=user_id,
         )
 
         return BaseResponse(
@@ -434,7 +434,7 @@ async def test_whatsapp_connection(
             "whatsapp_test_message_queued",
             company_id=company.id,
             task_id=task_result.id,
-            requested_by=current_user["id"],
+            requested_by=user_id,
         )
 
         return BaseResponse(

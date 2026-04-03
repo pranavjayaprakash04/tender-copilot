@@ -10,7 +10,7 @@ import { api } from "@/lib/api";
 
 interface Bid {
   id: string;
-  tender_id: number;
+  tender_id: string;
   title: string;
   bid_number: string;
   bid_amount: number;

@@ -454,10 +454,19 @@ class WhatsAppGatewayService:
             )
 
     async def verify_webhook(self, mode: str, token: str, challenge: str) -> str | None:
-        """Verify WhatsApp webhook."""
+        """Verify WhatsApp webhook using WHATSAPP_VERIFY_TOKEN env var."""
         try:
-            # Verify the webhook token
-            if mode == "subscribe" and token == settings.WHATSAPP_APP_SECRET:
+            import hmac as hmac_lib
+            # Use WHATSAPP_VERIFY_TOKEN for hub.verify_token comparison
+            # WHATSAPP_APP_SECRET is reserved for HMAC-SHA256 payload signature verification
+            expected_token = settings.WHATSAPP_VERIFY_TOKEN or ""
+            if not expected_token:
+                logger.warning(
+                    "whatsapp_verify_token_not_configured",
+                    detail="Set WHATSAPP_VERIFY_TOKEN env var"
+                )
+                return None
+            if mode == "subscribe" and hmac_lib.compare_digest(expected_token, token):
                 return challenge
             return None
         except Exception as e:
@@ -465,6 +474,5 @@ class WhatsAppGatewayService:
                 "webhook_verification_failed",
                 error=str(e),
                 mode=mode,
-                token=token,
             )
             return None

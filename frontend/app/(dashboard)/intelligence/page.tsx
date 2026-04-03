@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface CompetitorInsight {
-  competitor_name: string;
+  name: string;
+  competitor_name?: string;
   estimated_bid: number | null;
   win_probability: number;
   strengths: string[];
@@ -16,22 +17,22 @@ interface CompetitorInsight {
 }
 
 interface CompetitorAnalysisResponse {
-  tender_id: string;
-  company_id: string;
-  insights: CompetitorInsight[];
-  our_win_probability: number;
-  recommended_price: number | null;
-  analysis_lang: string;
-  generated_at: string;
+  competitors: CompetitorInsight[];
+  market_insights?: string;
+  win_strategies?: string[];
+  total_expected_bidders?: number;
+  // Legacy backend fields
+  insights?: CompetitorInsight[];
+  our_win_probability?: number;
+  recommended_price?: number | null;
 }
 
 interface WinProbabilityResponse {
-  tender_id: string;
   win_probability: number;
-  confidence: string;
+  confidence: "high" | "medium" | "low";
   factors: string[];
   market_avg: number | null;
-  recommended_range: { min: number; max: number } | null;
+  recommended_range: { min: number; max: number; optimal?: number } | null;
 }
 
 interface MarketPriceResponse {
@@ -47,9 +48,9 @@ interface Bid {
   id: string;
   tender_id: string;
   tender_title: string;
-  organisation: string;
+  organisation?: string;
   status: string;
-  deadline: string;
+  deadline?: string;
   estimated_value: number | null;
 }
 
@@ -107,13 +108,14 @@ function WinRing({ probability }: { probability: number }) {
 function CompetitorCard({ c, rank }: { c: CompetitorInsight; rank: number }) {
   const [open, setOpen] = useState(false);
   const color = winColor(c.win_probability);
+  const name = c.name || c.competitor_name || "Unknown";
 
   return (
     <div className="comp-card">
       <div className="comp-card-header" onClick={() => setOpen(!open)}>
         <div className="comp-rank" style={{ color }}>{rank}</div>
         <div className="comp-info">
-          <span className="comp-name">{c.competitor_name}</span>
+          <span className="comp-name">{name}</span>
           {c.estimated_bid && (
             <span className="comp-bid">{fmt(c.estimated_bid)}</span>
           )}
@@ -157,12 +159,12 @@ function CompetitorCard({ c, rank }: { c: CompetitorInsight; rank: number }) {
 
 export default function BidIntelligencePage() {
   const [selectedBidId, setSelectedBidId] = useState<string | null>(null);
-  const [selectedTenderId, setSelectedTenderId] = useState<string | null>(null);
+  const [selectedBid, setSelectedBid] = useState<Bid | null>(null);
   const [bidAmount, setBidAmount] = useState<string>("");
   const [category, setCategory] = useState<string>("");
   const [activeTab, setActiveTab] = useState<"competitors" | "winprob" | "market">("winprob");
 
-  // Fetch bids list
+  // Fetch bids list from Render backend
   const { data: bidsData, isLoading: bidsLoading } = useQuery({
     queryKey: ["bids"],
     queryFn: () => api.bids.list(),
@@ -170,27 +172,49 @@ export default function BidIntelligencePage() {
 
   const bids: Bid[] = (bidsData as any)?.bids ?? bidsData ?? [];
 
-  // Win Probability
+  // Win Probability — calls Vercel API route (NOT Render backend)
   const winProbMutation = useMutation<WinProbabilityResponse, Error>({
-    mutationFn: () =>
-      api.post("/api/v1/intelligence/bid/win-probability", {
-        tender_id: selectedTenderId,
-        company_id: "current",
-        our_bid_amount: bidAmount ? parseFloat(bidAmount) : null,
-      }),
+    mutationFn: async () => {
+      const res = await fetch("/api/win-probability", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tender_title: selectedBid?.tender_title || "",
+          tender_category: "",
+          estimated_value: selectedBid?.estimated_value,
+          tender_location: "",
+          portal: "CPPP",
+          our_bid_amount: bidAmount ? parseFloat(bidAmount) : undefined,
+          company_name: "",
+          company_industry: "",
+        }),
+      });
+      if (!res.ok) throw new Error("Win probability analysis failed");
+      return res.json();
+    },
   });
 
-  // Competitor Analysis
+  // Competitor Analysis — calls Vercel API route (NOT Render backend)
   const competitorMutation = useMutation<CompetitorAnalysisResponse, Error>({
-    mutationFn: () =>
-      api.post("/api/v1/intelligence/bid/analyze-competitors", {
-        tender_id: selectedTenderId,
-        company_id: "current",
-        lang: "en",
-      }),
+    mutationFn: async () => {
+      const res = await fetch("/api/competitors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tender_id: selectedBid?.tender_id || selectedBid?.id,
+          tender_title: selectedBid?.tender_title || "",
+          tender_category: "",
+          tender_location: "",
+          estimated_value: selectedBid?.estimated_value,
+          portal: "CPPP",
+        }),
+      });
+      if (!res.ok) throw new Error("Competitor analysis failed");
+      return res.json();
+    },
   });
 
-  // Market Price
+  // Market Price — fetches from Render backend (NOT Groq) via api.ts
   const { data: marketData, isLoading: marketLoading, refetch: fetchMarket } = useQuery<MarketPriceResponse>({
     queryKey: ["market-price", category],
     queryFn: () => api.get(`/api/v1/intelligence/bid/market-price/${encodeURIComponent(category)}`),
@@ -199,13 +223,14 @@ export default function BidIntelligencePage() {
 
   const handleSelectBid = (bid: Bid) => {
     setSelectedBidId(bid.id);
-    setSelectedTenderId(bid.tender_id || bid.id);
+    setSelectedBid(bid);
     winProbMutation.reset();
     competitorMutation.reset();
   };
 
   const winProb = winProbMutation.data;
   const compData = competitorMutation.data;
+  const competitors = compData?.competitors ?? compData?.insights ?? [];
 
   return (
     <>
@@ -220,7 +245,6 @@ export default function BidIntelligencePage() {
         .bi-layout{display:grid;grid-template-columns:320px 1fr;gap:24px;align-items:start}
         @media(max-width:900px){.bi-layout{grid-template-columns:1fr}}
 
-        /* Bid selector */
         .bid-panel{background:#131620;border:1px solid #1E2537;border-radius:14px;overflow:hidden}
         .bid-panel-title{padding:16px 20px;font-size:13px;font-weight:600;color:#64748B;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #1E2537}
         .bid-list{max-height:520px;overflow-y:auto}
@@ -230,28 +254,22 @@ export default function BidIntelligencePage() {
         .bid-item-title{font-size:13px;font-weight:600;color:#E2E8F0;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
         .bid-item-org{font-size:11px;color:#475569;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
         .bid-item-meta{display:flex;gap:8px;align-items:center}
-        .bid-status{padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600}
-        .bid-status--active{background:#10B98122;color:#10B981}
-        .bid-status--closing_soon{background:#F59E0B22;color:#F59E0B}
-        .bid-status--closed{background:#6B728022;color:#6B7280}
+        .bid-status{padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;background:#1E2537;color:#94A3B8}
         .bid-value{font-size:11px;color:#94A3B8;font-family:'Space Mono',monospace}
         .bid-empty{padding:32px;text-align:center;color:#475569;font-size:13px}
 
-        /* Intelligence panel */
         .intel-panel{background:#131620;border:1px solid #1E2537;border-radius:14px;overflow:hidden}
         .intel-empty{padding:80px 32px;text-align:center}
         .intel-empty-icon{font-size:48px;margin-bottom:16px}
         .intel-empty-title{font-size:16px;font-weight:600;color:#E2E8F0;margin-bottom:8px}
         .intel-empty-sub{font-size:13px;color:#475569}
 
-        /* Tabs */
         .tabs{display:flex;border-bottom:1px solid #1E2537}
         .tab{flex:1;padding:14px 16px;text-align:center;font-size:13px;font-weight:500;color:#475569;cursor:pointer;transition:all .15s;border-bottom:2px solid transparent}
         .tab:hover{color:#94A3B8;background:#1A1F2E}
         .tab--active{color:#3B82F6;border-bottom-color:#3B82F6;background:#1A2540}
         .tab-body{padding:24px}
 
-        /* Win probability */
         .win-section{display:flex;flex-direction:column;gap:24px}
         .win-top{display:flex;gap:24px;align-items:center;flex-wrap:wrap}
         .win-ring-wrap{flex-shrink:0}
@@ -273,7 +291,6 @@ export default function BidIntelligencePage() {
         .win-input:focus{border-color:#3B82F6}
         .win-market-avg{font-size:12px;color:#64748B;margin-top:6px}
 
-        /* Competitors */
         .comp-card{background:#1A1F2E;border:1px solid #1E2537;border-radius:10px;margin-bottom:10px;overflow:hidden}
         .comp-card-header{display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer}
         .comp-rank{font-size:20px;font-weight:700;width:28px;text-align:center;font-family:'Space Mono',monospace}
@@ -288,12 +305,7 @@ export default function BidIntelligencePage() {
         .comp-col-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
         .comp-item{display:flex;align-items:flex-start;gap:6px;font-size:12px;color:#94A3B8;margin-bottom:6px;line-height:1.4}
         .comp-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0;margin-top:4px}
-        .our-win-banner{background:linear-gradient(135deg,#1E3A5F,#1A2540);border:1px solid #3B82F640;border-radius:10px;padding:16px 20px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between}
-        .our-win-label{font-size:13px;color:#94A3B8}
-        .our-win-val{font-size:28px;font-weight:700;font-family:'Space Mono',monospace}
-        .our-rec-price{font-size:13px;color:#64748B;margin-top:4px}
 
-        /* Market */
         .market-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:20px}
         .market-card{background:#1A1F2E;border:1px solid #1E2537;border-radius:10px;padding:16px;text-align:center}
         .market-card-val{font-size:22px;font-weight:700;color:#F1F5F9;font-family:'Space Mono',monospace;margin-bottom:4px}
@@ -303,16 +315,14 @@ export default function BidIntelligencePage() {
         .market-bar-track{height:8px;background:#1E2537;border-radius:4px;position:relative;margin-bottom:8px}
         .market-bar-fill{height:8px;border-radius:4px;background:linear-gradient(90deg,#3B82F6,#10B981)}
         .market-bar-labels{display:flex;justify-content:space-between;font-size:11px;color:#475569;font-family:'Space Mono',monospace}
+        .market-sample{font-size:12px;color:#475569;margin-top:8px}
         .market-cat-row{display:flex;gap:10px;margin-bottom:16px}
         .market-cat-input{flex:1;padding:10px 14px;background:#0A0D14;border:1px solid #1E2537;border-radius:8px;color:#E2E8F0;font-size:14px;outline:none}
         .market-cat-input:focus{border-color:#3B82F6}
-        .market-sample{font-size:12px;color:#475569;margin-top:8px}
 
-        /* Shared */
         .spinner{width:20px;height:20px;border:2px solid #1E2537;border-top-color:#3B82F6;border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:middle;margin-right:8px}
         @keyframes spin{to{transform:rotate(360deg)}}
         .error-box{background:#EF444420;border:1px solid #EF444440;border-radius:8px;padding:12px 16px;color:#FCA5A5;font-size:13px;margin-top:12px}
-        .section-gap{margin-top:20px}
         .run-btn{padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;background:#3B82F6;color:#fff;transition:opacity .15s}
         .run-btn:hover{opacity:.85}
         .run-btn:disabled{opacity:.4;cursor:not-allowed}
@@ -343,9 +353,7 @@ export default function BidIntelligencePage() {
                     <div className="bid-item-title">{bid.tender_title || "Untitled Tender"}</div>
                     <div className="bid-item-org">{bid.organisation || "—"}</div>
                     <div className="bid-item-meta">
-                      <span className={`bid-status bid-status--${bid.status}`}>
-                        {bid.status?.replace("_", " ")}
-                      </span>
+                      <span className="bid-status">{bid.status?.replace("_", " ")}</span>
                       {bid.estimated_value && (
                         <span className="bid-value">{fmt(bid.estimated_value)}</span>
                       )}
@@ -358,7 +366,7 @@ export default function BidIntelligencePage() {
 
           {/* ── Intelligence Panel ── */}
           <div className="intel-panel">
-            {!selectedTenderId ? (
+            {!selectedBid ? (
               <div className="intel-empty">
                 <div className="intel-empty-icon">🎯</div>
                 <div className="intel-empty-title">Select a bid to analyse</div>
@@ -384,7 +392,7 @@ export default function BidIntelligencePage() {
 
                 <div className="tab-body">
 
-                  {/* ── Win Probability Tab ── */}
+                  {/* ── Win Probability Tab (Vercel /api/win-probability) ── */}
                   {activeTab === "winprob" && (
                     <div className="win-section">
                       <div className="win-input-row">
@@ -468,28 +476,9 @@ export default function BidIntelligencePage() {
                     </div>
                   )}
 
-                  {/* ── Competitor Analysis Tab ── */}
+                  {/* ── Competitor Analysis Tab (Vercel /api/competitors) ── */}
                   {activeTab === "competitors" && (
                     <div>
-                      {compData && (
-                        <div className="our-win-banner">
-                          <div>
-                            <div className="our-win-label">Our Win Probability</div>
-                            {compData.recommended_price && (
-                              <div className="our-rec-price">
-                                Recommended price: {fmt(compData.recommended_price)}
-                              </div>
-                            )}
-                          </div>
-                          <div
-                            className="our-win-val"
-                            style={{ color: winColor(compData.our_win_probability) }}
-                          >
-                            {pct(compData.our_win_probability)}
-                          </div>
-                        </div>
-                      )}
-
                       <button
                         className="run-btn"
                         disabled={competitorMutation.isPending}
@@ -505,11 +494,11 @@ export default function BidIntelligencePage() {
                         <div className="error-box">Analysis failed. Please try again.</div>
                       )}
 
-                      {compData?.insights?.map((c, i) => (
+                      {competitors.map((c, i) => (
                         <CompetitorCard key={i} c={c} rank={i + 1} />
                       ))}
 
-                      {compData && compData.insights.length === 0 && (
+                      {compData && competitors.length === 0 && (
                         <div style={{ textAlign: "center", padding: "32px", color: "#475569" }}>
                           No competitor data available for this tender.
                         </div>
@@ -517,7 +506,7 @@ export default function BidIntelligencePage() {
                     </div>
                   )}
 
-                  {/* ── Market Price Tab ── */}
+                  {/* ── Market Price Tab (Render backend) ── */}
                   {activeTab === "market" && (
                     <div>
                       <div className="market-cat-row">

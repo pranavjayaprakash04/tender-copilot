@@ -64,6 +64,7 @@ export const api = {
   get: (endpoint: string) => request('GET', endpoint),
   post: (endpoint: string, data: any) => request('POST', endpoint, data),
   put: (endpoint: string, data: any) => request('PUT', endpoint, data),
+  patch: (endpoint: string, data: any) => request('PATCH', endpoint, data),
   delete: (endpoint: string) => request('DELETE', endpoint),
 
   bids: {
@@ -103,7 +104,7 @@ export const api = {
     },
     search: (params?: any) => request('GET', `/api/v1/bids${params ? '?' + new URLSearchParams(params) : ''}`),
     create: async (data: {
-      tender_id: number;
+      tender_id: string;
       title: string;
       bid_amount: number;
       submission_deadline: string;
@@ -131,8 +132,12 @@ export const api = {
       if (!res.ok) throw new Error(await res.text());
     },
     // ── Legacy methods (kept for existing pages) ───────────────────────────────
-    updateStatus: (id: string, status: string) => request('POST', `/api/v1/bids/${id}/transition`, { new_status: status }),
-    recordOutcome: (id: string, data: any) => request('POST', '/api/v1/outcomes', { bid_id: id, ...data }),
+    updateStatus: (id: string, status: string) =>
+      request('PATCH', `/api/v1/bids/${id}/status`, { status })
+        .catch(() => request('POST', `/api/v1/bids/${id}/transition`, { new_status: status })),
+    recordOutcome: (id: string, data: any) =>
+      request('POST', `/api/v1/bids/${id}/outcome`, data)
+        .catch(() => request('POST', '/api/v1/outcomes', { bid_id: id, ...data })),
     generate: (id: string, lang?: string) => request('POST', `/api/v1/bids/${id}/generate`, { lang }),
     generateContent: (id: string, data?: any) => request('POST', `/api/v1/bids/${id}/generate`, data),
     getStatus: (taskId: string) => request('GET', `/api/v1/bids/status/${taskId}`),
@@ -210,11 +215,24 @@ export const api = {
   },
 
   alerts: {
-    list: () => request('GET', '/api/v1/notifications').then((res: any) => res.data ?? []),
-    getActive: () => request('GET', '/api/v1/notifications?status=pending').then((res: any) => res.data ?? []),
-    markRead: (id: string) => request('PUT', `/api/v1/notifications/${id}`, { status: 'read' }),
-    markAllRead: () => Promise.resolve(),
-    delete: (id: string) => request('DELETE', `/api/v1/notifications/${id}`),
+    list: (params?: any) =>
+      request('GET', `/api/v1/alerts/${params ? '?' + new URLSearchParams(params) : ''}`)
+        .then((res: any) => res?.data ?? res ?? [])
+        .catch(() =>
+          // Fallback to legacy notifications endpoint
+          request('GET', '/api/v1/notifications').then((res: any) => res?.data ?? res ?? [])
+        ),
+    getActive: () =>
+      request('GET', '/api/v1/alerts/?status=unread')
+        .then((res: any) => res?.data ?? res ?? []),
+    markRead: (id: string) =>
+      request('PATCH', `/api/v1/alerts/${id}/read`, {})
+        .catch(() => request('PUT', `/api/v1/notifications/${id}`, { status: 'read' })),
+    markAllRead: () =>
+      request('POST', '/api/v1/alerts/mark-all-read', {})
+        .catch(() => Promise.resolve()),
+    delete: (id: string) =>
+      request('DELETE', `/api/v1/notifications/${id}`),
     getPreferences: () => request('GET', '/api/v1/notifications/preferences'),
     updatePreferences: (data: any) => request('PUT', '/api/v1/notifications/preferences', data),
   },
@@ -226,12 +244,29 @@ export const api = {
   },
 
   partner: {
-    getClients: () => request('GET', '/api/v1/ca/clients'),
-    getClient: (id: string) => request('GET', `/api/v1/ca/clients/${id}`),
-    addClient: (data: any) => request('POST', '/api/v1/ca/clients', data),
-    updateClient: (id: string, data: any) => request('PUT', `/api/v1/ca/clients/${id}`, data),
-    removeClient: (id: string) => request('DELETE', `/api/v1/ca/clients/${id}`),
-    getDashboard: () => request('GET', '/api/v1/ca/dashboard'),
+    getClients: () => request('GET', '/api/v1/partner/clients'),
+    getClient: (id: string) => request('GET', `/api/v1/partner/clients/${id}`),
+    addClient: (data: any) => request('POST', '/api/v1/partner/clients', data),
+    updateClient: (id: string, data: any) => request('PUT', `/api/v1/partner/clients/${id}`, data),
+    removeClient: (id: string) => request('DELETE', `/api/v1/partner/clients/${id}`),
+    getDashboard: () => request('GET', '/api/v1/partner/dashboard'),
+  },
+
+  // Named aliases per spec
+  company: {
+    getProfile: () => request('GET', '/api/v1/company/profile').catch(() => null),
+    updateProfile: (data: any) => request('PUT', '/api/v1/company/profile', data),
+  },
+
+  vault: {
+    list: (params?: any) =>
+      request('GET', `/api/v1/vault/documents${params ? '?' + new URLSearchParams(params) : ''}`)
+        .then((res: any) => res?.data ?? res),
+    delete: (id: string) => request('DELETE', `/api/v1/vault/documents/${id}`),
+    getSignedUrl: (id: string) =>
+      request('GET', `/api/v1/vault/documents/${id}/url`)
+        .then((res: any) => res?.url ?? res?.download_url ?? res),
+    uploadMetadata: (data: any) => request('POST', '/api/v1/vault/upload', data),
   },
 
   intelligence: {
@@ -241,6 +276,8 @@ export const api = {
       request('POST', '/api/v1/intelligence/bid/analyze-competitors', data),
     getMarketPrice: (category: string) =>
       request('GET', `/api/v1/intelligence/bid/market-price/${encodeURIComponent(category)}`),
+    getMarketPrices: (params?: any) =>
+      request('GET', `/api/v1/intelligence/market-prices${params ? '?' + new URLSearchParams(params) : ''}`),
   },
 };
 

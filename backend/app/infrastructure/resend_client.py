@@ -8,9 +8,7 @@ import structlog
 from jinja2 import Environment, FileSystemLoader
 
 from app.config import settings
-from app.infrastructure.groq_client import GroqClient, GroqModel
 from app.shared.exceptions import ExternalServiceException
-from app.shared.lang_context import LangContext
 
 logger = structlog.get_logger()
 
@@ -25,7 +23,6 @@ class ResendClient:
                 Path(__file__).parent.parent / "contexts" / "alert_engine" / "templates"
             )
         )
-        self._groq = GroqClient()
 
     async def send_email(
         self,
@@ -55,7 +52,7 @@ class ResendClient:
             }
 
             async with httpx.AsyncClient() as client:
-                response = client.post(
+                response = await client.post(
                     "https://api.resend.com/emails",
                     headers={
                         "Authorization": f"Bearer {self._api_key}",
@@ -149,15 +146,24 @@ class ResendClient:
             Return only the subject line, nothing else.
             """
 
-            # Use GroqClient to generate subject
-            response = await self._groq.complete(
-                model=GroqModel.FAST,
-                system_prompt=None,
-                user_prompt=prompt,
-                output_schema=str,
-                lang=LangContext.from_lang("en"),
-                trace_id=None
+            # Use raw Groq API call to get a plain-text subject (not JSON schema)
+            import os as _os
+            groq_key = _os.getenv("GROQ_API_KEY", "")
+            if not groq_key:
+                return "📢 Tender Alert"
+            raw = await httpx.AsyncClient().post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+                json={
+                    "model": "llama-3.1-8b-instant",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.5,
+                    "max_tokens": 80,
+                },
+                timeout=15,
             )
+            raw.raise_for_status()
+            response = raw.json().get("choices", [{}])[0].get("message", {}).get("content", "📢 Tender Alert")
 
             subject = response.strip().strip('"').strip("'")
 
