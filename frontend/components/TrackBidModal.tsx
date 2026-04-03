@@ -37,7 +37,7 @@ export function TrackBidModal({ tender, companyId, onClose }: TrackBidModalProps
       const now = new Date();
       const bidNumber = `BID-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
       return api.bids.create({
-        tender_id: parseInt(tender.id),          // bids.tender_id is bigint
+        tender_id: tender.id,
         title: tender.title,
         bid_amount: parseFloat(form.bid_amount),
         emd_amount: form.emd_amount ? parseFloat(form.emd_amount) : undefined,
