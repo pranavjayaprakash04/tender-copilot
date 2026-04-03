@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tender Alert</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        .container {
+            background-color: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2563eb;
+            margin-bottom: 10px;
+        }
+        .alert-type {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+        .alert-new { background-color: #dcfce7; color: #166534; }
+        .alert-deadline { background-color: #fef3c7; color: #92400e; }
+        .alert-status { background-color: #dbeafe; color: #1d4ed8; }
+        .alert-payment { background-color: #fce7f3; color: #9f1239; }
+        .alert-general { background-color: #f3f4f6; color: #374151; }
+        
+        .content {
+            margin-bottom: 30px;
+        }
+        .tender-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 15px;
+        }
+        .tender-meta {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        .meta-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        .meta-label {
+            font-weight: 600;
+            color: #6b7280;
+        }
+        .meta-value {
+            color: #1f2937;
+        }
+        .message {
+            background-color: #f0f9ff;
+            border-left: 4px solid #3b82f6;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 0 6px 6px 0;
+        }
+        .cta-button {
+            display: inline-block;
+            background-color: #2563eb;
+            color: white;
+            padding: 12px 24px;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 600;
+            margin: 20px 0;
+        }
+        .cta-button:hover {
+            background-color: #1d4ed8;
+        }
+        .footer {
+            text-align: center;
+            padding-top: 20px;
+            border-top: 1px solid #e9ecef;
+            font-size: 12px;
+            color: #6b7280;
+        }
+        .urgency-high { border-left-color: #ef4444; }
+        .urgency-medium { border-left-color: #f59e0b; }
+        .urgency-low { border-left-color: #10b981; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">🚀 TenderCopilot</div>
+            <div class="alert-type alert-{{ alert_type | default('general') }}">
+                {% if alert_type == 'new_tender' %}🆕 New Tender
+                {% elif alert_type == 'deadline_reminder' %}🔔 Deadline Reminder
+                {% elif alert_type == 'bid_status' %}📊 Status Update
+                {% elif alert_type == 'payment_reminder' %}💰 Payment Reminder
+                {% else %}📢 Alert
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="content">
+            {% if tender_title %}
+            <div class="tender-title">{{ tender_title }}</div>
+            {% endif %}
+
+            {% if tender_id or company_name or deadline_date or tender_value %}
+            <div class="tender-meta">
+                {% if tender_id %}
+                <div class="meta-row">
+                    <span class="meta-label">Tender ID:</span>
+                    <span class="meta-value">{{ tender_id }}</span>
+                </div>
+                {% endif %}
+                
+                {% if company_name %}
+                <div class="meta-row">
+                    <span class="meta-label">Organization:</span>
+                    <span class="meta-value">{{ company_name }}</span>
+                </div>
+                {% endif %}
+                
+                {% if deadline_date %}
+                <div class="meta-row">
+                    <span class="meta-label">Deadline:</span>
+                    <span class="meta-value">{{ deadline_date }}</span>
+                </div>
+                {% endif %}
+                
+                {% if tender_value %}
+                <div class="meta-row">
+                    <span class="meta-label">Value:</span>
+                    <span class="meta-value">{{ tender_value }}</span>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if message %}
+            <div class="message urgency-{{ urgency | default('medium') }}">
+                {{ message }}
+            </div>
+            {% endif %}
+
+            {% if action_url %}
+            <a href="{{ action_url }}" class="cta-button">
+                {% if alert_type == 'deadline_reminder' %}View Tender Details
+                {% elif alert_type == 'new_tender' %}Review Tender
+                {% elif alert_type == 'bid_status' %}Check Status
+                {% elif alert_type == 'payment_reminder' %}Make Payment
+                {% else %}View Details
+                {% endif %}
+            </a>
+            {% endif %}
+        </div>
+
+        <div class="footer">
+            <p>This alert was sent by TenderCopilot</p>
+            <p>If you no longer wish to receive these alerts, you can update your notification preferences in your dashboard.</p>
+        </div>
+    </div>
+</body>
+</html>
