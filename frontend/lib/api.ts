@@ -38,6 +38,7 @@ export type TenderItem = {
   location?: string;
   description?: string;
   organisation?: string;
+  organization?: string;
   match_score?: number;
   status?: string;
 };
@@ -194,6 +195,7 @@ export const api = {
 };
 
 export default api;
+
 
 
 
