@@ -1,10 +1,55 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+
+function computeMatchScore(tender: Tender, profile: any): number {
+  if (!profile?.industry && !profile?.location && !profile?.capabilities_text) return 0;
+
+  let score = 0;
+  const cat = (tender.category || "").toLowerCase();
+  const loc = (tender.state || "").toLowerCase();
+  const title = (tender.title || "").toLowerCase();
+  const industry = (profile.industry || "").toLowerCase();
+  const location = (profile.location || "").toLowerCase();
+  const caps = (profile.capabilities_text || "").toLowerCase();
+
+  // Industry / category match
+  const itKeywords = ["it", "software", "technology", "tech", "digital", "computer", "ai", "cloud", "data"];
+  const worksKeywords = ["construction", "works", "civil", "road", "building", "infrastructure"];
+  const goodsKeywords = ["goods", "supply", "procurement", "purchase", "equipment", "material"];
+  const servicesKeywords = ["services", "consulting", "maintenance", "support", "management"];
+
+  const isIT = itKeywords.some(k => industry.includes(k) || caps.includes(k));
+  const catIsIT = itKeywords.some(k => cat.includes(k) || title.includes(k));
+  const catIsWorks = worksKeywords.some(k => cat.includes(k));
+  const catIsGoods = goodsKeywords.some(k => cat.includes(k));
+  const catIsServices = servicesKeywords.some(k => cat.includes(k) || title.includes(k));
+
+  if (isIT && catIsIT) score += 50;
+  else if (isIT && catIsServices) score += 30;
+  else if (isIT && (catIsWorks || catIsGoods)) score += 10;
+  else if (!isIT && (catIsWorks || catIsGoods)) score += 35;
+  else score += 20;
+
+  // Location match
+  const locWords = location.split(/[,\/\s]+/).filter(w => w.length > 3);
+  const locMatch = locWords.some(w => loc.includes(w) || title.includes(w));
+  if (locMatch) score += 25;
+  else score += 10;
+
+  // Capabilities keyword match
+  if (caps) {
+    const capWords = caps.split(/[,\s]+/).filter(w => w.length > 3);
+    const capMatch = capWords.filter(w => title.includes(w) || cat.includes(w)).length;
+    score += Math.min(capMatch * 5, 25);
+  }
+
+  return Math.min(score, 99);
+}
 
 interface Tender {
   id: string;
@@ -78,6 +123,12 @@ export default function TendersPage() {
     state: "",
     deadline: "",
     search: "",
+  });
+
+  const { data: profileData } = useQuery({
+    queryKey: ["company-profile"],
+    queryFn: () => api.company.getProfile().catch(() => null),
+    staleTime: 300_000,
   });
 
   const { data: tendersData, isLoading, error } = useQuery<TenderListResponse>({
