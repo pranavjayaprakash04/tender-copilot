@@ -32,7 +32,7 @@ class Company(Base):
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, default=func.uuid_generate_v4())
 
     # User reference — links company to auth user
-    user_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    user_id: Mapped[UUID | None] = mapped_column(PG_UUID, nullable=True, index=True)
 
     # Basic information
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
