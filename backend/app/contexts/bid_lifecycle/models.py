@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import (
     JSON,
@@ -65,11 +65,8 @@ class PaymentStatus(StrEnum):
 
 
 class Bid(Base):
-    """Bid lifecycle model."""
-
     __tablename__ = "bids"
 
-    # Status transition map
     _TRANSITIONS: dict[BidStatus, set[BidStatus]] = {
         BidStatus.DRAFT: {BidStatus.REVIEWING, BidStatus.CANCELLED, BidStatus.WITHDRAWN},
         BidStatus.REVIEWING: {BidStatus.SUBMITTED, BidStatus.DRAFT, BidStatus.ON_HOLD, BidStatus.CANCELLED},
@@ -83,54 +80,45 @@ class Bid(Base):
         BidStatus.CANCELLED: set(),
     }
 
-    id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, primary_key=True, server_default="gen_random_uuid()")
+    # ← FIXED: use Python-side uuid4() instead of server_default
+    # server_default="gen_random_uuid()" fails with asyncpg on INSERT RETURNING
+    id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, primary_key=True, default=uuid4)
     company_id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, nullable=False, index=True)
     tender_id: Mapped[int] = mapped_column(BigInteger, nullable=True, index=True)
     bid_number: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Financial
     bid_amount: Mapped[float | None] = mapped_column(Numeric(15, 2), nullable=True)
     emd_amount: Mapped[float | None] = mapped_column(Numeric(15, 2), nullable=True)
     bid_security_amount: Mapped[float | None] = mapped_column(Numeric(15, 2), nullable=True)
 
-    # Dates
     submission_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     submission_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     award_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    # Status
     status: Mapped[BidStatus] = mapped_column(String(30), nullable=False, default=BidStatus.DRAFT)
     previous_status: Mapped[BidStatus | None] = mapped_column(String(30), nullable=True)
 
-    # Team
     lead_bidder: Mapped[str | None] = mapped_column(String(255), nullable=True)
     bid_manager: Mapped[str | None] = mapped_column(String(255), nullable=True)
     technical_lead: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
-    # Scores
     compliance_score: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
     technical_score: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
     financial_score: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
 
-    # Notes
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     internal_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     tags: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
 
-    # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default="now()")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default="now()", onupdate=datetime.utcnow)
 
-    # ── Helper methods ──────────────────────────────────────────────
-
     def can_transition_to(self, new_status: BidStatus) -> bool:
-        """Check if transitioning to new_status is allowed from current status."""
         return new_status in self._TRANSITIONS.get(self.status, set())
 
     def get_allowed_transitions(self) -> list[BidStatus]:
-        """Return list of valid next statuses from current status."""
         return list(self._TRANSITIONS.get(self.status, set()))
 
     @property
@@ -147,13 +135,7 @@ class Bid(Base):
 
     @property
     def is_final_status(self) -> bool:
-        return self.status in {
-            BidStatus.WON,
-            BidStatus.LOST,
-            BidStatus.WITHDRAWN,
-            BidStatus.DISQUALIFIED,
-            BidStatus.CANCELLED,
-        }
+        return self.status in {BidStatus.WON, BidStatus.LOST, BidStatus.WITHDRAWN, BidStatus.DISQUALIFIED, BidStatus.CANCELLED}
 
     @property
     def days_since_submission(self) -> int | None:
@@ -170,16 +152,12 @@ class Bid(Base):
 
 
 class BidOutcomeRecord(Base):
-    """Record of bid outcome details."""
-
     __tablename__ = "bid_outcomes"
 
-    id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, primary_key=True, server_default="gen_random_uuid()")
+    id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, primary_key=True, default=uuid4)
     bid_id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, ForeignKey("bids.id", ondelete="CASCADE"), nullable=False, index=True)
     company_id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, nullable=False, index=True)
     outcome: Mapped[BidOutcome] = mapped_column(String(30), nullable=False)
-
-    # Loss details
     loss_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     loss_reason_details: Mapped[str | None] = mapped_column(Text, nullable=True)
     winning_bidder: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -193,11 +171,9 @@ class BidOutcomeRecord(Base):
 
 
 class BidPayment(Base):
-    """Payment tracking for won bids."""
-
     __tablename__ = "bid_payments"
 
-    id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, primary_key=True, server_default="gen_random_uuid()")
+    id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, primary_key=True, default=uuid4)
     bid_id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, ForeignKey("bids.id", ondelete="CASCADE"), nullable=False, index=True)
     company_id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, nullable=False, index=True)
     invoice_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -224,11 +200,9 @@ class BidPayment(Base):
 
 
 class BidFollowUp(Base):
-    """Follow-up tasks for bids and payments."""
-
     __tablename__ = "bid_follow_ups"
 
-    id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, primary_key=True, server_default="gen_random_uuid()")
+    id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, primary_key=True, default=uuid4)
     bid_id: Mapped[UUID] = mapped_column(SQLAlchemyUUID, ForeignKey("bids.id", ondelete="CASCADE"), nullable=False, index=True)
     payment_id: Mapped[UUID | None] = mapped_column(SQLAlchemyUUID, nullable=True)
     company_id: Mapped[UUID | None] = mapped_column(SQLAlchemyUUID, nullable=True)
