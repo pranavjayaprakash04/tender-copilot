@@ -50,7 +50,6 @@ export default function BidsPage() {
     });
   };
 
-  // Backend returns { bids: [], total, page, page_size }
   const bids: Bid[] = bidsData?.bids ?? bidsData?.items ?? [];
 
   if (isLoading) {
@@ -152,16 +151,15 @@ export default function BidsPage() {
                       >
                         {getStatusText(bid.status)}
                       </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          window.location.href = `/bids/${bid.id}`;
-                        }}
-                      >
-                        View
-                      </Button>
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => (window.location.href = `/bids/${bid.id}`)}
+                        >
+                          View
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>
