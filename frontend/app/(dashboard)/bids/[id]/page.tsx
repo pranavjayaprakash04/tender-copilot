@@ -1,300 +1,209 @@
 "use client";
 
-import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
 
-interface Bid {
+interface BidDetail {
   id: string;
   tender_id: string;
-  tender_title: string;
-  company_id: string;
-  status: "draft" | "reviewing" | "submitted" | "won" | "lost" | "withdrawn";
-  executive_summary?: string;
-  technical_approach?: string;
-  financial_proposal?: string;
-  compliance_statement?: string;
+  title: string;
+  bid_number: string;
+  status: string;
+  bid_amount?: number;
+  emd_amount?: number;
+  submission_deadline?: string;
+  notes?: string;
   created_at: string;
   updated_at: string;
+  can_edit?: boolean;
+  can_submit?: boolean;
+  can_withdraw?: boolean;
 }
 
-interface OutcomeModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSubmit: (outcome: "won" | "lost", ourPrice: number, winningPrice?: number) => void;
-  loading: boolean;
-}
-
-function OutcomeModal({ isOpen, onClose, onSubmit, loading }: OutcomeModalProps) {
-  const [outcome, setOutcome] = useState<"won" | "lost">("won");
-  const [ourPrice, setOurPrice] = useState("");
-  const [winningPrice, setWinningPrice] = useState("");
-
-  const handleSubmit = () => {
-    if (!ourPrice) return;
-    onSubmit(
-      outcome,
-      parseFloat(ourPrice),
-      outcome === "lost" && winningPrice ? parseFloat(winningPrice) : undefined
-    );
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Record Outcome</h3>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Result</label>
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  value="won"
-                  checked={outcome === "won"}
-                  onChange={() => setOutcome("won")}
-                />
-                <span className="text-green-700 font-medium">Won</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  value="lost"
-                  checked={outcome === "lost"}
-                  onChange={() => setOutcome("lost")}
-                />
-                <span className="text-red-700 font-medium">Lost</span>
-              </label>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Our Price (₹)
-            </label>
-            <input
-              type="number"
-              step="1"
-              value={ourPrice}
-              onChange={(e) => setOurPrice(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-              placeholder="0"
-              required
-            />
-          </div>
-
-          {outcome === "lost" && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Winning Price (₹)
-              </label>
-              <input
-                type="number"
-                step="1"
-                value={winningPrice}
-                onChange={(e) => setWinningPrice(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                placeholder="0"
-              />
-            </div>
-          )}
-        </div>
-
-        <div className="flex gap-3 pt-5">
-          <Button variant="outline" onClick={onClose} disabled={loading}>
-            Cancel
-          </Button>
-          <Button
-            variant="default"
-            onClick={handleSubmit}
-            disabled={loading || !ourPrice}
-          >
-            {loading ? "Saving…" : "Submit Outcome"}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const STATUS_COLORS: Record<string, string> = {
-  draft: "bg-gray-100 text-gray-800",
-  reviewing: "bg-yellow-100 text-yellow-800",
-  submitted: "bg-blue-100 text-blue-800",
-  won: "bg-green-100 text-green-800",
-  lost: "bg-red-100 text-red-800",
-  withdrawn: "bg-gray-100 text-gray-600",
+const statusColors: Record<string, string> = {
+  draft:            "bg-gray-100 text-gray-800",
+  reviewing:        "bg-yellow-100 text-yellow-800",
+  submitted:        "bg-blue-100 text-blue-800",
+  under_evaluation: "bg-purple-100 text-purple-800",
+  won:              "bg-green-100 text-green-800",
+  lost:             "bg-red-100 text-red-800",
+  withdrawn:        "bg-gray-100 text-gray-600",
+  on_hold:          "bg-orange-100 text-orange-800",
 };
 
-function BidSection({ title, content }: { title: string; content?: string }) {
-  if (!content) return null;
-  return (
-    <div className="bg-gray-50 rounded-lg p-5">
-      <h3 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">{title}</h3>
-      <div className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{content}</div>
-    </div>
-  );
-}
+const formatDate = (d?: string | null) => {
+  if (!d) return "—";
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return "—";
+  return dt.toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric" });
+};
+
+const formatCurrency = (v?: number | null) => {
+  if (v == null) return "—";
+  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(v);
+};
 
 export default function BidDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
-  const [showOutcomeModal, setShowOutcomeModal] = useState(false);
+  const qc = useQueryClient();
+  const bidId = params?.id;
 
-  const { data: bid, isLoading, error } = useQuery<Bid>({
-    queryKey: ["bid", params.id],
-    queryFn: () => api.bids.get(params.id),
+  const { data: rawData, isLoading, error } = useQuery({
+    queryKey: ["bid", bidId],
+    queryFn: () => api.bids.get(bidId!),
+    enabled: !!bidId,
   });
 
-  const updateStatusMutation = useMutation({
-    mutationFn: (status: string) => api.bids.updateStatus(params.id, status),
-    onSuccess: () => window.location.reload(),
-  });
+  const bid: BidDetail | null = rawData
+    ? ((rawData as any).data ?? rawData) as BidDetail
+    : null;
 
-  const recordOutcomeMutation = useMutation({
-    mutationFn: (data: { outcome: "won" | "lost"; our_price: number; winning_price?: number }) =>
-      api.bids.recordOutcome(params.id, data),
+  const transitionMutation = useMutation({
+    mutationFn: (newStatus: string) =>
+      api.bids.transition(bidId!, newStatus),
     onSuccess: () => {
-      setShowOutcomeModal(false);
-      window.location.reload();
+      qc.invalidateQueries({ queryKey: ["bid", bidId] });
+      qc.invalidateQueries({ queryKey: ["bids"] });
     },
   });
 
-  const formatDate = (dateString: string) =>
-    new Date(dateString).toLocaleDateString("en-IN", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+  const deleteMutation = useMutation({
+    mutationFn: () => api.bids.delete(bidId!),
+    onSuccess: () => router.push("/bids"),
+  });
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-4xl mx-auto px-4 py-8">
-          <div className="animate-pulse space-y-4">
-            <div className="h-8 bg-gray-200 rounded w-1/3" />
-            <div className="h-32 bg-gray-200 rounded" />
-            <div className="h-48 bg-gray-200 rounded" />
-          </div>
-        </div>
-      </div>
-    );
-  }
+  if (!bidId) return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <p className="text-gray-600">Invalid bid ID</p>
+    </div>
+  );
 
-  if (error || !bid) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-4xl mx-auto px-4 py-8">
-          <div className="text-center py-12">
-            <div className="text-4xl mb-4">⚠️</div>
-            <p className="text-red-600 mb-4 font-medium">Bid not found or could not be loaded.</p>
-            <Button onClick={() => router.push("/bids")}>Back to Bids</Button>
-          </div>
-        </div>
+  if (isLoading) return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <p className="text-gray-600">Loading bid...</p>
+    </div>
+  );
+
+  if (error || !bid) return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-center">
+        <p className="text-red-600 mb-4">Failed to load bid</p>
+        <Button onClick={() => router.back()}>Go Back</Button>
       </div>
-    );
-  }
+    </div>
+  );
+
+  const statusLabel = bid.status.charAt(0).toUpperCase() + bid.status.slice(1).replace("_", " ");
 
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto px-4 py-8">
+        <button onClick={() => router.back()} className="text-sm text-gray-500 hover:text-gray-700 mb-6 flex items-center gap-1">
+          ← Back to Bids
+        </button>
+
         {/* Header */}
-        <div className="flex items-center gap-4 mb-6">
-          <button
-            onClick={() => router.push("/bids")}
-            className="text-sm text-gray-500 hover:text-gray-900 flex items-center gap-1"
-          >
-            ← Back
-          </button>
-          <h1 className="text-2xl font-bold text-gray-900">Bid Details</h1>
-        </div>
-
-        {/* Status & Actions */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">{bid.tender_title}</h2>
-              <div className="flex flex-wrap gap-4 text-sm text-gray-500">
-                <span>Created: {formatDate(bid.created_at)}</span>
-                <span>Updated: {formatDate(bid.updated_at)}</span>
-              </div>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+            <div className="flex-1">
+              <h1 className="text-2xl font-bold text-gray-900 mb-1">{bid.title || "Untitled Bid"}</h1>
+              <p className="text-gray-500 text-sm">Bid #{bid.bid_number}</p>
             </div>
-
-            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-              <span
-                className={cn(
-                  "px-3 py-1 rounded-full text-sm font-medium",
-                  STATUS_COLORS[bid.status] ?? "bg-gray-100 text-gray-800"
-                )}
-              >
-                {bid.status.charAt(0).toUpperCase() + bid.status.slice(1)}
-              </span>
-
-              <div className="flex gap-2">
-                {bid.status === "draft" && (
-                  <Button
-                    size="sm"
-                    onClick={() => updateStatusMutation.mutate("reviewing")}
-                    disabled={updateStatusMutation.isPending}
-                  >
-                    {updateStatusMutation.isPending ? "Updating…" : "Submit for Review"}
-                  </Button>
-                )}
-
-                {bid.status === "reviewing" && (
-                  <Button
-                    size="sm"
-                    onClick={() => updateStatusMutation.mutate("submitted")}
-                    disabled={updateStatusMutation.isPending}
-                  >
-                    {updateStatusMutation.isPending ? "Updating…" : "Mark as Submitted"}
-                  </Button>
-                )}
-
-                {bid.status === "submitted" && (
-                  <Button
-                    size="sm"
-                    onClick={() => setShowOutcomeModal(true)}
-                  >
-                    Record Outcome
-                  </Button>
-                )}
-              </div>
-            </div>
+            <span className={cn("px-3 py-1 rounded-full text-sm font-medium self-start", statusColors[bid.status] ?? "bg-gray-100 text-gray-800")}>
+              {statusLabel}
+            </span>
           </div>
         </div>
 
-        {/* Bid Content Sections */}
-        <div className="space-y-4">
-          <BidSection title="Executive Summary" content={bid.executive_summary} />
-          <BidSection title="Technical Approach" content={bid.technical_approach} />
-          <BidSection title="Financial Proposal" content={bid.financial_proposal} />
-          <BidSection title="Compliance Statement" content={bid.compliance_statement} />
-
-          {!bid.executive_summary && !bid.technical_approach && !bid.financial_proposal && (
-            <div className="bg-white rounded-xl border border-dashed border-gray-300 p-12 text-center">
-              <div className="text-3xl mb-3">📄</div>
-              <p className="text-gray-500 text-sm">No bid content generated yet.</p>
+        {/* Key Details */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Bid Details</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+            <div><p className="text-gray-500">Bid Amount</p><p className="font-semibold text-gray-900">{formatCurrency(bid.bid_amount)}</p></div>
+            <div><p className="text-gray-500">EMD Amount</p><p className="font-medium text-gray-900">{formatCurrency(bid.emd_amount)}</p></div>
+            <div><p className="text-gray-500">Submission Deadline</p><p className="font-medium text-gray-900">{formatDate(bid.submission_deadline)}</p></div>
+            <div><p className="text-gray-500">Created</p><p className="font-medium text-gray-900">{formatDate(bid.created_at)}</p></div>
+            <div><p className="text-gray-500">Last Updated</p><p className="font-medium text-gray-900">{formatDate(bid.updated_at)}</p></div>
+            <div><p className="text-gray-500">Status</p><p className="font-medium text-gray-900">{statusLabel}</p></div>
+          </div>
+          {bid.notes && (
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <p className="text-gray-500 text-sm mb-1">Notes</p>
+              <p className="text-gray-700 text-sm">{bid.notes}</p>
             </div>
           )}
         </div>
-      </div>
 
-      <OutcomeModal
-        isOpen={showOutcomeModal}
-        onClose={() => setShowOutcomeModal(false)}
-        onSubmit={(outcome, ourPrice, winningPrice) =>
-          recordOutcomeMutation.mutate({ outcome, our_price: ourPrice, winning_price: winningPrice })
-        }
-        loading={recordOutcomeMutation.isPending}
-      />
+        {/* Actions */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Actions</h2>
+          <div className="flex flex-wrap gap-3">
+
+            {/* Status transitions */}
+            {bid.status === "draft" && (
+              <Button onClick={() => transitionMutation.mutate("reviewing")} disabled={transitionMutation.isPending}
+                className="bg-yellow-500 hover:bg-yellow-600 text-white">
+                Move to Reviewing
+              </Button>
+            )}
+            {bid.status === "reviewing" && (
+              <Button onClick={() => transitionMutation.mutate("submitted")} disabled={transitionMutation.isPending}
+                className="bg-blue-600 hover:bg-blue-700 text-white">
+                Mark as Submitted
+              </Button>
+            )}
+            {bid.status === "submitted" && (
+              <Button onClick={() => transitionMutation.mutate("under_evaluation")} disabled={transitionMutation.isPending}
+                className="bg-purple-600 hover:bg-purple-700 text-white">
+                Under Evaluation
+              </Button>
+            )}
+            {bid.status === "under_evaluation" && (
+              <>
+                <Button onClick={() => transitionMutation.mutate("won")} disabled={transitionMutation.isPending}
+                  className="bg-green-600 hover:bg-green-700 text-white">
+                  🎉 Mark as Won
+                </Button>
+                <Button onClick={() => transitionMutation.mutate("lost")} disabled={transitionMutation.isPending}
+                  className="bg-red-600 hover:bg-red-700 text-white">
+                  Mark as Lost
+                </Button>
+              </>
+            )}
+            {["draft", "reviewing", "submitted"].includes(bid.status) && (
+              <Button variant="outline" onClick={() => transitionMutation.mutate("withdrawn")} disabled={transitionMutation.isPending}>
+                Withdraw
+              </Button>
+            )}
+
+            {/* Go to tender */}
+            {bid.tender_id && (
+              <Button variant="outline" onClick={() => router.push(`/tenders/${bid.tender_id}`)}>
+                View Tender
+              </Button>
+            )}
+
+            {/* Delete draft */}
+            {bid.status === "draft" && (
+              <Button variant="outline" className="text-red-600 border-red-200 hover:bg-red-50"
+                onClick={() => { if (confirm("Delete this bid?")) deleteMutation.mutate(); }}
+                disabled={deleteMutation.isPending}>
+                {deleteMutation.isPending ? "Deleting..." : "Delete"}
+              </Button>
+            )}
+
+            {transitionMutation.isError && (
+              <p className="text-red-600 text-sm w-full">Transition failed. Please try again.</p>
+            )}
+            {transitionMutation.isSuccess && (
+              <p className="text-green-600 text-sm w-full">✓ Status updated successfully</p>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
