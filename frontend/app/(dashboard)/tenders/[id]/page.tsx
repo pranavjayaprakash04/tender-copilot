@@ -70,11 +70,14 @@ interface EligibilityCriteria {
 interface EligibilityResponse {
   eligible: boolean;
   score: number;
-  verdict: string;
-  criteria: EligibilityCriteria[];
-  missing_documents: string[];
-  recommendations: string[];
-  summary: string;
+  verdict?: string;
+  criteria?: EligibilityCriteria[];
+  missing_documents?: string[];
+  recommendations?: string[];
+  summary?: string;
+  // alternate field names from some API versions
+  reasons?: string[];
+  missing_requirements?: string[];
 }
 
 interface ChecklistItem {
@@ -360,7 +363,7 @@ function CompetitorsModal({ tender, companyId, onClose }: { tender: TenderDetail
           <div className="comp-head" onClick={() => setOpenComp(openComp === i ? null : i)}>
             <div style={{ fontSize: 16, fontWeight: 700, width: 22, textAlign: "center", fontFamily: "monospace", color: winColor(c.win_probability) }}>{i + 1}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#E2E8F0" }}>{c.competitor_name}</span>
+              <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#E2E8F0" }}>{(c as any).name || c.competitor_name || `Competitor ${i + 1}`}</span>
               {c.estimated_bid && <span style={{ display: "block", fontSize: 11, color: "#64748B", fontFamily: "monospace", marginTop: 1 }}>{fmt(c.estimated_bid)}</span>}
             </div>
             <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "monospace", color: winColor(c.win_probability) }}>{pct(c.win_probability)}</div>
@@ -447,7 +450,12 @@ function EligibilityModal({ tender, profile, onClose }: { tender: TenderDetail; 
     },
   });
   const data = mutation.data;
-  const verdictColor = (v: string) => v?.includes("Highly") ? "#10B981" : v?.includes("Likely") ? "#3B82F6" : v?.includes("Marginally") ? "#F59E0B" : "#EF4444";
+  const verdictColor = (v: string | undefined) => !v ? "#64748B" : v.includes("Highly") ? "#10B981" : v.includes("Likely") ? "#3B82F6" : v.includes("Marginally") ? "#F59E0B" : "#EF4444";
+  const verdict = data.verdict || (data.eligible ? "Likely Eligible" : "Not Eligible");
+  const summary = data.summary || data.reasons?.join(". ") || "";
+  const criteria = data.criteria || [];
+  const missingDocs = data.missing_documents || data.missing_requirements || [];
+  const recommendations = data.recommendations || [];
   const statusIcon = (s: string) => s === "pass" ? "✓" : s === "warning" ? "⚠" : "✗";
   const statusColor = (s: string) => s === "pass" ? "#10B981" : s === "warning" ? "#F59E0B" : "#EF4444";
   return (
@@ -463,29 +471,29 @@ function EligibilityModal({ tender, profile, onClose }: { tender: TenderDetail; 
       {mutation.isError && <div style={{ background: "#EF444420", border: "1px solid #EF444440", borderRadius: 6, padding: "10px 14px", color: "#FCA5A5", fontSize: 12, marginBottom: 12 }}>Analysis failed. Please try again.<button onClick={() => mutation.mutate()} style={{ marginLeft: 8, background: "none", border: "none", color: "#3B82F6", cursor: "pointer", fontSize: 12 }}>Retry</button></div>}
       {data && (
         <>
-          <div style={{ background: verdictColor(data.verdict) + "18", border: `1px solid ${verdictColor(data.verdict)}40`, borderRadius: 10, padding: "16px 20px", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div><div style={{ fontSize: 18, fontWeight: 700, color: verdictColor(data.verdict) }}>{data.verdict}</div><div style={{ fontSize: 12, color: "#94A3B8", marginTop: 4, maxWidth: 340 }}>{data.summary}</div></div>
+          <div style={{ background: verdictColor(verdict) + "18", border: `1px solid ${verdictColor(verdict)}40`, borderRadius: 10, padding: "16px 20px", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div><div style={{ fontSize: 18, fontWeight: 700, color: verdictColor(verdict) }}>{verdict}</div><div style={{ fontSize: 12, color: "#94A3B8", marginTop: 4, maxWidth: 340 }}>{summary}</div></div>
             <div style={{ textAlign: "center", flexShrink: 0 }}><div style={{ fontSize: 32, fontWeight: 800, color: verdictColor(data.verdict), fontFamily: "monospace" }}>{data.score}</div><div style={{ fontSize: 10, color: "#64748B", textTransform: "uppercase", letterSpacing: ".5px" }}>Score</div></div>
           </div>
           <div style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: "#94A3B8", marginBottom: 8, textTransform: "uppercase", letterSpacing: ".5px" }}>Eligibility Criteria</div>
-            {data.criteria.map((c, i) => (
+            {criteria.map((c, i) => (
               <div key={i} style={{ background: "#1A1F2E", border: `1px solid ${statusColor(c.status)}30`, borderRadius: 8, padding: "10px 14px", marginBottom: 8, display: "flex", gap: 12, alignItems: "flex-start" }}>
                 <span style={{ fontSize: 14, color: statusColor(c.status), flexShrink: 0, marginTop: 1 }}>{statusIcon(c.status)}</span>
                 <div><div style={{ fontSize: 12, fontWeight: 600, color: "#E2E8F0", marginBottom: 2 }}>{c.name}</div><div style={{ fontSize: 11, color: "#64748B" }}>{c.detail}</div></div>
               </div>
             ))}
           </div>
-          {data.missing_documents?.length > 0 && (
+          {missingDocs.length > 0 && (
             <div style={{ background: "#F59E0B10", border: "1px solid #F59E0B30", borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: "#F59E0B", marginBottom: 8 }}>⚠ Missing Documents</div>
-              {data.missing_documents.map((d, i) => <div key={i} style={{ fontSize: 11, color: "#94A3B8", marginBottom: 4, display: "flex", gap: 6 }}><span style={{ width: 4, height: 4, borderRadius: "50%", background: "#F59E0B", display: "inline-block", flexShrink: 0, marginTop: 4 }} />{d}</div>)}
+              {missingDocs.map((d, i) => <div key={i} style={{ fontSize: 11, color: "#94A3B8", marginBottom: 4, display: "flex", gap: 6 }}><span style={{ width: 4, height: 4, borderRadius: "50%", background: "#F59E0B", display: "inline-block", flexShrink: 0, marginTop: 4 }} />{d}</div>)}
             </div>
           )}
-          {data.recommendations?.length > 0 && (
+          {recommendations.length > 0 && (
             <div style={{ background: "#3B82F610", border: "1px solid #3B82F630", borderRadius: 8, padding: "12px 14px" }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: "#3B82F6", marginBottom: 8 }}>💡 Recommendations</div>
-              {data.recommendations.map((r, i) => <div key={i} style={{ fontSize: 11, color: "#94A3B8", marginBottom: 4, display: "flex", gap: 6 }}><span style={{ width: 4, height: 4, borderRadius: "50%", background: "#3B82F6", display: "inline-block", flexShrink: 0, marginTop: 4 }} />{r}</div>)}
+              {recommendations.map((r, i) => <div key={i} style={{ fontSize: 11, color: "#94A3B8", marginBottom: 4, display: "flex", gap: 6 }}><span style={{ width: 4, height: 4, borderRadius: "50%", background: "#3B82F6", display: "inline-block", flexShrink: 0, marginTop: 4 }} />{r}</div>)}
             </div>
           )}
           <button onClick={() => mutation.mutate()} style={{ marginTop: 14, padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1px solid #1E2537", background: "transparent", color: "#94A3B8" }}>Re-check</button>
