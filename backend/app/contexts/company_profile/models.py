@@ -17,7 +17,6 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
-
 class CompanySize(StrEnum):
     """Company size categories."""
     MICRO = "micro"
@@ -26,12 +25,14 @@ class CompanySize(StrEnum):
     LARGE = "large"
     ENTERPRISE = "enterprise"
 
-
 class Company(Base):
     """Company profile model."""
     __tablename__ = "companies"
 
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, default=func.uuid_generate_v4())
+
+    # User reference — links company to auth user
+    user_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
 
     # Basic information
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
@@ -51,7 +52,7 @@ class Company(Base):
     employee_count: Mapped[int] = mapped_column(Integer, nullable=True)
     annual_revenue: Mapped[float] = mapped_column(Float, nullable=True)
 
-    # Indian compliance fields (added via ALTER TABLE migration)
+    # Indian compliance fields
     gstin: Mapped[str | None] = mapped_column(String(20), nullable=True)
     udyam_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
     turnover_range: Mapped[str | None] = mapped_column(String(50), nullable=True)
