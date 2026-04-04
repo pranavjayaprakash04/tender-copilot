@@ -81,7 +81,12 @@ export const api = {
   },
 
   bids: {
-    list: () => request<any>("/api/v1/bids/"),
+    list: (params?: Record<string, any>) => {
+      const q = new URLSearchParams(
+        Object.fromEntries(Object.entries(params || {}).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))
+      ).toString();
+      return request<any>(`/api/v1/bids/${q ? `?${q}` : ""}`);
+    },
     get: (id: string) => request<any>(`/api/v1/bids/${id}`),
     create: (data: Record<string, unknown>) =>
       request<any>("/api/v1/bids/", { method: "POST", body: JSON.stringify(data) }),
@@ -183,4 +188,5 @@ export const api = {
 };
 
 export default api;
+
 
