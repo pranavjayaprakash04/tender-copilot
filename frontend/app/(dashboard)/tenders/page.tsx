@@ -46,16 +46,30 @@ function safeFormatDate(dateStr: string | null | undefined): string {
   return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 }
 
-function deadlineColor(dateStr: string | null | undefined, isUrgent?: boolean, isClosingSoon?: boolean): string {
-  if (isUrgent) return "text-red-600";
-  if (isClosingSoon) return "text-orange-600";
-  if (!dateStr) return "text-gray-500";
+function daysLeft(dateStr: string | null | undefined): number | null {
+  if (!dateStr) return null;
   const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return "text-gray-500";
+  if (isNaN(d.getTime())) return null;
   const days = Math.ceil((d.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  return days;
+}
+
+function deadlineColor(days: number | null): string {
+  if (days === null) return "text-gray-400";
+  if (days < 0) return "text-gray-400";
   if (days <= 3) return "text-red-600";
-  if (days <= 7) return "text-orange-600";
+  if (days <= 7) return "text-orange-500";
   return "text-green-600";
+}
+
+function formatValue(estimated_value?: number, emd_amount?: number): string {
+  if (estimated_value && estimated_value > 0) {
+    return `₹${estimated_value.toLocaleString("en-IN")}`;
+  }
+  if (emd_amount && emd_amount > 0) {
+    return `EMD: ₹${emd_amount.toLocaleString("en-IN")}`;
+  }
+  return "Value not disclosed";
 }
 
 export default function TendersPage() {
@@ -63,14 +77,14 @@ export default function TendersPage() {
     category: "",
     state: "",
     deadline: "",
-    search: ""
+    search: "",
   });
 
   const { data: tendersData, isLoading, error } = useQuery<TenderListResponse>({
     queryKey: ["tenders", filters],
     queryFn: async () => {
       return api.tenders.search(filters) as unknown as TenderListResponse;
-    }
+    },
   });
 
   const SkeletonCard = () => (
@@ -100,25 +114,31 @@ export default function TendersPage() {
                 onChange={(e) => setFilters({ ...filters, search: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+              {/* Category matches DB values: Works, Goods, Services */}
               <select
                 value={filters.category}
                 onChange={(e) => setFilters({ ...filters, category: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">All Categories</option>
-                <option value="construction">Construction</option>
-                <option value="it">IT</option>
-                <option value="transport">Transport</option>
+                <option value="Works">Works</option>
+                <option value="Goods">Goods</option>
+                <option value="Services">Services</option>
               </select>
+              {/* State filter searches location/city text in DB */}
               <select
                 value={filters.state}
                 onChange={(e) => setFilters({ ...filters, state: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">All States</option>
-                <option value="tamil_nadu">Tamil Nadu</option>
-                <option value="karnataka">Karnataka</option>
-                <option value="maharashtra">Maharashtra</option>
+                <option value="Chennai">Chennai</option>
+                <option value="Madurai">Madurai</option>
+                <option value="Coimbatore">Coimbatore</option>
+                <option value="Vellore">Vellore</option>
+                <option value="Mumbai">Mumbai</option>
+                <option value="Delhi">Delhi</option>
+                <option value="Bangalore">Bangalore</option>
               </select>
               <select
                 value={filters.deadline}
@@ -131,7 +151,9 @@ export default function TendersPage() {
                 <option value="30">Next 30 Days</option>
               </select>
             </div>
-            <Button onClick={() => setFilters({ search: "", category: "", state: "", deadline: "" })}>
+            <Button
+              onClick={() => setFilters({ search: "", category: "", state: "", deadline: "" })}
+            >
               Clear Filters
             </Button>
           </div>
@@ -150,53 +172,78 @@ export default function TendersPage() {
               <p className="text-gray-600">No tenders found</p>
             </div>
           ) : (
-            tendersData.tenders.map((tender: Tender) => (
-              <div key={tender.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-                <h3 className="text-base font-semibold text-gray-900 mb-2 line-clamp-2">{tender.title}</h3>
-                <p className="text-gray-500 text-sm mb-1">{tender.procuring_entity}</p>
-                {tender.state && (
-                  <p className="text-gray-400 text-xs mb-2">{tender.district ? `${tender.district}, ` : ""}{tender.state}</p>
-                )}
-                <p className="text-base font-medium text-gray-900 mb-4">
-                  {tender.estimated_value && tender.estimated_value > 0
-                    ? `₹${tender.estimated_value.toLocaleString("en-IN")}`
-                    : tender.emd_amount && tender.emd_amount > 0
-                    ? `EMD: ₹${tender.emd_amount.toLocaleString("en-IN")}`
-                    : "Value not disclosed"}
-                </p>
+            tendersData.tenders.map((tender: Tender) => {
+              const days = daysLeft(tender.bid_submission_deadline);
+              const isExpired = days !== null && days < 0;
 
-                <div className="flex justify-between items-center mb-4">
-                  {tender.match_score && tender.match_score > 0 ? (
-                    <span className={cn(
-                      "px-2 py-1 rounded-full text-xs font-medium",
-                      tender.match_score >= 80 ? "bg-green-100 text-green-800" :
-                      tender.match_score >= 60 ? "bg-yellow-100 text-yellow-800" :
-                      "bg-orange-100 text-orange-800"
-                    )}>
-                      Match: {tender.match_score}%
-                    </span>
-                  ) : (
-                    <span className="text-xs text-gray-400">Set profile for match score</span>
+              return (
+                <div
+                  key={tender.id}
+                  className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
+                >
+                  <h3 className="text-base font-semibold text-gray-900 mb-1 line-clamp-2">
+                    {tender.title}
+                  </h3>
+                  <p className="text-gray-500 text-sm mb-1">{tender.procuring_entity}</p>
+                  {tender.state && (
+                    <p className="text-gray-400 text-xs mb-3">
+                      {tender.district ? `${tender.district}, ` : ""}
+                      {tender.state}
+                    </p>
                   )}
-                  <span className={cn("text-sm font-medium", deadlineColor(tender.bid_submission_deadline, tender.is_urgent, tender.is_closing_soon))}>
-                    {safeFormatDate(tender.bid_submission_deadline)}
-                  </span>
-                </div>
 
-                {tender.days_until_deadline !== undefined && tender.days_until_deadline > 0 && (
-                  <p className="text-xs text-gray-400 mb-3">{tender.days_until_deadline} days left</p>
-                )}
+                  <p className="text-base font-semibold text-gray-800 mb-4">
+                    {formatValue(tender.estimated_value, tender.emd_amount)}
+                  </p>
 
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={() => window.location.href = `/tenders/${tender.id}`}>
-                    View Details
-                  </Button>
-                  <Button size="sm" variant="outline">
-                    Set Alert
-                  </Button>
+                  <div className="flex justify-between items-center mb-3">
+                    {tender.match_score && tender.match_score > 0 ? (
+                      <span
+                        className={cn(
+                          "px-2 py-1 rounded-full text-xs font-medium",
+                          tender.match_score >= 80
+                            ? "bg-green-100 text-green-800"
+                            : tender.match_score >= 60
+                            ? "bg-yellow-100 text-yellow-800"
+                            : "bg-orange-100 text-orange-800"
+                        )}
+                      >
+                        Match: {tender.match_score}%
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-400">—</span>
+                    )}
+
+                    <div className={cn("text-right text-sm font-medium", deadlineColor(days))}>
+                      {isExpired ? (
+                        <span className="text-gray-400">Expired</span>
+                      ) : days === null ? (
+                        <span className="text-gray-400">No deadline</span>
+                      ) : (
+                        <>
+                          <span>{safeFormatDate(tender.bid_submission_deadline)}</span>
+                          <span className="block text-xs font-normal">
+                            {days === 0 ? "Due today" : `${days} day${days === 1 ? "" : "s"} left`}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => (window.location.href = `/tenders/${tender.id}`)}
+                    >
+                      View Details
+                    </Button>
+                    <Button size="sm" variant="outline">
+                      Set Alert
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 
