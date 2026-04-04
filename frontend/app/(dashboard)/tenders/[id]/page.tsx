@@ -303,7 +303,7 @@ function WinProbabilityModal({ tender, companyId, onClose }: { tender: TenderDet
           {data.factors?.length > 0 && (
             <div className="i-factors">
               <div style={{ fontSize: 11, fontWeight: 600, color: "#94A3B8", marginBottom: 10 }}>Key Factors</div>
-              {data.factors.map((f, i) => (
+              {data.factors.map((f: string, i: number) => (
                 <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 6, marginBottom: 6, fontSize: 12, color: "#CBD5E1" }}>
                   <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#3B82F6", flexShrink: 0, marginTop: 4, display: "inline-block" }} />{f}
                 </div>
@@ -373,11 +373,11 @@ function CompetitorsModal({ tender, companyId, onClose }: { tender: TenderDetail
             <div className="comp-detail">
               <div>
                 <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 6, color: "#10B981" }}>Strengths</div>
-                {c.strengths.map((s, j) => <div key={j} style={{ display: "flex", alignItems: "flex-start", gap: 5, fontSize: 11, color: "#94A3B8", marginBottom: 4 }}><span style={{ width: 4, height: 4, borderRadius: "50%", background: "#10B981", flexShrink: 0, marginTop: 4, display: "inline-block" }} />{s}</div>)}
+                {c.strengths.map((s: string, j: number) => <div key={j} style={{ display: "flex", alignItems: "flex-start", gap: 5, fontSize: 11, color: "#94A3B8", marginBottom: 4 }}><span style={{ width: 4, height: 4, borderRadius: "50%", background: "#10B981", flexShrink: 0, marginTop: 4, display: "inline-block" }} />{s}</div>)}
               </div>
               <div>
                 <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 6, color: "#EF4444" }}>Weaknesses</div>
-                {c.weaknesses.map((w, j) => <div key={j} style={{ display: "flex", alignItems: "flex-start", gap: 5, fontSize: 11, color: "#94A3B8", marginBottom: 4 }}><span style={{ width: 4, height: 4, borderRadius: "50%", background: "#EF4444", flexShrink: 0, marginTop: 4, display: "inline-block" }} />{w}</div>)}
+                {c.weaknesses.map((w: string, j: number) => <div key={j} style={{ display: "flex", alignItems: "flex-start", gap: 5, fontSize: 11, color: "#94A3B8", marginBottom: 4 }}><span style={{ width: 4, height: 4, borderRadius: "50%", background: "#EF4444", flexShrink: 0, marginTop: 4, display: "inline-block" }} />{w}</div>)}
               </div>
             </div>
           )}
@@ -477,7 +477,7 @@ function EligibilityModal({ tender, profile, onClose }: { tender: TenderDetail; 
           </div>
           <div style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: "#94A3B8", marginBottom: 8, textTransform: "uppercase", letterSpacing: ".5px" }}>Eligibility Criteria</div>
-            {criteria.map((c, i) => (
+            {criteria.map((c: EligibilityCriteria, i: number) => (
               <div key={i} style={{ background: "#1A1F2E", border: `1px solid ${statusColor(c.status)}30`, borderRadius: 8, padding: "10px 14px", marginBottom: 8, display: "flex", gap: 12, alignItems: "flex-start" }}>
                 <span style={{ fontSize: 14, color: statusColor(c.status), flexShrink: 0, marginTop: 1 }}>{statusIcon(c.status)}</span>
                 <div><div style={{ fontSize: 12, fontWeight: 600, color: "#E2E8F0", marginBottom: 2 }}>{c.name}</div><div style={{ fontSize: 11, color: "#64748B" }}>{c.detail}</div></div>
@@ -487,13 +487,13 @@ function EligibilityModal({ tender, profile, onClose }: { tender: TenderDetail; 
           {missingDocs.length > 0 && (
             <div style={{ background: "#F59E0B10", border: "1px solid #F59E0B30", borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: "#F59E0B", marginBottom: 8 }}>⚠ Missing Documents</div>
-              {missingDocs.map((d, i) => <div key={i} style={{ fontSize: 11, color: "#94A3B8", marginBottom: 4, display: "flex", gap: 6 }}><span style={{ width: 4, height: 4, borderRadius: "50%", background: "#F59E0B", display: "inline-block", flexShrink: 0, marginTop: 4 }} />{d}</div>)}
+              {missingDocs.map((d: string, i: number) => <div key={i} style={{ fontSize: 11, color: "#94A3B8", marginBottom: 4, display: "flex", gap: 6 }}><span style={{ width: 4, height: 4, borderRadius: "50%", background: "#F59E0B", display: "inline-block", flexShrink: 0, marginTop: 4 }} />{d}</div>)}
             </div>
           )}
           {recommendations.length > 0 && (
             <div style={{ background: "#3B82F610", border: "1px solid #3B82F630", borderRadius: 8, padding: "12px 14px" }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: "#3B82F6", marginBottom: 8 }}>💡 Recommendations</div>
-              {recommendations.map((r, i) => <div key={i} style={{ fontSize: 11, color: "#94A3B8", marginBottom: 4, display: "flex", gap: 6 }}><span style={{ width: 4, height: 4, borderRadius: "50%", background: "#3B82F6", display: "inline-block", flexShrink: 0, marginTop: 4 }} />{r}</div>)}
+              {recommendations.map((r: string, i: number) => <div key={i} style={{ fontSize: 11, color: "#94A3B8", marginBottom: 4, display: "flex", gap: 6 }}><span style={{ width: 4, height: 4, borderRadius: "50%", background: "#3B82F6", display: "inline-block", flexShrink: 0, marginTop: 4 }} />{r}</div>)}
             </div>
           )}
           <button onClick={() => mutation.mutate()} style={{ marginTop: 14, padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1px solid #1E2537", background: "transparent", color: "#94A3B8" }}>Re-check</button>
@@ -548,7 +548,7 @@ function DocumentChecklistModal({ tender, onClose }: { tender: TenderDetail; onC
             ))}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {data.checklist.map((item) => {
+            {data.checklist.map((item: ChecklistItem) => {
               const isChecked = !!checked[item.id];
               return (
                 <div key={item.id} style={{ background: isChecked ? "#10B98108" : "#1A1F2E", border: `1px solid ${isChecked ? "#10B98140" : item.required ? "#EF444430" : "#1E2537"}`, borderRadius: 8, padding: "12px 14px", cursor: "pointer" }} onClick={() => toggleCheck(item.id)}>
@@ -600,15 +600,15 @@ function PriceIntelligenceModal({ tender, companyId, onClose }: { tender: Tender
     const lo = Math.min(...allVals), hi = Math.max(...allVals), range = hi - lo || 1;
     const xScale = (i: number) => PAD + (i / (trend.length - 1)) * (W - PAD * 2);
     const yScale = (v: number) => H - 12 - ((v - lo) / range) * (H - 24);
-    const avgPath = trend.map((t, i) => `${i === 0 ? "M" : "L"}${xScale(i)},${yScale(t.avg)}`).join(" ");
-    const areaPath = [...trend.map((t, i) => `${i === 0 ? "M" : "L"}${xScale(i)},${yScale(t.max)}`), ...trend.map((t, i) => `L${xScale(trend.length - 1 - i)},${yScale(trend[trend.length - 1 - i].min)}`), "Z"].join(" ");
+    const avgPath = trend.map((t: PriceTrendPoint, i: number) => `${i === 0 ? "M" : "L"}${xScale(i)},${yScale(t.avg)}`).join(" ");
+    const areaPath = [...trend.map((t, i) => `${i === 0 ? "M" : "L"}${xScale(i)},${yScale(t.max)}`), ...trend.map((t: PriceTrendPoint, i: number) => `L${xScale(trend.length - 1 - i)},${yScale(trend[trend.length - 1 - i].min)}`), "Z"].join(" ");
     return (
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: 100 }}>
         <defs><linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#3B82F6" stopOpacity="0.25" /><stop offset="100%" stopColor="#3B82F6" stopOpacity="0.03" /></linearGradient></defs>
         <path d={areaPath} fill="url(#trendGrad)" />
         <path d={avgPath} fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        {trend.map((t, i) => <circle key={i} cx={xScale(i)} cy={yScale(t.avg)} r="3" fill="#3B82F6" />)}
-        {trend.map((t, i) => <text key={i} x={xScale(i)} y={H - 1} textAnchor="middle" fontSize="9" fill="#475569">{t.label}</text>)}
+        {trend.map((t: PriceTrendPoint, i: number) => <circle key={i} cx={xScale(i)} cy={yScale(t.avg)} r="3" fill="#3B82F6" />)}
+        {trend.map((t: PriceTrendPoint, i: number) => <text key={i} x={xScale(i)} y={H - 1} textAnchor="middle" fontSize="9" fill="#475569">{t.label}</text>)}
       </svg>
     );
   };
@@ -652,7 +652,7 @@ function PriceIntelligenceModal({ tender, companyId, onClose }: { tender: Tender
           {data.bands?.length > 0 && (
             <div className="pi-card">
               <div className="pi-section-title">Price Bands</div>
-              {data.bands.map((band, i) => (
+              {data.bands.map((band: PriceBand, i: number) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: i < data.bands.length - 1 ? "1px solid #1E2537" : "none" }}>
                   <div style={{ width: 3, height: 36, borderRadius: 2, background: bandColors[i], flexShrink: 0 }} />
                   <div style={{ flex: 1 }}><div style={{ fontSize: 12, fontWeight: 600, color: bandColors[i], marginBottom: 2 }}>{band.label}</div><div style={{ fontSize: 10, color: "#475569" }}>{fmtShort(band.min)} – {fmtShort(band.max)}</div><div style={{ fontSize: 10, color: "#64748B", marginTop: 1 }}>{band.description}</div></div>
