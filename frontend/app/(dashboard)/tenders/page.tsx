@@ -36,15 +36,15 @@ function computeMatchScore(tender: Tender, profile: any): number {
   else score += 20;
 
   // Location match
-  const locWords = location.split(/[,\/\s]+/).filter(w => w.length > 3);
-  const locMatch = locWords.some(w => loc.includes(w) || title.includes(w));
+  const locWords = location.split(/[,/\s]+/).filter((w: string) => w.length > 3);
+  const locMatch = locWords.some((w: string) => loc.includes(w) || title.includes(w));
   if (locMatch) score += 25;
   else score += 10;
 
   // Capabilities keyword match
   if (caps) {
-    const capWords = caps.split(/[,\s]+/).filter(w => w.length > 3);
-    const capMatch = capWords.filter(w => title.includes(w) || cat.includes(w)).length;
+    const capWords = caps.split(/[,\s]+/).filter((w: string) => w.length > 3);
+    const capMatch = capWords.filter((w: string) => title.includes(w) || cat.includes(w)).length;
     score += Math.min(capMatch * 5, 25);
   }
 
