@@ -115,7 +115,8 @@ export const api = {
     markAllRead: () =>
       request<void>("/api/v1/alerts/mark-all-read", { method: "POST" }),
     create: (data: Record<string, unknown>) =>
-      request<AlertItem>("/api/v1/alerts/", {
+      delete: (id: string) => request<void>(`/api/v1/alerts/${id}`, { method: "DELETE" }),
+    create: (id: string) => request<AlertItem>("/api/v1/alerts/", {
         method: "POST",
         body: JSON.stringify(data),
       }),
@@ -253,3 +254,4 @@ export interface MarketPriceData {
 }
 
 export default api;
+
