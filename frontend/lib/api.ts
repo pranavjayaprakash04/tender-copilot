@@ -109,6 +109,11 @@ export const api = {
       }),
     getStatus: (taskId: string) => request<any>(`/api/v1/bids/${taskId}/status`),
     stats: () => request<any>("/api/v1/bids/stats"),
+    delete: (id: string) => request<void>(`/api/v1/bids/${id}`, { method: "DELETE" }),
+    approve: (id: string) => request<any>(`/api/v1/bids/${id}/approve`, { method: "POST" }),
+    reject: (id: string, reason?: string) => request<any>(`/api/v1/bids/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) }),
+    getAnalytics: () => request<any>("/api/v1/bids/analytics"),
+    submitForReview: (id: string) => request<any>(`/api/v1/bids/${id}/submit`, { method: "POST" }),
     transition: (id: string, status: string, reason?: string) =>
       request<any>(`/api/v1/bids/${id}/transition`, {
         method: "POST",
@@ -189,6 +194,7 @@ export const api = {
 };
 
 export default api;
+
 
 
 
