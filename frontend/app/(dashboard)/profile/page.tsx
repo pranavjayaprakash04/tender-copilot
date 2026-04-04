@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 export const dynamic = "force-dynamic";
 
 import { useState, useEffect } from "react";
@@ -42,8 +42,8 @@ const INDIAN_STATES = [
 ];
 
 const TURNOVER_RANGES = [
-  "Below ₹40L", "₹40L – ₹1Cr", "₹1Cr – ₹5Cr",
-  "₹5Cr – ₹25Cr", "Above ₹25Cr",
+  "Below â‚¹40L", "â‚¹40L â€“ â‚¹1Cr", "â‚¹1Cr â€“ â‚¹5Cr",
+  "â‚¹5Cr â€“ â‚¹25Cr", "Above â‚¹25Cr",
 ];
 
 function InitialAvatar({ name, email }: { name?: string; email?: string }) {
@@ -70,7 +70,7 @@ export default function ProfilePage() {
     queryKey: ["company-profile"],
     queryFn: async () => {
       try {
-        return await api.companies.getProfile();
+        return await api.company.getProfile();
       } catch {
         return null;
       }
@@ -87,8 +87,8 @@ export default function ProfilePage() {
   const saveProfile = useMutation({
     mutationFn: (data: CompanyProfile) =>
       profileExists
-        ? api.companies.updateProfile(data)
-        : api.companies.createProfile(data),
+        ? api.company.updateProfile(data)
+        : api.company.createProfile(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["company-profile"] });
       setEditing(false);
@@ -127,7 +127,7 @@ export default function ProfilePage() {
               <p className="text-gray-400 text-xs mt-0.5">
                 Joined {user?.created_at
                   ? new Date(user.created_at).toLocaleDateString("en-IN", { month: "long", year: "numeric" })
-                  : "—"}
+                  : "â€”"}
               </p>
             </div>
           </div>
@@ -140,7 +140,7 @@ export default function ProfilePage() {
               <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Company Profile</h2>
               {!profileExists && !isLoading && (
                 <p className="text-xs text-amber-600 mt-1">
-                  No profile yet — fill in your details to enable bid matching.
+                  No profile yet â€” fill in your details to enable bid matching.
                 </p>
               )}
             </div>
@@ -233,7 +233,7 @@ export default function ProfilePage() {
                   disabled={saveProfile.isPending}
                   className="px-5 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-colors"
                 >
-                  {saveProfile.isPending ? "Saving…" : profileExists ? "Save Changes" : "Create Profile"}
+                  {saveProfile.isPending ? "Savingâ€¦" : profileExists ? "Save Changes" : "Create Profile"}
                 </button>
                 <button
                   type="button"
@@ -276,7 +276,7 @@ export default function ProfilePage() {
 
           {saved && (
             <div className="mt-4 flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-2">
-              <span>✓</span> Profile saved successfully
+              <span>âœ“</span> Profile saved successfully
             </div>
           )}
         </div>
@@ -327,3 +327,4 @@ function ProfileField({ label, value }: { label: string; value?: string }) {
     </div>
   );
 }
+
