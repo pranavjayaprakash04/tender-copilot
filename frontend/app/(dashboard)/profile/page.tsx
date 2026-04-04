@@ -24,6 +24,45 @@ interface CompanyProfile {
   website?: string;
 }
 
+// Field MUST be outside ProfilePage — if defined inside, it remounts on every
+// keystroke causing the input to lose focus after each character typed.
+function Field({
+  label,
+  field,
+  value,
+  placeholder,
+  type = "text",
+  isEditing,
+  onChange,
+}: {
+  label: string;
+  field: keyof CompanyProfile;
+  value: string;
+  placeholder?: string;
+  type?: string;
+  isEditing: boolean;
+  onChange: (field: keyof CompanyProfile, value: string) => void;
+}) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      {isEditing ? (
+        <input
+          type={type}
+          value={value}
+          onChange={(e) => onChange(field, e.target.value)}
+          placeholder={placeholder}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+        />
+      ) : (
+        <p className="text-sm text-gray-900 py-2">
+          {value || <span className="text-gray-400">Not set</span>}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function ProfilePage() {
   const queryClient = useQueryClient();
   const [saved, setSaved] = useState(false);
@@ -56,35 +95,6 @@ export default function ProfilePage() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const Field = ({
-    label,
-    field,
-    placeholder,
-    type = "text",
-  }: {
-    label: string;
-    field: keyof CompanyProfile;
-    placeholder?: string;
-    type?: string;
-  }) => (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-      {isEditing ? (
-        <input
-          type={type}
-          value={formData[field] || ""}
-          onChange={(e) => handleChange(field, e.target.value)}
-          placeholder={placeholder}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-        />
-      ) : (
-        <p className="text-sm text-gray-900 py-2">
-          {formData[field] || <span className="text-gray-400">Not set</span>}
-        </p>
-      )}
-    </div>
-  );
-
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -102,6 +112,19 @@ export default function ProfilePage() {
     );
   }
 
+  const f = (field: keyof CompanyProfile, label: string, placeholder?: string, type = "text") => (
+    <Field
+      key={field}
+      label={label}
+      field={field}
+      value={formData[field] || ""}
+      placeholder={placeholder}
+      type={type}
+      isEditing={isEditing}
+      onChange={handleChange}
+    />
+  );
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto px-4 py-8">
@@ -109,19 +132,12 @@ export default function ProfilePage() {
           <h1 className="text-3xl font-bold text-gray-900">Profile</h1>
           <div className="flex gap-2 items-center">
             {saved && (
-              <span className="text-green-600 text-sm font-medium">
-                ✓ Saved successfully
-              </span>
+              <span className="text-green-600 text-sm font-medium">✓ Saved</span>
             )}
             {isEditing ? (
               <>
-                <Button variant="outline" onClick={() => setIsEditing(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  onClick={() => mutation.mutate(formData)}
-                  disabled={mutation.isPending}
-                >
+                <Button variant="outline" onClick={() => setIsEditing(false)}>Cancel</Button>
+                <Button onClick={() => mutation.mutate(formData)} disabled={mutation.isPending}>
                   {mutation.isPending ? "Saving..." : "Save Changes"}
                 </Button>
               </>
@@ -134,33 +150,33 @@ export default function ProfilePage() {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Company Information</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Field label="Company Name" field="company_name" placeholder="Pynevera Technologies Pvt Ltd" />
-            <Field label="Business Type" field="business_type" placeholder="Private Limited" />
-            <Field label="Industry" field="industry" placeholder="IT / Software" />
-            <Field label="Annual Turnover" field="annual_turnover" placeholder="e.g. 50 Lakhs" />
-            <Field label="Employee Count" field="employee_count" placeholder="e.g. 10" />
-            <Field label="Website" field="website" placeholder="https://yourcompany.com" type="url" />
+            {f("company_name", "Company Name", "Pynevera Technologies Pvt Ltd")}
+            {f("business_type", "Business Type", "Private Limited")}
+            {f("industry", "Industry", "IT / Software")}
+            {f("annual_turnover", "Annual Turnover", "e.g. 50 Lakhs")}
+            {f("employee_count", "Employee Count", "e.g. 10")}
+            {f("website", "Website", "https://yourcompany.com", "url")}
           </div>
         </div>
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Tax & Registration</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Field label="GSTIN" field="gstin" placeholder="22AAAAA0000A1Z5" />
-            <Field label="PAN" field="pan" placeholder="AAAAA0000A" />
-            <Field label="Registration Number" field="registration_number" placeholder="CIN / MSME No." />
+            {f("gstin", "GSTIN", "22AAAAA0000A1Z5")}
+            {f("pan", "PAN", "AAAAA0000A")}
+            {f("registration_number", "Registration Number", "CIN / MSME No.")}
           </div>
         </div>
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Contact & Address</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Field label="Contact Email" field="contact_email" placeholder="contact@yourcompany.com" type="email" />
-            <Field label="Contact Phone" field="contact_phone" placeholder="+91 98765 43210" />
-            <Field label="Address" field="address" placeholder="Street address" />
-            <Field label="City" field="city" placeholder="Coimbatore" />
-            <Field label="State" field="state" placeholder="Tamil Nadu" />
-            <Field label="Pincode" field="pincode" placeholder="641001" />
+            {f("contact_email", "Contact Email", "contact@yourcompany.com", "email")}
+            {f("contact_phone", "Contact Phone", "+91 98765 43210")}
+            {f("address", "Address", "Street address")}
+            {f("city", "City", "Coimbatore")}
+            {f("state", "State", "Tamil Nadu")}
+            {f("pincode", "Pincode", "641001")}
           </div>
         </div>
 
