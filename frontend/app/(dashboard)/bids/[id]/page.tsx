@@ -144,55 +144,57 @@ export default function BidDetailPage({ params }: { params: { id: string } }) {
 
             {/* Status transitions */}
             {bid.status === "draft" && (
-              <Button onClick={() => transitionMutation.mutate("reviewing")} disabled={transitionMutation.isPending}
-                className="bg-yellow-500 hover:bg-yellow-600 text-white">
+              <button onClick={() => transitionMutation.mutate("reviewing")} disabled={transitionMutation.isPending}
+                className="px-4 py-2 rounded-md text-sm font-medium bg-yellow-500 hover:bg-yellow-600 text-white disabled:opacity-50">
                 Move to Reviewing
-              </Button>
+              </button>
             )}
             {bid.status === "reviewing" && (
-              <Button onClick={() => transitionMutation.mutate("submitted")} disabled={transitionMutation.isPending}
-                className="bg-blue-600 hover:bg-blue-700 text-white">
+              <button onClick={() => transitionMutation.mutate("submitted")} disabled={transitionMutation.isPending}
+                className="px-4 py-2 rounded-md text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50">
                 Mark as Submitted
-              </Button>
+              </button>
             )}
             {bid.status === "submitted" && (
-              <Button onClick={() => transitionMutation.mutate("under_evaluation")} disabled={transitionMutation.isPending}
-                className="bg-purple-600 hover:bg-purple-700 text-white">
+              <button onClick={() => transitionMutation.mutate("under_evaluation")} disabled={transitionMutation.isPending}
+                className="px-4 py-2 rounded-md text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white disabled:opacity-50">
                 Under Evaluation
-              </Button>
+              </button>
             )}
             {bid.status === "under_evaluation" && (
               <>
-                <Button onClick={() => transitionMutation.mutate("won")} disabled={transitionMutation.isPending}
-                  className="bg-green-600 hover:bg-green-700 text-white">
+                <button onClick={() => transitionMutation.mutate("won")} disabled={transitionMutation.isPending}
+                  className="px-4 py-2 rounded-md text-sm font-medium bg-green-600 hover:bg-green-700 text-white disabled:opacity-50">
                   🎉 Mark as Won
-                </Button>
-                <Button onClick={() => transitionMutation.mutate("lost")} disabled={transitionMutation.isPending}
-                  className="bg-red-600 hover:bg-red-700 text-white">
+                </button>
+                <button onClick={() => transitionMutation.mutate("lost")} disabled={transitionMutation.isPending}
+                  className="px-4 py-2 rounded-md text-sm font-medium bg-red-600 hover:bg-red-700 text-white disabled:opacity-50">
                   Mark as Lost
-                </Button>
+                </button>
               </>
             )}
             {["draft", "reviewing", "submitted"].includes(bid.status) && (
-              <Button variant="outline" onClick={() => transitionMutation.mutate("withdrawn")} disabled={transitionMutation.isPending}>
+              <button onClick={() => transitionMutation.mutate("withdrawn")} disabled={transitionMutation.isPending}
+                className="px-4 py-2 rounded-md text-sm font-medium border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50">
                 Withdraw
-              </Button>
+              </button>
             )}
 
             {/* Go to tender */}
             {bid.tender_id && (
-              <Button variant="outline" onClick={() => router.push(`/tenders/${bid.tender_id}`)}>
+              <button onClick={() => router.push(`/tenders/${bid.tender_id}`)}
+                className="px-4 py-2 rounded-md text-sm font-medium border border-gray-300 text-gray-700 hover:bg-gray-50">
                 View Tender
-              </Button>
+              </button>
             )}
 
             {/* Delete draft */}
             {bid.status === "draft" && (
-              <Button variant="outline" className="text-red-600 border-red-200 hover:bg-red-50"
-                onClick={() => { if (confirm("Delete this bid?")) deleteMutation.mutate(); }}
-                disabled={deleteMutation.isPending}>
+              <button onClick={() => { if (confirm("Delete this bid?")) deleteMutation.mutate(); }}
+                disabled={deleteMutation.isPending}
+                className="px-4 py-2 rounded-md text-sm font-medium border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50">
                 {deleteMutation.isPending ? "Deleting..." : "Delete"}
-              </Button>
+              </button>
             )}
 
             {transitionMutation.isError && (
