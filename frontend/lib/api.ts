@@ -28,7 +28,6 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return res.json();
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type TenderItem = {
   id: string;
   title: string;
@@ -38,7 +37,6 @@ export type TenderItem = {
   portal?: string;
   location?: string;
   description?: string;
-  /** Both spellings of organisation/organization accepted */
   organisation?: string;
   organization?: string;
   match_score?: number;
@@ -69,7 +67,7 @@ export const api = {
           Object.entries(params || {}).filter(([, v]) => v !== undefined)
         ) as Record<string, string>
       ).toString();
-      return request<{ tenders: TenderItem[]; total: number; page?: number; limit?: number }>(
+      return request<{ tenders: TenderItem[]; total: number }>(
         `/api/v1/tenders/${q ? `?${q}` : ""}`
       );
     },
@@ -79,7 +77,7 @@ export const api = {
           Object.entries(params || {}).filter(([, v]) => v !== undefined)
         ) as Record<string, string>
       ).toString();
-      return request<{ tenders: TenderItem[]; total: number; page?: number; limit?: number }>(
+      return request<{ tenders: TenderItem[]; total: number }>(
         `/api/v1/tenders/${q ? `?${q}` : ""}`
       );
     },
@@ -176,7 +174,8 @@ export const api = {
   },
 
   compliance: {
-    delete: (id: string) => request<void>(/api/v1/compliance/documents/+id, { method: 'DELETE' }),
+    delete: (id: string) =>
+      request<void>(`/api/v1/compliance/documents/${id}`, { method: "DELETE" }),
     getDocuments: () => request<any>("/api/v1/compliance/documents"),
     uploadDocument: async (fileOrData: File | Record<string, unknown>) => {
       if (fileOrData instanceof File) {
