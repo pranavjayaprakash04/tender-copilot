@@ -44,6 +44,23 @@ interface TenderListResponse {
   limit?: number;
 }
 
+function safeFormatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return "No deadline";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "No deadline";
+  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function safeDeadlineColor(dateStr: string | null | undefined): string {
+  if (!dateStr) return "text-gray-500";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "text-gray-500";
+  const days = Math.ceil((d.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  if (days <= 3) return "text-red-600";
+  if (days <= 7) return "text-orange-600";
+  return "text-green-600";
+}
+
 export default function TendersPage() {
   const [filters, setFilters] = useState<TenderListParams>({
     category: "",
@@ -64,13 +81,6 @@ export default function TendersPage() {
     if (score >= 60) return "bg-yellow-100 text-yellow-800";
     if (score >= 40) return "bg-orange-100 text-orange-800";
     return "bg-red-100 text-red-800";
-  };
-
-  const getDeadlineColor = (deadline: string) => {
-    const days = Math.ceil((new Date(deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-    if (days <= 3) return "text-red-600";
-    if (days <= 7) return "text-orange-600";
-    return "text-green-600";
   };
 
   const SkeletonCard = () => (
@@ -139,7 +149,7 @@ export default function TendersPage() {
         </div>
 
         {/* Tender Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {isLoading ? (
             Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)
           ) : error ? (
@@ -147,31 +157,34 @@ export default function TendersPage() {
               <p className="text-red-600 mb-4">Error loading tenders</p>
               <Button onClick={() => window.location.reload()}>Retry</Button>
             </div>
-          ) : tendersData?.tenders.length === 0 ? (
+          ) : !tendersData?.tenders || tendersData.tenders.length === 0 ? (
             <div className="col-span-full text-center py-12">
               <p className="text-gray-600">No tenders found</p>
             </div>
           ) : (
-            tendersData?.tenders.map((tender: Tender) => (
+            tendersData.tenders.map((tender: Tender) => (
               <div key={tender.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">{tender.title}</h3>
-                <p className="text-gray-600 mb-2">{tender.department || tender.organization}</p>
-                <p className="text-lg font-medium text-gray-900 mb-4">
-                  {tender.value ? `₹${parseInt(tender.value).toLocaleString("en-IN")}` : 'Value not specified'}
+                <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">{tender.title}</h3>
+                <p className="text-gray-600 text-sm mb-2">{tender.department || tender.authority || tender.organization}</p>
+                <p className="text-base font-medium text-gray-900 mb-4">
+                  {tender.value ? `₹${parseInt(tender.value).toLocaleString("en-IN")}` : "Value not specified"}
                 </p>
                 
                 <div className="flex justify-between items-center mb-4">
-                  <span className={cn(
-                    "px-2 py-1 rounded-full text-xs font-medium",
-                    getMatchScoreColor(tender.match_score || 0)
-                  )}>
-                    Match Score: {tender.match_score || 0}%
-                  </span>
-                  <span className={cn(
-                    "text-sm font-medium",
-                    getDeadlineColor(tender.deadline)
-                  )}>
-                    {new Date(tender.deadline).toLocaleDateString("en-IN")}
+                  {tender.match_score && tender.match_score > 0 ? (
+                    <span className={cn(
+                      "px-2 py-1 rounded-full text-xs font-medium",
+                      getMatchScoreColor(tender.match_score)
+                    )}>
+                      Match: {tender.match_score}%
+                    </span>
+                  ) : (
+                    <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                      Complete profile for match score
+                    </span>
+                  )}
+                  <span className={cn("text-sm font-medium", safeDeadlineColor(tender.deadline))}>
+                    {safeFormatDate(tender.deadline)}
                   </span>
                 </div>
                 
@@ -187,6 +200,12 @@ export default function TendersPage() {
             ))
           )}
         </div>
+
+        {tendersData?.total && tendersData.total > 0 && (
+          <p className="text-center text-sm text-gray-500 mt-6">
+            Showing {tendersData.tenders?.length || 0} of {tendersData.total} tenders
+          </p>
+        )}
       </div>
     </div>
   );
