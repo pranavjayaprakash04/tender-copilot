@@ -15,7 +15,6 @@ SKIP_PATHS = {
     "/api/v1/webhook",
 }
 
-# Use service role key to verify any user token via Supabase API
 _supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
 
 
@@ -43,7 +42,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             logger.warning("auth_token_invalid", error=str(e))
             return JSONResponse(status_code=401, content={"detail": "Invalid token"})
 
-        # Look up company_id for this user
+        # Look up company_id for this user via user_id column
         request.state.company_id = None
         if request.state.user_id:
             try:
@@ -57,18 +56,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 )
                 if result.data and len(result.data) > 0:
                     request.state.company_id = result.data[0]["id"]
-                else:
-                    # Try owner_id as fallback column name
-                    result2 = (
-                        _supabase
-                        .table("companies")
-                        .select("id")
-                        .eq("owner_id", request.state.user_id)
-                        .limit(1)
-                        .execute()
-                    )
-                    if result2.data and len(result2.data) > 0:
-                        request.state.company_id = result2.data[0]["id"]
             except Exception as e:
                 logger.warning("company_lookup_failed", user_id=request.state.user_id, error=str(e))
 
