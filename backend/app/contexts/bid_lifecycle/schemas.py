@@ -17,27 +17,27 @@ from app.contexts.bid_lifecycle.models import (
 class BidResponse(BaseModel):
     id: UUID
     company_id: UUID
-    tender_id: int          # bigint in DB
+    tender_id: int | None = None
     bid_number: str
     title: str
-    description: str | None
-    bid_amount: float
-    emd_amount: float | None
-    bid_security_amount: float | None
-    submission_deadline: datetime
-    submission_date: datetime | None
-    award_date: datetime | None
+    description: str | None = None
+    bid_amount: float | None = None
+    emd_amount: float | None = None
+    bid_security_amount: float | None = None
+    submission_deadline: datetime | None = None
+    submission_date: datetime | None = None
+    award_date: datetime | None = None
     status: BidStatus
-    previous_status: BidStatus | None
-    lead_bidder: str | None
-    bid_manager: str | None
-    technical_lead: str | None
-    compliance_score: float | None
-    technical_score: float | None
-    financial_score: float | None
-    notes: str | None
-    internal_notes: str | None
-    tags: dict | None
+    previous_status: BidStatus | None = None
+    lead_bidder: str | None = None
+    bid_manager: str | None = None
+    technical_lead: str | None = None
+    compliance_score: float | None = None
+    technical_score: float | None = None
+    financial_score: float | None = None
+    notes: str | None = None
+    internal_notes: str | None = None
+    tags: dict | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -53,14 +53,14 @@ class BidResponse(BaseModel):
 
 class BidCreate(BaseModel):
     company_id: UUID
-    tender_id: int          # bigint in DB — NOT UUID
+    tender_id: int | None = None   # bigint — optional, scraper IDs may not exist
     bid_number: str
     title: str
     description: str | None = None
-    bid_amount: float
+    bid_amount: float | None = None
     emd_amount: float | None = None
     bid_security_amount: float | None = None
-    submission_deadline: datetime
+    submission_deadline: datetime | None = None   # ← FIXED: removed strict future validator
     lead_bidder: str | None = None
     bid_manager: str | None = None
     technical_lead: str | None = None
@@ -76,13 +76,6 @@ class BidCreate(BaseModel):
     def validate_positive_amounts(cls, v):
         if v is not None and v < 0:
             raise ValueError('Amounts must be positive')
-        return v
-
-    @field_validator('submission_deadline')
-    @classmethod
-    def validate_deadline_future(cls, v):
-        if v and v <= datetime.now(UTC):
-            raise ValueError('Submission deadline must be in the future')
         return v
 
 
@@ -113,7 +106,7 @@ class BidStatusTransition(BaseModel):
 class BidSearchFilters(BaseModel):
     search_query: str | None = None
     status: BidStatus | None = None
-    tender_id: int | None = None     # bigint in DB — NOT UUID
+    tender_id: int | None = None
     lead_bidder: str | None = None
     bid_manager: str | None = None
     min_amount: float | None = None
@@ -159,31 +152,31 @@ class BidOutcomeRecordResponse(BaseModel):
     id: UUID
     bid_id: UUID
     outcome: BidOutcome
-    loss_reason: LossReason | None
-    loss_reason_details: str | None
-    winning_bidder: str | None
-    winning_amount: float | None
-    competitor_count: int | None
-    our_ranking: int | None
-    technical_score_received: float | None
-    financial_score_received: float | None
-    total_score_received: float | None
-    max_possible_score: float | None
-    evaluation_feedback: str | None
-    strengths: str | None
-    weaknesses: str | None
-    improvement_recommendations: str | None
-    profit_margin: float | None
-    cost_breakdown: dict | None
-    pricing_strategy: str | None
-    recorded_by: str | None
-    verified: bool
-    verified_by: str | None
-    verified_at: datetime | None
+    loss_reason: LossReason | None = None
+    loss_reason_details: str | None = None
+    winning_bidder: str | None = None
+    winning_amount: float | None = None
+    competitor_count: int | None = None
+    our_ranking: int | None = None
+    technical_score_received: float | None = None
+    financial_score_received: float | None = None
+    total_score_received: float | None = None
+    max_possible_score: float | None = None
+    evaluation_feedback: str | None = None
+    strengths: str | None = None
+    weaknesses: str | None = None
+    improvement_recommendations: str | None = None
+    profit_margin: float | None = None
+    cost_breakdown: dict | None = None
+    pricing_strategy: str | None = None
+    recorded_by: str | None = None
+    verified: bool = False
+    verified_by: str | None = None
+    verified_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
 
 
 class BidOutcomeRecordCreate(BaseModel):
@@ -235,19 +228,19 @@ class BidOutcomeRecordUpdate(BaseModel):
 class BidPaymentResponse(BaseModel):
     id: UUID
     bid_id: UUID
-    payment_type: str
+    payment_type: str | None = None
     payment_amount: float
-    due_date: datetime
+    due_date: datetime | None = None
     status: PaymentStatus
-    paid_amount: float | None
-    paid_date: datetime | None
-    invoice_number: str | None
-    invoice_date: datetime | None
-    payment_terms: str | None
-    last_follow_up_date: datetime | None
-    follow_up_count: int
-    next_follow_up_date: datetime | None
-    notes: str | None
+    paid_amount: float | None = None
+    paid_date: datetime | None = None
+    invoice_number: str | None = None
+    invoice_date: datetime | None = None
+    payment_terms: str | None = None
+    last_follow_up_date: datetime | None = None
+    follow_up_count: int = 0
+    next_follow_up_date: datetime | None = None
+    notes: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -255,7 +248,7 @@ class BidPaymentResponse(BaseModel):
     days_overdue: int = 0
     outstanding_amount: float = 0.0
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
 
 
 class BidPaymentCreate(BaseModel):
@@ -289,26 +282,26 @@ class BidPaymentUpdate(BaseModel):
 class BidFollowUpResponse(BaseModel):
     id: UUID
     bid_id: UUID
-    payment_id: UUID | None
+    payment_id: UUID | None = None
     follow_up_type: str
     priority: str
-    contact_person: str | None
+    contact_person: str | None = None
     contact_method: str
     status: str
-    scheduled_date: datetime
-    completed_date: datetime | None
-    subject: str
-    message: str
-    response: str | None
-    assigned_to: str | None
-    reminder_sent: bool
+    scheduled_date: datetime | None = None
+    completed_date: datetime | None = None
+    subject: str | None = None
+    message: str | None = None
+    response: str | None = None
+    assigned_to: str | None = None
+    reminder_sent: bool = False
     created_at: datetime
     updated_at: datetime
 
     is_overdue: bool = False
     days_overdue: int = 0
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
 
 
 class BidFollowUpCreate(BaseModel):
@@ -349,19 +342,6 @@ class LossAnalysisResponse(BaseModel):
     technical_insights: dict | None
     confidence_score: float
     generated_at: datetime
-
-
-class PaymentFollowUpRequest(BaseModel):
-    days_overdue: int = 30
-    include_overdue_only: bool = True
-    send_notifications: bool = False
-
-
-class PaymentFollowUpResponse(BaseModel):
-    payments_processed: int
-    follow_ups_created: int
-    notifications_sent: int
-    processed_payment_ids: list[UUID]
 
 
 class BidBulkUpdate(BaseModel):
