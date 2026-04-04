@@ -59,8 +59,8 @@ export default function AlertsPage() {
       const res = await api.alerts.list();
       if (Array.isArray(res)) return res;
       if (res && Array.isArray((res as any).notifications)) return (res as any).notifications;
-      if (res && Array.isArray(res.items)) return res.items;
-      if (res && Array.isArray(res.data)) return res.data;
+      if (res && Array.isArray((res as any).items)) return (res as any).items;
+      if (res && Array.isArray((res as any).data)) return (res as any).data;
       return [];
     },
     retry: 1,
