@@ -251,3 +251,5 @@ export interface MarketPriceData {
   prices?: unknown[];
   [key: string]: unknown;
 }
+
+export default api;
