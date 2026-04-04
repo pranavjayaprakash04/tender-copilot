@@ -176,6 +176,7 @@ export const api = {
   },
 
   compliance: {
+    delete: (id: string) => request<void>(/api/v1/compliance/documents/\, { method: "DELETE" }),
     getDocuments: () => request<any>("/api/v1/compliance/documents"),
     uploadDocument: async (fileOrData: File | Record<string, unknown>) => {
       if (fileOrData instanceof File) {
