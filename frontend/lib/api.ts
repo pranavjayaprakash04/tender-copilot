@@ -210,6 +210,11 @@ export const api = {
         method: "PATCH",
         body: JSON.stringify(data),
       }),
+    createProfile: (data: Record<string, unknown>) =>
+      request<any>("/api/v1/company/profile", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
   },
 
   partner: {
