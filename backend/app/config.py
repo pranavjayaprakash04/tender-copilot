@@ -65,6 +65,7 @@ class Settings(BaseSettings):
             "https://nivedha.ai",
             "https://www.nivedha.ai",
             "https://tender-copilot.vercel.app",
+            "https://tender-copilot-kbv99k3hl-pyroguardspranav-9371s-projects.vercel.app",
         ],
         description="Allowed CORS origins"
     )
