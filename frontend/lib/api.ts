@@ -103,6 +103,11 @@ export const api = {
         body: JSON.stringify(data),
       }),
     getStatus: (taskId: string) => request<any>(`/api/v1/bids/${taskId}/status`),
+    transition: (id: string, status: string, reason?: string) =>
+      request<any>(`/api/v1/bids/${id}/transition`, {
+        method: "POST",
+        body: JSON.stringify({ status, reason }),
+      }),
     export: (id: string, format: string) =>
       request<any>(`/api/v1/bids/${id}/export?format=${format}`),
   },
@@ -178,3 +183,4 @@ export const api = {
 };
 
 export default api;
+
