@@ -6,26 +6,22 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 
+// Backend schema fields — must match CompanyProfileUpdate exactly
 interface CompanyProfile {
-  company_name?: string;
-  gstin?: string;
-  pan?: string;
-  registration_number?: string;
-  business_type?: string;
+  name?: string;           // company name
   industry?: string;
-  annual_turnover?: string;
-  employee_count?: string;
-  address?: string;
-  city?: string;
-  state?: string;
-  pincode?: string;
+  location?: string;       // state/city
   contact_email?: string;
   contact_phone?: string;
   website?: string;
+  description?: string;
+  capabilities_text?: string;
+  gstin?: string;
+  udyam_number?: string;
+  turnover_range?: string;
 }
 
-// Field MUST be outside ProfilePage — if defined inside, it remounts on every
-// keystroke causing the input to lose focus after each character typed.
+// Field defined OUTSIDE to prevent remount on every keystroke
 function Field({
   label,
   field,
@@ -68,25 +64,35 @@ export default function ProfilePage() {
   const [saved, setSaved] = useState(false);
   const [formData, setFormData] = useState<CompanyProfile>({});
   const [isEditing, setIsEditing] = useState(false);
+  const [noProfile, setNoProfile] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["company-profile"],
-    queryFn: () => api.company.getProfile(),
+    queryFn: () => api.company.getProfile().catch(() => null),
   });
 
   useEffect(() => {
     if (data) {
       setFormData((data as CompanyProfile) || {});
+      setNoProfile(false);
+    } else if (data === null) {
+      setNoProfile(true);
     }
   }, [data]);
 
   const mutation = useMutation({
-    mutationFn: (d: CompanyProfile) =>
-      api.company.updateProfile(d as Record<string, unknown>),
+    mutationFn: async (d: CompanyProfile) => {
+      if (noProfile) {
+        // No company exists yet — create one
+        return (api.company as any).createProfile(d);
+      }
+      return api.company.updateProfile(d as Record<string, unknown>);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["company-profile"] });
       setSaved(true);
       setIsEditing(false);
+      setNoProfile(false);
       setTimeout(() => setSaved(false), 3000);
     },
   });
@@ -94,6 +100,24 @@ export default function ProfilePage() {
   const handleChange = (field: keyof CompanyProfile, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
+
+  const f = (
+    field: keyof CompanyProfile,
+    label: string,
+    placeholder?: string,
+    type = "text"
+  ) => (
+    <Field
+      key={field}
+      label={label}
+      field={field}
+      value={formData[field] || ""}
+      placeholder={placeholder}
+      type={type}
+      isEditing={isEditing}
+      onChange={handleChange}
+    />
+  );
 
   if (isLoading) {
     return (
@@ -112,19 +136,6 @@ export default function ProfilePage() {
     );
   }
 
-  const f = (field: keyof CompanyProfile, label: string, placeholder?: string, type = "text") => (
-    <Field
-      key={field}
-      label={label}
-      field={field}
-      value={formData[field] || ""}
-      placeholder={placeholder}
-      type={type}
-      isEditing={isEditing}
-      onChange={handleChange}
-    />
-  );
-
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto px-4 py-8">
@@ -133,6 +144,9 @@ export default function ProfilePage() {
           <div className="flex gap-2 items-center">
             {saved && (
               <span className="text-green-600 text-sm font-medium">✓ Saved</span>
+            )}
+            {mutation.isError && (
+              <span className="text-red-600 text-sm">Save failed — check required fields</span>
             )}
             {isEditing ? (
               <>
@@ -147,41 +161,43 @@ export default function ProfilePage() {
           </div>
         </div>
 
+        {noProfile && !isEditing && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 text-sm text-blue-800">
+            No company profile yet. Click <strong>Edit Profile</strong> to create one.
+          </div>
+        )}
+
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Company Information</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {f("company_name", "Company Name", "Pynevera Technologies Pvt Ltd")}
-            {f("business_type", "Business Type", "Private Limited")}
-            {f("industry", "Industry", "IT / Software")}
-            {f("annual_turnover", "Annual Turnover", "e.g. 50 Lakhs")}
-            {f("employee_count", "Employee Count", "e.g. 10")}
+            {f("name", "Company Name *", "Pynevera Technologies Pvt Ltd")}
+            {f("industry", "Industry *", "IT / Software")}
+            {f("location", "Location / State *", "Coimbatore, Tamil Nadu")}
+            {f("turnover_range", "Turnover Range", "Below ₹40L")}
             {f("website", "Website", "https://yourcompany.com", "url")}
+            {f("description", "Description", "Brief company description")}
           </div>
         </div>
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Tax & Registration</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Registration</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {f("gstin", "GSTIN", "22AAAAA0000A1Z5")}
-            {f("pan", "PAN", "AAAAA0000A")}
-            {f("registration_number", "Registration Number", "CIN / MSME No.")}
+            {f("udyam_number", "Udyam Number", "UDYAM-TN-00-0000000")}
+            {f("capabilities_text", "Capabilities", "e.g. Software development, AI, Cloud")}
           </div>
         </div>
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Contact & Address</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Contact</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {f("contact_email", "Contact Email", "contact@yourcompany.com", "email")}
+            {f("contact_email", "Contact Email *", "contact@yourcompany.com", "email")}
             {f("contact_phone", "Contact Phone", "+91 98765 43210")}
-            {f("address", "Address", "Street address")}
-            {f("city", "City", "Coimbatore")}
-            {f("state", "State", "Tamil Nadu")}
-            {f("pincode", "Pincode", "641001")}
           </div>
         </div>
 
         <p className="text-xs text-gray-400 mt-4 text-center">
-          Completing your profile improves tender match scores and AI eligibility analysis.
+          Fields marked * are required. Completing your profile improves tender match scores.
         </p>
       </div>
     </div>
