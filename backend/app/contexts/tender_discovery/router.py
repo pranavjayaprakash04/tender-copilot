@@ -13,8 +13,6 @@ from app.dependencies import (
 router = APIRouter(prefix="/tenders", tags=["tender-discovery"])
 
 
-# ── Helper ────────────────────────────────────────────────────────────────────
-
 def _build_where(search, category, state, deadline):
     conditions = ["1=1"]
     params: dict = {}
@@ -64,8 +62,6 @@ TENDER_SELECT = """
 """
 
 
-# ── IMPORTANT: specific routes MUST come before /{tender_id} ─────────────────
-
 @router.get("")
 async def list_tenders(
     search: str | None = Query(None),
@@ -78,7 +74,6 @@ async def list_tenders(
     _user_id: str = Depends(get_current_user_id),
     _trace_id: str = Depends(get_trace_id),
 ):
-    """List tenders from the real scraper table."""
     where, params = _build_where(search, category, state, deadline)
     offset = (page - 1) * limit
     params["limit"] = limit
@@ -115,7 +110,6 @@ async def get_tender_stats(
     _user_id: str = Depends(get_current_user_id),
     _trace_id: str = Depends(get_trace_id),
 ):
-    """Aggregate stats from the real tenders table."""
     row = (
         await session.execute(
             text("""
@@ -147,28 +141,15 @@ async def get_closing_soon(
     _user_id: str = Depends(get_current_user_id),
     _trace_id: str = Depends(get_trace_id),
 ):
-    """Tenders closing within N days — tries tenders_closing_soon first, falls back to tenders."""
-    # Check if the dedicated closing-soon table exists
-    table_check = (
-        await session.execute(
-            text("""
-                SELECT EXISTS (
-                    SELECT 1 FROM information_schema.tables
-                    WHERE table_schema = 'public'
-                      AND table_name   = 'tenders_closing_soon'
-                )
-            """)
-        )
-    ).scalar()
-
-    source_table = "tenders_closing_soon" if table_check else "tenders"
-
+    """Tenders closing within N days from the main tenders table."""
+    # ← FIXED: always use tenders table + use make_interval() to avoid
+    # asyncpg's inability to bind integer parameters with INTERVAL multiplication
     rows = await session.execute(
         text(f"""
             SELECT {TENDER_SELECT}
-            FROM {source_table}
+            FROM tenders
             WHERE bid_end_date BETWEEN CURRENT_DATE
-              AND CURRENT_DATE + :days * INTERVAL '1 day'
+              AND CURRENT_DATE + make_interval(days => :days)
             ORDER BY bid_end_date ASC
             LIMIT :limit
         """),
@@ -188,7 +169,6 @@ async def get_alerts(
     _user_id: str = Depends(get_current_user_id),
     _trace_id: str = Depends(get_trace_id),
 ):
-    """Fetch alerts for the current company."""
     conditions = ["company_id = :company_id"]
     params: dict = {"company_id": str(company_id), "limit": limit}
 
@@ -220,8 +200,6 @@ async def get_alerts(
     return {"data": [dict(r._mapping) for r in rows]}
 
 
-# ── Parameterised route LAST — avoids swallowing the routes above ─────────────
-
 @router.get("/{tender_id}")
 async def get_tender(
     tender_id: str,
@@ -229,8 +207,6 @@ async def get_tender(
     _user_id: str = Depends(get_current_user_id),
     _trace_id: str = Depends(get_trace_id),
 ):
-    """Fetch a single tender by its UUID or scraper tender_id."""
-    # Try UUID match first, then scraper string id
     row = (
         await session.execute(
             text(f"""
