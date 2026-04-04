@@ -207,7 +207,7 @@ export const api = {
     getProfile: () => request<any>("/api/v1/company/profile"),
     updateProfile: (data: Record<string, unknown>) =>
       request<any>("/api/v1/company/profile", {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify(data),
       }),
   },
