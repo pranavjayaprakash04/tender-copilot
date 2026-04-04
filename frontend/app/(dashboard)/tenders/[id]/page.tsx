@@ -451,11 +451,11 @@ function EligibilityModal({ tender, profile, onClose }: { tender: TenderDetail; 
   });
   const data = mutation.data;
   const verdictColor = (v: string | undefined) => !v ? "#64748B" : v.includes("Highly") ? "#10B981" : v.includes("Likely") ? "#3B82F6" : v.includes("Marginally") ? "#F59E0B" : "#EF4444";
-  const verdict = data.verdict || (data.eligible ? "Likely Eligible" : "Not Eligible");
-  const summary = data.summary || data.reasons?.join(". ") || "";
-  const criteria = data.criteria || [];
-  const missingDocs = data.missing_documents || data.missing_requirements || [];
-  const recommendations = data.recommendations || [];
+  const verdict = data?.verdict || (data?.eligible ? "Likely Eligible" : "Not Eligible");
+  const summary = data?.summary || (data as any)?.reasons?.join(". ") || "";
+  const criteria = data?.criteria || [];
+  const missingDocs = data?.missing_documents || (data as any)?.missing_requirements || [];
+  const recommendations = data?.recommendations || [];
   const statusIcon = (s: string) => s === "pass" ? "✓" : s === "warning" ? "⚠" : "✗";
   const statusColor = (s: string) => s === "pass" ? "#10B981" : s === "warning" ? "#F59E0B" : "#EF4444";
   return (
