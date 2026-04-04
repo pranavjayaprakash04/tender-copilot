@@ -50,8 +50,9 @@ export default function AlertsPage() {
   // Pull closing-soon tenders to generate deadline alerts
   const { data: closingSoon } = useQuery({
     queryKey: ["closing-soon"],
-    queryFn: () => api.get("/api/v1/tenders/closing-soon/list?days=7&limit=20"),
+    queryFn: () => api.get("/api/v1/tenders/closing-soon/list?days=7&limit=20").catch(() => null),
     staleTime: 60_000,
+    retry: false,  // don't hammer the backend on 500
   });
 
   // Pull bids to generate bid status alerts
