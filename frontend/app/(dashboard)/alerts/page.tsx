@@ -58,7 +58,7 @@ export default function AlertsPage() {
     queryFn: async () => {
       const res = await api.alerts.list();
       if (Array.isArray(res)) return res;
-      if (res && Array.isArray(res.notifications)) return res.notifications;
+      if (res && Array.isArray((res as any).notifications)) return (res as any).notifications;
       if (res && Array.isArray(res.items)) return res.items;
       if (res && Array.isArray(res.data)) return res.data;
       return [];
