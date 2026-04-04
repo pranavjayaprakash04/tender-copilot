@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "@/lib/i18n";
@@ -113,11 +113,11 @@ export default function DashboardPage() {
                     <div key={tender.id} className="flex items-center justify-between p-3 bg-gray-50 rounded">
                       <div>
                         <h4 className="text-sm font-medium text-gray-900">{tender.title}</h4>
-                        <p className="text-xs text-gray-600">{tender.organization}</p>
+                        <p className="text-xs text-gray-600">{tender.organisation}</p>
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-medium text-gray-900">
-                          {tender.value ? `₹${parseInt(tender.value).toLocaleString("en-IN")}` : 'N/A'}
+                          {tender.value ? `â‚¹${parseInt(tender.value).toLocaleString("en-IN")}` : 'N/A'}
                         </p>
                         <p className="text-xs text-gray-500">
                           {new Date(tender.deadline).toLocaleDateString()}
