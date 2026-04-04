@@ -13,6 +13,7 @@ interface Tender {
   procuring_entity: string;
   bid_submission_deadline: string;
   estimated_value?: number;
+  emd_amount?: number;
   category: string;
   status: string;
   state?: string;
@@ -157,9 +158,11 @@ export default function TendersPage() {
                   <p className="text-gray-400 text-xs mb-2">{tender.district ? `${tender.district}, ` : ""}{tender.state}</p>
                 )}
                 <p className="text-base font-medium text-gray-900 mb-4">
-                  {tender.estimated_value
+                  {tender.estimated_value && tender.estimated_value > 0
                     ? `₹${tender.estimated_value.toLocaleString("en-IN")}`
-                    : "Value not specified"}
+                    : tender.emd_amount && tender.emd_amount > 0
+                    ? `EMD: ₹${tender.emd_amount.toLocaleString("en-IN")}`
+                    : "Value not disclosed"}
                 </p>
 
                 <div className="flex justify-between items-center mb-4">
