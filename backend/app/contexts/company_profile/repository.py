@@ -31,13 +31,13 @@ class CompanyProfileRepository:
     async def get_by_user_id(self, user_id: str) -> Company | None:
         """Look up company by user_id column."""
         result = await self._session.execute(
-            select(Company).where(Company.user_id == str(user_id))
+            select(Company).where(Company.user_id == UUID(str(user_id)))
         )
         return result.scalar_one_or_none()
 
     async def create(self, user_id: str, data: CompanyProfileCreate) -> Company:
         company = Company(
-            user_id=str(user_id),  # ← THIS was missing — now saves user_id
+            user_id=UUID(str(user_id)),  # saves user_id as UUID
             name=data.name,
             industry=data.industry or "Other",
             location=data.location or "",
