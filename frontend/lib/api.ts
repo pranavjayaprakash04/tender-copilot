@@ -93,11 +93,12 @@ export const api = {
             ) as Record<string, string>
           ).toString()
         : "";
-      return request<any>(`/api/v1/bids/${q ? `?${q}` : ""}`);
+      // No trailing slash — prevents redirect that drops Authorization header
+      return request<any>(`/api/v1/bids${q ? `?${q}` : ""}`);
     },
     get: (id: string) => request<any>(`/api/v1/bids/${id}`),
     create: (data: Record<string, unknown>) =>
-      request<any>("/api/v1/bids/", { method: "POST", body: JSON.stringify(data) }),
+      request<any>("/api/v1/bids", { method: "POST", body: JSON.stringify(data) }),
     update: (id: string, data: Record<string, unknown>) =>
       request<any>(`/api/v1/bids/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     updateStatus: (id: string, status: string) =>
@@ -160,6 +161,7 @@ export const api = {
       }),
   },
 
+  // Compliance Vault — all routes are under /api/v1/vault/ (not /compliance/)
   vault: {
     list: () => request<any>("/api/v1/vault/documents"),
     delete: (id: string) =>
@@ -175,14 +177,14 @@ export const api = {
 
   compliance: {
     delete: (id: string) =>
-      request<void>(`/api/v1/compliance/documents/${id}`, { method: "DELETE" }),
-    getDocuments: () => request<any>("/api/v1/compliance/documents"),
+      request<void>(`/api/v1/vault/documents/${id}`, { method: "DELETE" }),
+    getDocuments: () => request<any>("/api/v1/vault/documents"),
     uploadDocument: async (fileOrData: File | Record<string, unknown>) => {
       if (fileOrData instanceof File) {
         const token = await getAuthToken();
         const formData = new FormData();
         formData.append("file", fileOrData);
-        const res = await fetch(`${BASE_URL}/api/v1/compliance/documents`, {
+        const res = await fetch(`${BASE_URL}/api/v1/vault/upload`, {
           method: "POST",
           headers: token ? { Authorization: `Bearer ${token}` } : {},
           body: formData,
@@ -190,15 +192,15 @@ export const api = {
         if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
         return res.json();
       }
-      return request<any>("/api/v1/compliance/documents", {
+      return request<any>("/api/v1/vault/upload", {
         method: "POST",
         body: JSON.stringify(fileOrData),
       });
     },
     deleteDocument: (id: string) =>
-      request<void>(`/api/v1/compliance/documents/${id}`, { method: "DELETE" }),
+      request<void>(`/api/v1/vault/documents/${id}`, { method: "DELETE" }),
     getSignedUrl: (id: string) =>
-      request<{ url: string }>(`/api/v1/compliance/documents/${id}/url`),
+      request<{ url: string }>(`/api/v1/vault/documents/${id}/url`),
   },
 
   company: {
