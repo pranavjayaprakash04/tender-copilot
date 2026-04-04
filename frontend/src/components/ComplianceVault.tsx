@@ -1,10 +1,5 @@
 'use client';
 
-// ─── Removed: export const dynamic = 'force-dynamic'
-// That directive is only valid in Next.js page.tsx / route.tsx files,
-// not inside component files. Placing it here caused a silent build warning
-// and had no effect.
-
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
 import {
@@ -15,29 +10,22 @@ import { format } from 'date-fns';
 import { createClient } from '@supabase/supabase-js';
 import { api } from '@/lib/api';
 
-// ─── Supabase ─────────────────────────────────────────────────────────────────
-// Single instance outside the component — avoids creating a new client on every
-// render and keeps session state stable.
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 );
 
-/** Fetch a binary response (blob) from a protected endpoint. */
 const fetchBlob = async (endpoint: string): Promise<Blob> => {
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
-
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://tender-copilot.onrender.com';
   const res = await fetch(`${apiUrl}${endpoint}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
-
   if (!res.ok) throw new Error(`Download failed (${res.status})`);
   return res.blob();
 };
 
-// ─── Types ────────────────────────────────────────────────────────────────────
 interface Document {
   id: string;
   filename: string;
@@ -56,8 +44,7 @@ interface DocumentStats {
   expiring_soon_documents: number;
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
 const DOC_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'gst',                    label: 'GST Certificate' },
@@ -77,17 +64,14 @@ const DOC_TYPE_LABEL: Record<string, string> = Object.fromEntries(
   DOC_TYPE_OPTIONS.map(({ value, label }) => [value, label]),
 );
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Derive stats from a document list — avoids a separate API call. */
 const deriveStats = (docs: Document[]): DocumentStats => {
   const now = Date.now();
   const soon = now + 30 * 24 * 60 * 60 * 1000;
   return {
-    total_documents:     docs.length,
-    current_documents:   docs.filter(d => d.is_current).length,
-    expired_documents:   docs.filter(d => d.expires_at && new Date(d.expires_at).getTime() < now).length,
-    expiring_soon_documents: docs.filter(d => {
+    total_documents:          docs.length,
+    current_documents:        docs.filter(d => d.is_current).length,
+    expired_documents:        docs.filter(d => d.expires_at && new Date(d.expires_at).getTime() < now).length,
+    expiring_soon_documents:  docs.filter(d => {
       if (!d.expires_at) return false;
       const t = new Date(d.expires_at).getTime();
       return t > now && t <= soon;
@@ -106,27 +90,19 @@ const getDocumentStatus = (doc: Document): 'superseded' | 'expired' | 'expiring'
 };
 
 const STATUS_CONFIG = {
-  superseded: { label: 'Superseded', classes: 'bg-gray-100 text-gray-700' },
-  expired:    { label: 'Expired',    classes: 'bg-red-100 text-red-700' },
+  superseded: { label: 'Superseded',    classes: 'bg-gray-100 text-gray-700' },
+  expired:    { label: 'Expired',       classes: 'bg-red-100 text-red-700' },
   expiring:   { label: 'Expiring Soon', classes: 'bg-yellow-100 text-yellow-700' },
-  valid:      { label: 'Valid',      classes: 'bg-green-100 text-green-700' },
+  valid:      { label: 'Valid',         classes: 'bg-green-100 text-green-700' },
 };
 
-/**
- * Sanitize error messages before displaying them.
- * Never expose raw exception messages from the API — they may contain SQL
- * details, stack traces, or internal paths.
- */
 const friendlyError = (err: unknown, fallback: string): string => {
   if (!(err instanceof Error)) return fallback;
-  // Allow only short, obviously user-facing messages (no stack traces / SQL).
   const msg = err.message;
   if (msg.length < 120 && !/\bat\b|\bsql\b|Error:/i.test(msg)) return msg;
   return fallback;
 };
 
-// ─── Confirm Dialog ───────────────────────────────────────────────────────────
-// Replaces the browser's blocking confirm() with an accessible inline modal.
 interface ConfirmDialogProps {
   message: string;
   onConfirm: () => void;
@@ -134,52 +110,33 @@ interface ConfirmDialogProps {
 }
 
 const ConfirmDialog: React.FC<ConfirmDialogProps> = ({ message, onConfirm, onCancel }) => (
-  <div
-    role="dialog"
-    aria-modal="true"
-    aria-label="Confirm action"
-    className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-  >
+  <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
     <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4">
       <div className="flex items-start gap-3 mb-4">
         <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
         <p className="text-gray-800 text-sm">{message}</p>
       </div>
       <div className="flex justify-end gap-3">
-        <button
-          onClick={onCancel}
-          className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={onConfirm}
-          className="px-4 py-2 text-sm text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
-        >
-          Delete
-        </button>
+        <button onClick={onCancel} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
+        <button onClick={onConfirm} className="px-4 py-2 text-sm text-white bg-red-600 hover:bg-red-700 rounded-lg">Delete</button>
       </div>
     </div>
   </div>
 );
 
-// ─── Main Component ───────────────────────────────────────────────────────────
 const ComplianceVault: React.FC = () => {
-  const [documents, setDocuments]         = useState<Document[]>([]);
-  const [stats, setStats]                 = useState<DocumentStats | null>(null);
-  const [loading, setLoading]             = useState(false);
-  const [uploading, setUploading]         = useState(false);
-  const [error, setError]                 = useState<string | null>(null);
-  const [success, setSuccess]             = useState<string | null>(null);
-  const [searchTerm, setSearchTerm]       = useState('');
-  const [filterType, setFilterType]       = useState('all');
-  const [filterStatus, setFilterStatus]   = useState('all');
-  // Upload UX — user must choose document type before dropping files
+  const [documents, setDocuments]           = useState<Document[]>([]);
+  const [stats, setStats]                   = useState<DocumentStats | null>(null);
+  const [loading, setLoading]               = useState(false);
+  const [uploading, setUploading]           = useState(false);
+  const [error, setError]                   = useState<string | null>(null);
+  const [success, setSuccess]               = useState<string | null>(null);
+  const [searchTerm, setSearchTerm]         = useState('');
+  const [filterType, setFilterType]         = useState('all');
+  const [filterStatus, setFilterStatus]     = useState('all');
   const [pendingDocType, setPendingDocType] = useState('other');
-  // Delete confirmation — holds the doc id to delete; null = dialog closed
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
-  // Auto-dismiss success banners after 4 seconds
   const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showSuccess = (msg: string) => {
     setSuccess(msg);
@@ -187,15 +144,15 @@ const ComplianceVault: React.FC = () => {
     successTimer.current = setTimeout(() => setSuccess(null), 4000);
   };
 
-  // ── Fetch ────────────────────────────────────────────────────────────────
   const fetchDocuments = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const data = await api.compliance.getDocuments();
-      const docs: Document[] = Array.isArray(data) ? data : Array.isArray(data?.documents) ? data.documents : Array.isArray(data?.data) ? data.data : [];
+      const docs: Document[] = Array.isArray(data) ? data
+        : Array.isArray(data?.documents) ? data.documents
+        : Array.isArray(data?.data) ? data.data : [];
       setDocuments(docs);
-      // Derive stats from the same payload — no second request, no race condition
       setStats(deriveStats(docs));
     } catch (err) {
       setError(friendlyError(err, 'Failed to load documents. Please try again.'));
@@ -206,77 +163,8 @@ const ComplianceVault: React.FC = () => {
 
   useEffect(() => {
     fetchDocuments();
-    return () => {
-      if (successTimer.current) clearTimeout(successTimer.current);
-    };
+    return () => { if (successTimer.current) clearTimeout(successTimer.current); };
   }, [fetchDocuments]);
-
-  // ── Upload ───────────────────────────────────────────────────────────────
-
-  /**
-   * Deep PDF validation — runs entirely in the browser before any network call.
-   *
-   * Layers of defence:
-   *  1. MIME type from the File object (set by the OS, not the file content — spoofable)
-   *  2. File extension — must be exactly ".pdf"
-   *  3. Magic bytes — first 4 bytes of the file must be %PDF (hex 25 50 44 46)
-   *     This catches files renamed to .pdf that are actually executables, zips, etc.
-   *  4. Embedded script / JavaScript keyword scan — reads the first 64 KB and
-   *     searches for /JS , /JavaScript , and AA (auto-action) PDF object markers.
-   *     These are the primary vectors for PDF-based malware.
-   *  5. Embedded executable scan — checks for EXE magic bytes (MZ / 4D5A) inside
-   *     the first 64 KB, which would indicate a dropper embedded in the PDF.
-   *
-   * NOTE: These are client-side heuristics only. The backend must perform its own
-   * validation (MIME sniffing, AV scan, sandboxed rendering). Client checks exist
-   * to give immediate feedback and reduce junk uploads — not as a security guarantee.
-   */
-  const validatePdf = (file: File): Promise<string | null> =>
-    new Promise(resolve => {
-      // Layer 1 — MIME type
-      if (file.type !== 'application/pdf') {
-        resolve('Only PDF files are accepted. This file has type: ' + (file.type || 'unknown'));
-        return;
-      }
-      // Layer 2 — extension
-      if (!file.name.toLowerCase().endsWith('.pdf')) {
-        resolve('File must have a .pdf extension.');
-        return;
-      }
-      // Layer 3 + 4 + 5 — binary inspection
-      const reader = new FileReader();
-      // Read first 64 KB — enough to catch magic bytes and most embedded scripts
-      reader.readAsArrayBuffer(file.slice(0, 65536));
-      reader.onload = () => {
-        const buf = new Uint8Array(reader.result as ArrayBuffer);
-
-        // Layer 3: PDF magic bytes — %PDF = 0x25 0x50 0x44 0x46
-        if (buf[0] !== 0x25 || buf[1] !== 0x50 || buf[2] !== 0x44 || buf[3] !== 0x46) {
-          resolve('File does not appear to be a valid PDF (invalid magic bytes).');
-          return;
-        }
-
-        // Convert to string for text-based pattern scanning
-        const head = Array.from(buf).map(b => String.fromCharCode(b)).join('');
-
-        // Layer 4: embedded JavaScript markers
-        if (/\/JS\s|\/JavaScript\s|\/AA\s/.test(head)) {
-          resolve('This PDF contains embedded scripts and cannot be uploaded for security reasons.');
-          return;
-        }
-
-        // Layer 5: embedded Windows executable (MZ header = 0x4D 0x5A)
-        for (let i = 0; i < buf.length - 1; i++) {
-          if (buf[i] === 0x4D && buf[i + 1] === 0x5A) {
-            resolve('This file contains an embedded executable and cannot be uploaded.');
-            return;
-          }
-        }
-
-        resolve(null); // all checks passed
-      };
-      reader.onerror = () => resolve('Could not read file for validation.');
-    });
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
@@ -284,26 +172,14 @@ const ComplianceVault: React.FC = () => {
     setError(null);
 
     for (const file of acceptedFiles) {
-      // Size check first — avoids reading a huge file for magic bytes
       if (file.size > MAX_FILE_SIZE_BYTES) {
         setError(`"${file.name}" exceeds the 10 MB limit.`);
         setUploading(false);
         return;
       }
-
-      // Deep PDF + malware validation
-      const validationError = await validatePdf(file);
-      if (validationError) {
-        setError(validationError);
-        setUploading(false);
-        return;
-      }
-
       try {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('document_type', pendingDocType);
-        await api.compliance.uploadDocument(formData as any);
+        // Send file + doc_type as query param (backend requires this)
+        await (api.compliance.uploadDocument as any)(file, pendingDocType);
         showSuccess(`Uploaded "${file.name}" successfully.`);
       } catch (err) {
         setError(friendlyError(err, `Failed to upload "${file.name}". Please try again.`));
@@ -311,31 +187,25 @@ const ComplianceVault: React.FC = () => {
         return;
       }
     }
-
     setUploading(false);
     fetchDocuments();
   }, [pendingDocType, fetchDocuments]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    // react-dropzone MIME filter — first line of defence at the file picker level
     accept: { 'application/pdf': ['.pdf'] },
     multiple: true,
     disabled: uploading,
   });
 
-  // ── Delete ───────────────────────────────────────────────────────────────
-  // Step 1: show confirm dialog (replaces blocking confirm())
   const requestDelete = (docId: string) => setConfirmDeleteId(docId);
 
-  // Step 2: user confirmed
   const confirmDelete = async () => {
     if (!confirmDeleteId) return;
     const docId = confirmDeleteId;
     setConfirmDeleteId(null);
     setError(null);
     try {
-      // ✅ Routes through api.ts — uses correct /api/v1/vault/{id} endpoint
       await api.compliance.delete(docId);
       showSuccess('Document deleted.');
       fetchDocuments();
@@ -344,13 +214,9 @@ const ComplianceVault: React.FC = () => {
     }
   };
 
-  // ── Download ─────────────────────────────────────────────────────────────
   const downloadDocument = async (docId: string, filename: string) => {
     setError(null);
     try {
-      // ✅ Uses correct /api/v1/vault/{id}/download endpoint via fetchBlob helper.
-      // api.compliance.download() calls res.json() which fails on binary responses,
-      // so we use the dedicated fetchBlob helper instead.
       const blob = await fetchBlob(`/api/v1/vault/${docId}/download`);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -358,17 +224,12 @@ const ComplianceVault: React.FC = () => {
       a.download = filename;
       document.body.appendChild(a);
       a.click();
-      // Clean up immediately — don't leak object URLs
-      requestAnimationFrame(() => {
-        URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-      });
+      requestAnimationFrame(() => { URL.revokeObjectURL(url); document.body.removeChild(a); });
     } catch (err) {
       setError(friendlyError(err, 'Failed to download the document. Please try again.'));
     }
   };
 
-  // ── Filter / Search ──────────────────────────────────────────────────────
   const filteredDocuments = documents.filter(doc => {
     const matchesSearch = doc.filename.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesType   = filterType === 'all' || doc.doc_type === filterType;
@@ -381,11 +242,8 @@ const ComplianceVault: React.FC = () => {
     return matchesSearch && matchesType && matchesStatus;
   });
 
-  // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
-
-      {/* Confirm Delete Dialog */}
       {confirmDeleteId && (
         <ConfirmDialog
           message="Delete this document permanently? This action cannot be undone."
@@ -394,7 +252,6 @@ const ComplianceVault: React.FC = () => {
         />
       )}
 
-      {/* Header */}
       <div className="mb-8 flex items-center gap-3">
         <ShieldCheck className="h-8 w-8 text-indigo-600" />
         <div>
@@ -403,14 +260,13 @@ const ComplianceVault: React.FC = () => {
         </div>
       </div>
 
-      {/* Stats */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           {[
-            { label: 'Total',         value: stats.total_documents,        icon: File,         color: 'text-blue-600' },
-            { label: 'Current',       value: stats.current_documents,      icon: CheckCircle,  color: 'text-green-600' },
+            { label: 'Total',         value: stats.total_documents,         icon: File,        color: 'text-blue-600' },
+            { label: 'Current',       value: stats.current_documents,       icon: CheckCircle, color: 'text-green-600' },
             { label: 'Expiring Soon', value: stats.expiring_soon_documents, icon: Clock,       color: 'text-yellow-600' },
-            { label: 'Expired',       value: stats.expired_documents,      icon: AlertCircle,  color: 'text-red-600' },
+            { label: 'Expired',       value: stats.expired_documents,       icon: AlertCircle, color: 'text-red-600' },
           ].map(({ label, value, icon: Icon, color }) => (
             <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 flex items-center gap-4">
               <Icon className={`h-7 w-7 flex-shrink-0 ${color}`} />
@@ -423,11 +279,8 @@ const ComplianceVault: React.FC = () => {
         </div>
       )}
 
-      {/* Upload */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm mb-8 p-6">
         <h2 className="text-sm font-semibold text-gray-700 mb-4">Upload Document</h2>
-
-        {/* Document type must be chosen before uploading */}
         <div className="mb-4 flex items-center gap-3">
           <label htmlFor="upload-doc-type" className="text-sm text-gray-600 flex-shrink-0">
             Document type <span className="text-red-500">*</span>
@@ -443,12 +296,11 @@ const ComplianceVault: React.FC = () => {
             ))}
           </select>
         </div>
-
         <div
           {...getRootProps()}
           className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer
-            ${isDragActive  ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:border-gray-300'}
-            ${uploading     ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
+            ${isDragActive ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:border-gray-300'}
+            ${uploading ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
         >
           <input {...getInputProps()} />
           {uploading ? (
@@ -468,54 +320,38 @@ const ComplianceVault: React.FC = () => {
         </div>
       </div>
 
-      {/* Alerts */}
       {error && (
         <div role="alert" className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-5 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
           <p className="text-sm text-red-800 flex-1">{error}</p>
-          <button onClick={() => setError(null)} aria-label="Dismiss" className="text-red-400 hover:text-red-700">
-            <X className="h-4 w-4" />
-          </button>
+          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-700"><X className="h-4 w-4" /></button>
         </div>
       )}
       {success && (
         <div role="status" className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 mb-5 flex items-start gap-3">
           <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
           <p className="text-sm text-green-800 flex-1">{success}</p>
-          <button onClick={() => setSuccess(null)} aria-label="Dismiss" className="text-green-400 hover:text-green-700">
-            <X className="h-4 w-4" />
-          </button>
+          <button onClick={() => setSuccess(null)} className="text-green-400 hover:text-green-700"><X className="h-4 w-4" /></button>
         </div>
       )}
 
-      {/* Filters */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm mb-6 p-4">
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input
-              type="search"
-              placeholder="Search documents…"
-              value={searchTerm}
+              type="search" placeholder="Search documents…" value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-indigo-400"
             />
           </div>
-          <select
-            value={filterType}
-            onChange={e => setFilterType(e.target.value)}
-            className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
-          >
+          <select value={filterType} onChange={e => setFilterType(e.target.value)}
+            className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400">
             <option value="all">All Types</option>
-            {DOC_TYPE_OPTIONS.map(({ value, label }) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
+            {DOC_TYPE_OPTIONS.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
           </select>
-          <select
-            value={filterStatus}
-            onChange={e => setFilterStatus(e.target.value)}
-            className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
-          >
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+            className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400">
             <option value="all">All Status</option>
             <option value="current">Current</option>
             <option value="expiring">Expiring Soon</option>
@@ -524,15 +360,12 @@ const ComplianceVault: React.FC = () => {
         </div>
       </div>
 
-      {/* Document List */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-gray-100">
           <h2 className="text-sm font-semibold text-gray-700">
-            Documents
-            <span className="ml-2 text-gray-400 font-normal">({filteredDocuments.length})</span>
+            Documents <span className="ml-2 text-gray-400 font-normal">({filteredDocuments.length})</span>
           </h2>
         </div>
-
         {loading ? (
           <div className="p-12 flex flex-col items-center gap-3 text-gray-400">
             <Loader2 className="h-8 w-8 animate-spin" />
@@ -547,39 +380,26 @@ const ComplianceVault: React.FC = () => {
           <ul className="divide-y divide-gray-50">
             {filteredDocuments.map(doc => {
               const status = getDocumentStatus(doc);
-              const cfg    = STATUS_CONFIG[status];
+              const cfg = STATUS_CONFIG[status];
               return (
                 <li key={doc.id} className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 transition-colors">
                   <File className="h-8 w-8 text-gray-300 flex-shrink-0" />
-
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">{doc.filename}</p>
-                    <p className="text-xs text-gray-500">
-                      {DOC_TYPE_LABEL[doc.doc_type] ?? doc.doc_type} · v{doc.version}
-                    </p>
+                    <p className="text-xs text-gray-500">{DOC_TYPE_LABEL[doc.doc_type] ?? doc.doc_type} · v{doc.version}</p>
                     <p className="text-xs text-gray-400">
                       Uploaded {format(new Date(doc.uploaded_at), 'dd MMM yyyy')}
                       {doc.expires_at && ` · Expires ${format(new Date(doc.expires_at), 'dd MMM yyyy')}`}
                     </p>
                   </div>
-
-                  <span className={`px-2 py-0.5 text-xs font-medium rounded-full flex-shrink-0 ${cfg.classes}`}>
-                    {cfg.label}
-                  </span>
-
+                  <span className={`px-2 py-0.5 text-xs font-medium rounded-full flex-shrink-0 ${cfg.classes}`}>{cfg.label}</span>
                   <div className="flex items-center gap-1 flex-shrink-0">
-                    <button
-                      onClick={() => downloadDocument(doc.id, doc.filename)}
-                      title="Download"
-                      className="p-2 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
-                    >
+                    <button onClick={() => downloadDocument(doc.id, doc.filename)} title="Download"
+                      className="p-2 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
                       <Download className="h-4 w-4" />
                     </button>
-                    <button
-                      onClick={() => requestDelete(doc.id)}
-                      title="Delete"
-                      className="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                    >
+                    <button onClick={() => requestDelete(doc.id)} title="Delete"
+                      className="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
