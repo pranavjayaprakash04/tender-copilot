@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "@/lib/i18n";
@@ -109,18 +109,18 @@ export default function DashboardPage() {
                 </div>
               ) : tendersData?.tenders && tendersData.tenders.length > 0 ? (
                 <div className="space-y-4">
-                  {tendersData.tenders.slice(0, 5).map((tender) => (
+                  {tendersData.tenders.slice(0, 5).map((tender: any) => (
                     <div key={tender.id} className="flex items-center justify-between p-3 bg-gray-50 rounded">
                       <div>
                         <h4 className="text-sm font-medium text-gray-900">{tender.title}</h4>
-                        <p className="text-xs text-gray-600">{tender.organisation}</p>
+                        <p className="text-xs text-gray-600">{(tender as any).organisation ?? (tender as any).organization ?? ""}</p>
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-medium text-gray-900">
-                          {tender.value ? `â‚¹${parseInt(tender.value).toLocaleString("en-IN")}` : 'N/A'}
+                          {tender.value ? `₹${parseInt(String(tender.value)).toLocaleString("en-IN")}` : 'N/A'}
                         </p>
                         <p className="text-xs text-gray-500">
-                          {new Date(tender.deadline).toLocaleDateString()}
+                          {tender.deadline ? new Date(tender.deadline).toLocaleDateString() : ''}
                         </p>
                       </div>
                     </div>
@@ -149,7 +149,7 @@ export default function DashboardPage() {
                 </div>
               ) : alertsData && alertsData.length > 0 ? (
                 <div className="space-y-4">
-                  {alertsData.slice(0, 5).map((alert, index) => (
+                  {alertsData.slice(0, 5).map((alert: any, index: number) => (
                     <div key={index} className="flex items-center p-3 bg-yellow-50 rounded">
                       <div className="flex-shrink-0">
                         <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">

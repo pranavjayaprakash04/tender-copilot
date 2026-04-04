@@ -1,7 +1,7 @@
-"use client";
-import { useState, useEffect } from "react";
+﻿"use client";
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useTranslation } from "next-i18next";
+import { useTranslation } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { MessageLoading } from "@/components/ui/message-loading";
 import { api } from "@/lib/api";
@@ -12,13 +12,6 @@ interface BidGenerationPanelProps {
   companyId: string;
 }
 
-interface BidStatus {
-  status: "pending" | "processing" | "completed" | "failed";
-  progress: number;
-  bid_id?: string;
-  error?: string;
-}
-
 export function BidGenerationPanel({ tenderId, tenderTitle, companyId }: BidGenerationPanelProps) {
   const { t, i18n } = useTranslation("common");
   const [taskId, setTaskId] = useState<string | null>(null);
@@ -27,30 +20,19 @@ export function BidGenerationPanel({ tenderId, tenderTitle, companyId }: BidGene
 
   const generateBidMutation = useMutation({
     mutationFn: async (lang: "en" | "ta") => {
-      const response = await api.bids.generate(tenderId, lang);
+      const response = await api.bids.generate({ tender_id: tenderId, language: lang });
       setTaskId(response.task_id);
       setPolling(true);
       return response;
     }
   });
 
-  const { data: bidStatus } = useQuery<BidStatus>({
+  const { data: bidStatus } = useQuery({
     queryKey: ["bid-status", taskId],
     queryFn: () => api.bids.getStatus(taskId!),
     enabled: !!taskId && polling,
     refetchInterval: polling ? 3000 : false
   });
-
-  useEffect(() => {
-    if (bidStatus?.status === "completed") {
-      setPolling(false);
-      if (bidStatus.bid_id) {
-        window.location.href = `/bids/${bidStatus.bid_id}`;
-      }
-    } else if (bidStatus?.status === "failed") {
-      setPolling(false);
-    }
-  }, [bidStatus]);
 
   const handleLanguageToggle = () => {
     const newLang = currentLang === "en" ? "ta" : "en";
@@ -60,6 +42,15 @@ export function BidGenerationPanel({ tenderId, tenderTitle, companyId }: BidGene
   const handleGenerateBid = () => {
     generateBidMutation.mutate(currentLang);
   };
+
+  if (bidStatus?.status === "completed") {
+    setPolling(false);
+    window.location.href = `/bids/${bidStatus.bid_id}`;
+  }
+
+  if (bidStatus?.status === "failed") {
+    setPolling(false);
+  }
 
   const getProgressColor = (progress: number) => {
     if (progress >= 80) return "bg-green-500";
@@ -114,17 +105,19 @@ export function BidGenerationPanel({ tenderId, tenderTitle, companyId }: BidGene
             <span className="text-gray-600">{t("bids.progress")}</span>
             <span className="font-medium">{bidStatus.progress}%</span>
           </div>
+          
           <div className="w-full bg-gray-200 rounded-full h-2">
             <div
               className={`h-2 rounded-full transition-all duration-300 ${getProgressColor(bidStatus.progress)}`}
               style={{ width: `${bidStatus.progress}%` }}
             />
           </div>
+
           <div className="flex items-center text-blue-600">
             <MessageLoading />
             <span className="ml-2 text-sm">
-              {bidStatus.status === "processing"
-                ? t("bids.processing")
+              {bidStatus.status === "processing" 
+                ? t("bids.processing") 
                 : t("bids.pending")
               }
             </span>
@@ -140,7 +133,11 @@ export function BidGenerationPanel({ tenderId, tenderTitle, companyId }: BidGene
           {bidStatus.error && (
             <p className="text-red-600 text-xs">{bidStatus.error}</p>
           )}
-          <Button variant="outline" size="sm" onClick={handleGenerateBid}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleGenerateBid}
+          >
             {t("bids.retry")}
           </Button>
         </div>

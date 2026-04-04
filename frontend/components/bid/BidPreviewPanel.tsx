@@ -1,7 +1,9 @@
-"use client";
+﻿"use client";
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useTranslation } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
+import { MessageLoading } from "@/components/ui/message-loading";
 import { api } from "@/lib/api";
 
 interface Bid {
@@ -21,20 +23,14 @@ interface BidPreviewPanelProps {
   bidId: string;
 }
 
-const SECTIONS: { key: keyof Bid; title: string }[] = [
-  { key: "executive_summary", title: "Executive Summary" },
-  { key: "technical_approach", title: "Technical Approach" },
-  { key: "financial_proposal", title: "Financial Proposal" },
-  { key: "compliance_statement", title: "Compliance Statement" },
-];
-
 export function BidPreviewPanel({ bidId }: BidPreviewPanelProps) {
+  const { t } = useTranslation("common");
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<Partial<Bid>>({});
 
-  const { data: bid, isLoading, error } = useQuery<Bid>({
+  const { data: bid, isLoading, error } = useQuery({
     queryKey: ["bid", bidId],
-    queryFn: () => api.bids.get(bidId),
+    queryFn: () => api.bids.get(bidId)
   });
 
   const updateBidMutation = useMutation({
@@ -42,34 +38,46 @@ export function BidPreviewPanel({ bidId }: BidPreviewPanelProps) {
     onSuccess: () => {
       setIsEditing(false);
       setEditData({});
-    },
+    }
+  });
+
+  const exportBidMutation = useMutation({
+    mutationFn: () => api.bids.export(bidId, "pdf")
   });
 
   const handleEdit = () => {
-    if (!bid) return;
     setEditData({
-      executive_summary: bid.executive_summary || "",
-      technical_approach: bid.technical_approach || "",
-      financial_proposal: bid.financial_proposal || "",
-      compliance_statement: bid.compliance_statement || "",
+      executive_summary: bid?.executive_summary || "",
+      technical_approach: bid?.technical_approach || "",
+      financial_proposal: bid?.financial_proposal || "",
+      compliance_statement: bid?.compliance_statement || ""
     });
     setIsEditing(true);
   };
 
+  const handleSave = () => {
+    updateBidMutation.mutate(editData);
+  };
+
+  const handleCancel = () => {
+    setIsEditing(false);
+    setEditData({});
+  };
+
+  const handleExport = () => {
+    exportBidMutation.mutate();
+  };
+
   const handleFieldChange = (field: keyof Bid, value: string) => {
-    setEditData((prev) => ({ ...prev, [field]: value }));
+    setEditData(prev => ({ ...prev, [field]: value }));
   };
 
   if (isLoading) {
     return (
-      <div className="bg-white rounded-xl border border-gray-200 p-6 animate-pulse">
-        <div className="space-y-4">
-          {[...Array(4)].map((_, i) => (
-            <div key={i}>
-              <div className="h-4 bg-gray-200 rounded w-1/4 mb-2" />
-              <div className="h-20 bg-gray-100 rounded" />
-            </div>
-          ))}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="flex items-center justify-center py-8">
+          <MessageLoading />
+          <span className="ml-2 text-gray-600">{t("bids.loading")}</span>
         </div>
       </div>
     );
@@ -77,63 +85,121 @@ export function BidPreviewPanel({ bidId }: BidPreviewPanelProps) {
 
   if (error || !bid) {
     return (
-      <div className="bg-white rounded-xl border border-gray-200 p-6 text-center">
-        <p className="text-red-600 mb-4 text-sm">Could not load bid content.</p>
-        <Button onClick={() => window.location.reload()}>Retry</Button>
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="text-center py-8">
+          <p className="text-red-600 mb-4">{t("bids.error_loading")}</p>
+          <Button onClick={() => window.location.reload()}>{t("common.retry")}</Button>
+        </div>
       </div>
     );
   }
 
+  const sections = [
+    {
+      key: "executive_summary" as keyof Bid,
+      title: t("bids.executive_summary"),
+      value: bid.executive_summary
+    },
+    {
+      key: "technical_approach" as keyof Bid,
+      title: t("bids.technical_approach"),
+      value: bid.technical_approach
+    },
+    {
+      key: "financial_proposal" as keyof Bid,
+      title: t("bids.financial_proposal"),
+      value: bid.financial_proposal
+    },
+    {
+      key: "compliance_statement" as keyof Bid,
+      title: t("bids.compliance_statement"),
+      value: bid.compliance_statement
+    }
+  ];
+
   return (
-    <div className="bg-white rounded-xl border border-gray-200">
-      <div className="p-5 border-b border-gray-200 flex items-center justify-between">
-        <h3 className="text-base font-semibold text-gray-900">Bid Content</h3>
-        <div className="flex gap-2">
-          {isEditing ? (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => { setIsEditing(false); setEditData({}); }}
-                disabled={updateBidMutation.isPending}
-              >
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => updateBidMutation.mutate(editData)}
-                disabled={updateBidMutation.isPending}
-              >
-                {updateBidMutation.isPending ? "Saving…" : "Save"}
-              </Button>
-            </>
-          ) : (
-            <Button variant="outline" size="sm" onClick={handleEdit}>
-              Edit
-            </Button>
-          )}
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+      <div className="p-6 border-b border-gray-200">
+        <div className="flex justify-between items-center">
+          <h3 className="text-lg font-semibold text-gray-900">
+            {t("bids.preview")}
+          </h3>
+          <div className="flex gap-2">
+            {isEditing ? (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCancel}
+                  disabled={updateBidMutation.isPending}
+                >
+                  {t("common.cancel")}
+                </Button>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={updateBidMutation.isPending}
+                >
+                  {updateBidMutation.isPending ? (
+                    <>
+                      <MessageLoading />
+                      <span className="ml-2">{t("bids.saving")}</span>
+                    </>
+                  ) : (
+                    t("bids.save")
+                  )}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExport}
+                  disabled={exportBidMutation.isPending}
+                >
+                  {exportBidMutation.isPending ? (
+                    <>
+                      <MessageLoading />
+                      <span className="ml-2">{t("bids.downloading")}</span>
+                    </>
+                  ) : (
+                    t("bids.download")
+                  )}
+                </Button>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={handleEdit}
+                >
+                  {t("bids.edit")}
+                </Button>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="p-5 space-y-5">
-        {SECTIONS.map((section) => (
-          <div key={String(section.key)}>
-            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+      <div className="p-6 space-y-6">
+        {sections.map((section) => (
+          <div key={section.key} className="space-y-2">
+            <h4 className="text-md font-medium text-gray-900">
               {section.title}
             </h4>
             {isEditing ? (
               <textarea
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
-                rows={5}
-                value={String(editData[section.key] ?? "")}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                rows={6}
+                value={editData[section.key] || ""}
                 onChange={(e) => handleFieldChange(section.key, e.target.value)}
-                placeholder={`Enter ${section.title.toLowerCase()}…`}
+                placeholder={t("bids.edit_placeholder")}
               />
             ) : (
-              <div className="bg-gray-50 rounded-lg px-4 py-3 text-sm text-gray-700 whitespace-pre-wrap leading-relaxed min-h-[60px]">
-                {String(bid[section.key] || "") || (
-                  <span className="text-gray-400 italic">No content yet.</span>
-                )}
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-gray-700 whitespace-pre-wrap">
+                  {section.value || t("bids.no_content")}
+                </p>
               </div>
             )}
           </div>

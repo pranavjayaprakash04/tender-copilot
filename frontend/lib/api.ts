@@ -1,4 +1,4 @@
-﻿import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -28,6 +28,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return res.json();
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type TenderItem = {
   id: string;
   title: string;
@@ -37,10 +38,13 @@ export type TenderItem = {
   portal?: string;
   location?: string;
   description?: string;
+  /** Both spellings of organisation/organization accepted */
   organisation?: string;
   organization?: string;
   match_score?: number;
   status?: string;
+  estimated_value?: string | number;
+  tender_value?: string | number;
 };
 
 export type AlertItem = {
@@ -52,10 +56,11 @@ export type AlertItem = {
   created_at?: string;
 };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const api = {
-  get: (path: string) => request(path),
+  get: (path: string) => request<any>(path),
   post: (path: string, body: unknown) =>
-    request(path, { method: "POST", body: JSON.stringify(body) }),
+    request<any>(path, { method: "POST", body: JSON.stringify(body) }),
 
   tenders: {
     list: (params?: Record<string, string | undefined>) => {
@@ -64,7 +69,7 @@ export const api = {
           Object.entries(params || {}).filter(([, v]) => v !== undefined)
         ) as Record<string, string>
       ).toString();
-      return request<{ tenders: TenderItem[]; total: number }>(
+      return request<{ tenders: TenderItem[]; total: number; page?: number; limit?: number }>(
         `/api/v1/tenders/${q ? `?${q}` : ""}`
       );
     },
@@ -74,7 +79,7 @@ export const api = {
           Object.entries(params || {}).filter(([, v]) => v !== undefined)
         ) as Record<string, string>
       ).toString();
-      return request<{ tenders: TenderItem[]; total: number }>(
+      return request<{ tenders: TenderItem[]; total: number; page?: number; limit?: number }>(
         `/api/v1/tenders/${q ? `?${q}` : ""}`
       );
     },
@@ -82,10 +87,14 @@ export const api = {
   },
 
   bids: {
-    list: (params?: Record<string, any>) => {
-      const q = new URLSearchParams(
-        Object.fromEntries(Object.entries(params || {}).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))
-      ).toString();
+    list: (params?: Record<string, string | undefined>) => {
+      const q = params
+        ? new URLSearchParams(
+            Object.fromEntries(
+              Object.entries(params).filter(([, v]) => v !== undefined)
+            ) as Record<string, string>
+          ).toString()
+        : "";
       return request<any>(`/api/v1/bids/${q ? `?${q}` : ""}`);
     },
     get: (id: string) => request<any>(`/api/v1/bids/${id}`),
@@ -98,6 +107,11 @@ export const api = {
         method: "PATCH",
         body: JSON.stringify({ status }),
       }),
+    transition: (id: string, status: string, reason?: string) =>
+      request<any>(`/api/v1/bids/${id}/transition`, {
+        method: "POST",
+        body: JSON.stringify({ status, reason }),
+      }),
     recordOutcome: (id: string, data: Record<string, unknown>) =>
       request<any>(`/api/v1/bids/${id}/outcome`, {
         method: "POST",
@@ -109,19 +123,20 @@ export const api = {
         body: JSON.stringify(data),
       }),
     getStatus: (taskId: string) => request<any>(`/api/v1/bids/${taskId}/status`),
-    stats: () => request<any>("/api/v1/bids/stats"),
-    delete: (id: string) => request<void>(`/api/v1/bids/${id}`, { method: "DELETE" }),
-    approve: (id: string) => request<any>(`/api/v1/bids/${id}/approve`, { method: "POST" }),
-    reject: (id: string, reason?: string) => request<any>(`/api/v1/bids/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) }),
-    getAnalytics: () => request<any>("/api/v1/bids/analytics"),
-    submitForReview: (id: string) => request<any>(`/api/v1/bids/${id}/submit`, { method: "POST" }),
-    transition: (id: string, status: string, reason?: string) =>
-      request<any>(`/api/v1/bids/${id}/transition`, {
-        method: "POST",
-        body: JSON.stringify({ status, reason }),
-      }),
-    export: (id: string, format: string) =>
+    export: (id: string, format = "pdf") =>
       request<any>(`/api/v1/bids/${id}/export?format=${format}`),
+    stats: () => request<any>("/api/v1/bids/stats"),
+    approve: (id: string) =>
+      request<any>(`/api/v1/bids/${id}/approve`, { method: "POST" }),
+    reject: (id: string, reason?: string) =>
+      request<any>(`/api/v1/bids/${id}/reject`, {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      }),
+    submitForReview: (id: string) =>
+      request<any>(`/api/v1/bids/${id}/submit-review`, { method: "POST" }),
+    delete: (id: string) =>
+      request<void>(`/api/v1/bids/${id}`, { method: "DELETE" }),
   },
 
   alerts: {
@@ -162,11 +177,24 @@ export const api = {
 
   compliance: {
     getDocuments: () => request<any>("/api/v1/compliance/documents"),
-    uploadDocument: (data: Record<string, unknown>) =>
-      request<any>("/api/v1/compliance/documents", {
+    uploadDocument: async (fileOrData: File | Record<string, unknown>) => {
+      if (fileOrData instanceof File) {
+        const token = await getAuthToken();
+        const formData = new FormData();
+        formData.append("file", fileOrData);
+        const res = await fetch(`${BASE_URL}/api/v1/compliance/documents`, {
+          method: "POST",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: formData,
+        });
+        if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+        return res.json();
+      }
+      return request<any>("/api/v1/compliance/documents", {
         method: "POST",
-        body: JSON.stringify(data),
-      }),
+        body: JSON.stringify(fileOrData),
+      });
+    },
     deleteDocument: (id: string) =>
       request<void>(`/api/v1/compliance/documents/${id}`, { method: "DELETE" }),
     getSignedUrl: (id: string) =>
@@ -195,8 +223,3 @@ export const api = {
 };
 
 export default api;
-
-
-
-
-
