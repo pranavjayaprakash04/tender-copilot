@@ -179,23 +179,17 @@ export const api = {
     delete: (id: string) =>
       request<void>(`/api/v1/vault/documents/${id}`, { method: "DELETE" }),
     getDocuments: () => request<any>("/api/v1/vault/documents"),
-    uploadDocument: async (fileOrData: File | Record<string, unknown>) => {
-      if (fileOrData instanceof File) {
-        const token = await getAuthToken();
-        const formData = new FormData();
-        formData.append("file", fileOrData);
-        const res = await fetch(`${BASE_URL}/api/v1/vault/upload`, {
-          method: "POST",
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-          body: formData,
-        });
-        if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
-        return res.json();
-      }
-      return request<any>("/api/v1/vault/upload", {
+    uploadDocument: async (file: File, docType: string) => {
+      const token = await getAuthToken();
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`${BASE_URL}/api/v1/vault/upload?doc_type=${encodeURIComponent(docType)}`, {
         method: "POST",
-        body: JSON.stringify(fileOrData),
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
       });
+      if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+      return res.json();
     },
     deleteDocument: (id: string) =>
       request<void>(`/api/v1/vault/documents/${id}`, { method: "DELETE" }),
