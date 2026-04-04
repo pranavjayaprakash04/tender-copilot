@@ -1,7 +1,7 @@
 "use client";
 export const dynamic = "force-dynamic";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
@@ -30,16 +30,20 @@ export default function ProfilePage() {
   const [formData, setFormData] = useState<CompanyProfile>({});
   const [isEditing, setIsEditing] = useState(false);
 
-  const { isLoading } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["company-profile"],
     queryFn: () => api.company.getProfile(),
-    onSuccess: (data: CompanyProfile) => {
-      setFormData(data || {});
-    },
-  } as any);
+  });
+
+  useEffect(() => {
+    if (data) {
+      setFormData((data as CompanyProfile) || {});
+    }
+  }, [data]);
 
   const mutation = useMutation({
-    mutationFn: (data: CompanyProfile) => api.company.updateProfile(data as Record<string, unknown>),
+    mutationFn: (d: CompanyProfile) =>
+      api.company.updateProfile(d as Record<string, unknown>),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["company-profile"] });
       setSaved(true);
@@ -103,18 +107,15 @@ export default function ProfilePage() {
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold text-gray-900">Profile</h1>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
             {saved && (
-              <span className="text-green-600 text-sm font-medium py-2">
+              <span className="text-green-600 text-sm font-medium">
                 ✓ Saved successfully
               </span>
             )}
             {isEditing ? (
               <>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsEditing(false)}
-                >
+                <Button variant="outline" onClick={() => setIsEditing(false)}>
                   Cancel
                 </Button>
                 <Button
@@ -130,7 +131,6 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Company Information */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Company Information</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -143,7 +143,6 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Tax & Registration */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Tax & Registration</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -153,7 +152,6 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Contact & Address */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Contact & Address</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
