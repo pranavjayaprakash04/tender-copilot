@@ -303,7 +303,7 @@ const ComplianceVault: React.FC = () => {
         const formData = new FormData();
         formData.append('file', file);
         formData.append('document_type', pendingDocType);
-        await api.compliance.uploadDocument(formData);
+        await api.compliance.uploadDocument(formData as any);
         showSuccess(`Uploaded "${file.name}" successfully.`);
       } catch (err) {
         setError(friendlyError(err, `Failed to upload "${file.name}". Please try again.`));
