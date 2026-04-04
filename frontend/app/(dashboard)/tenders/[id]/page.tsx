@@ -1072,7 +1072,7 @@ export default function TenderDetailPage({ params }: { params: { id: string } })
 
   const { data: profileData } = useQuery({
     queryKey: ["company-profile"],
-    queryFn: () => api.companies.getProfile(),
+    queryFn: () => api.company.getProfile(),
     staleTime: 300_000,
   });
 
