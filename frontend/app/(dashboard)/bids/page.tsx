@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 export const dynamic = "force-dynamic";
 
 import { useState } from "react";
@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface Bid {
   id: string;
@@ -35,7 +35,7 @@ interface BidStats {
   average_bid_amount: number;
 }
 
-// ── Status config ─────────────────────────────────────────────────────────────
+// â”€â”€ Status config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; border: string; dot: string }> = {
   draft:               { label: "Draft",             color: "text-gray-600",  bg: "bg-gray-50",   border: "border-gray-200", dot: "bg-gray-400"   },
@@ -45,7 +45,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
   technically_qualified:{ label: "Tech Qualified",  color: "text-teal-700",  bg: "bg-teal-50",   border: "border-teal-200",  dot: "bg-teal-500"   },
   financially_qualified:{ label: "Fin Qualified",   color: "text-cyan-700",  bg: "bg-cyan-50",   border: "border-cyan-200",  dot: "bg-cyan-500"   },
   awarded:             { label: "Awarded",           color: "text-indigo-700",bg: "bg-indigo-50", border: "border-indigo-200",dot: "bg-indigo-500" },
-  won:                 { label: "Won ✓",             color: "text-green-700", bg: "bg-green-50",  border: "border-green-200", dot: "bg-green-500"  },
+  won:                 { label: "Won âœ“",             color: "text-green-700", bg: "bg-green-50",  border: "border-green-200", dot: "bg-green-500"  },
   lost:                { label: "Lost",              color: "text-red-700",   bg: "bg-red-50",    border: "border-red-200",   dot: "bg-red-500"    },
   withdrawn:           { label: "Withdrawn",         color: "text-orange-700",bg: "bg-orange-50", border: "border-orange-200",dot: "bg-orange-500" },
   disqualified:        { label: "Disqualified",      color: "text-rose-700",  bg: "bg-rose-50",   border: "border-rose-200",  dot: "bg-rose-500"   },
@@ -65,7 +65,7 @@ const ALLOWED_TRANSITIONS: Record<string, string[]> = {
   on_hold:          ["reviewing", "cancelled"],
 };
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
@@ -78,7 +78,7 @@ const daysUntil = (d: string) => {
   return diff;
 };
 
-// ── Status Badge ──────────────────────────────────────────────────────────────
+// â”€â”€ Status Badge â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function StatusBadge({ status }: { status: string }) {
   const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.draft;
@@ -90,7 +90,7 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-// ── Stat Card ─────────────────────────────────────────────────────────────────
+// â”€â”€ Stat Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function StatCard({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: string }) {
   return (
@@ -102,7 +102,7 @@ function StatCard({ label, value, sub, accent }: { label: string; value: string;
   );
 }
 
-// ── Bid Card ──────────────────────────────────────────────────────────────────
+// â”€â”€ Bid Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function BidCard({ bid, onTransition, onDelete }: {
   bid: Bid;
@@ -144,11 +144,11 @@ function BidCard({ bid, onTransition, onDelete }: {
         isUrgent  ? "bg-amber-50 text-amber-700" :
                     "bg-gray-50 text-gray-600"
       }`}>
-        <span>🗓</span>
+        <span>ðŸ—“</span>
         <span>
           {isOverdue ? `Closed ${Math.abs(days)}d ago` :
            days === 0 ? "Due today!" :
-           `${days}d left — ${fmtDate(bid.submission_deadline)}`}
+           `${days}d left â€” ${fmtDate(bid.submission_deadline)}`}
         </span>
       </div>
 
@@ -178,7 +178,7 @@ function BidCard({ bid, onTransition, onDelete }: {
   );
 }
 
-// ── Transition Modal ──────────────────────────────────────────────────────────
+// â”€â”€ Transition Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function TransitionModal({ bid, onClose, onSuccess }: {
   bid: Bid;
@@ -264,7 +264,7 @@ function TransitionModal({ bid, onClose, onSuccess }: {
             disabled={!newStatus || mutation.isPending}
             className="flex-1 bg-slate-800 hover:bg-slate-900 text-white rounded-lg py-2.5 text-sm font-medium transition-colors disabled:opacity-40"
           >
-            {mutation.isPending ? "Updating..." : "Update →"}
+            {mutation.isPending ? "Updating..." : "Update â†’"}
           </button>
         </div>
       </div>
@@ -272,7 +272,7 @@ function TransitionModal({ bid, onClose, onSuccess }: {
   );
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
+// â”€â”€ Main Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function BidsPage() {
   const qc = useQueryClient();
@@ -287,7 +287,7 @@ export default function BidsPage() {
       api.bids.list({
         search: search || undefined,
         status: statusFilter === "all" ? undefined : statusFilter,
-        page_size: 50,
+        page_size: "50",
       }),
   });
 
@@ -355,7 +355,7 @@ export default function BidsPage() {
         <div className="flex flex-col sm:flex-row gap-3 mb-6">
           {/* Search */}
           <div className="relative flex-1 max-w-xs">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">ðŸ”</span>
             <input
               type="text"
               placeholder="Search bids..."
@@ -392,7 +392,7 @@ export default function BidsPage() {
           </div>
         ) : bids.length === 0 ? (
           <div className="text-center py-20">
-            <div className="text-5xl mb-4">📋</div>
+            <div className="text-5xl mb-4">ðŸ“‹</div>
             <h3 className="text-lg font-semibold text-gray-700">No bids yet</h3>
             <p className="text-gray-400 text-sm mt-2">
               Go to a tender and click <strong>"Track this Bid"</strong> to start tracking.
@@ -434,7 +434,7 @@ export default function BidsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
             <div className="text-center">
-              <div className="text-4xl mb-3">🗑️</div>
+              <div className="text-4xl mb-3">ðŸ—‘ï¸</div>
               <h3 className="font-semibold text-gray-900">Delete this bid?</h3>
               <p className="text-sm text-gray-500 mt-1 line-clamp-2">{deleteTarget.title}</p>
             </div>
@@ -460,3 +460,4 @@ export default function BidsPage() {
     </div>
   );
 }
+
