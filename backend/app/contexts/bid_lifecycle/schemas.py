@@ -344,6 +344,19 @@ class LossAnalysisResponse(BaseModel):
     generated_at: datetime
 
 
+
+class PaymentFollowUpRequest(BaseModel):
+    days_overdue: int = 30
+    include_overdue_only: bool = True
+    send_notifications: bool = False
+
+
+class PaymentFollowUpResponse(BaseModel):
+    payments_processed: int
+    follow_ups_created: int
+    notifications_sent: int
+    processed_payment_ids: list[UUID]
+
 class BidBulkUpdate(BaseModel):
     bid_ids: list[UUID]
     updates: BidUpdate
