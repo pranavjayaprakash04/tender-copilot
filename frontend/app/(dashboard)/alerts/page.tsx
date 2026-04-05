@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { useLang } from "@/app/(dashboard)/layout";
+import { useLang } from "@/src/components/LanguageContext";
 import { cn } from "@/lib/utils";
 
 interface TenderAlert {
