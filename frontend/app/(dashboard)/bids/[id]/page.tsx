@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
+import { useLang } from "@/app/(dashboard)/layout";
 
 interface BidDetail {
   id: string;
@@ -48,6 +49,7 @@ const formatCurrency = (v?: number | null) => {
 
 export default function BidDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
+  const { t } = useLang();
   const qc = useQueryClient();
   const bidId = params?.id;
 
@@ -193,7 +195,7 @@ export default function BidDetailPage({ params }: { params: { id: string } }) {
               <button onClick={() => { if (confirm("Delete this bid?")) deleteMutation.mutate(); }}
                 disabled={deleteMutation.isPending}
                 className="px-4 py-2 rounded-md text-sm font-medium border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50">
-                {deleteMutation.isPending ? "Deleting..." : "Delete"}
+                {deleteMutation.isPending ? t("Deleting...","நீக்குகிறது...") : t("Delete","நீக்கு")}
               </button>
             )}
 
