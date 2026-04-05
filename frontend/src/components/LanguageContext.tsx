@@ -1,47 +1,39 @@
 "use client";
-
 import { createContext, useContext, useState, ReactNode } from "react";
 
-interface LanguageContextType {
-  language: "en" | "ta";
-  setLanguage: (lang: "en" | "ta") => void;
+interface LangCtx {
+  lang: "en" | "ta";
+  toggle: () => void;
   t: (en: string, ta: string) => string;
   isTamil: boolean;
 }
 
-const LanguageContext = createContext<LanguageContextType>({
-  language: "en",
-  setLanguage: () => {},
+const LangContext = createContext<LangCtx>({
+  lang: "en",
+  toggle: () => {},
   t: (en) => en,
   isTamil: false,
 });
 
+export function useLang() { return useContext(LangContext); }
+
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguage] = useState<"en" | "ta">("en");
-
-  const t = (en: string, ta: string) => language === "ta" ? ta : en;
-
+  const [lang, setLang] = useState<"en" | "ta">("en");
+  const toggle = () => setLang(l => l === "en" ? "ta" : "en");
+  const t = (en: string, ta: string) => lang === "ta" ? ta : en;
   return (
-    <LanguageContext.Provider value={{ language, setLanguage, t, isTamil: language === "ta" }}>
+    <LangContext.Provider value={{ lang, toggle, t, isTamil: lang === "ta" }}>
       {children}
-    </LanguageContext.Provider>
+    </LangContext.Provider>
   );
 }
 
-export function useLanguage() {
-  return useContext(LanguageContext);
-}
-
 export function LanguageToggle() {
-  const { language, setLanguage } = useLanguage();
+  const { lang, toggle } = useLang();
   return (
-    <button
-      onClick={() => setLanguage(language === "en" ? "ta" : "en")}
-      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-gray-200 hover:border-gray-400 transition-colors bg-white"
-      title="Toggle language"
-    >
-      <span>{language === "en" ? "🇮🇳" : "🇬🇧"}</span>
-      <span className="text-gray-700">{language === "en" ? "தமிழ்" : "English"}</span>
+    <button onClick={toggle}
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-gray-200 hover:border-indigo-400 hover:text-indigo-600 transition-colors bg-white">
+      {lang === "en" ? <><span>🇮🇳</span><span>தமிழ்</span></> : <><span>🇬🇧</span><span>English</span></>}
     </button>
   );
 }
