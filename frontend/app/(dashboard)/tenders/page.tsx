@@ -123,6 +123,26 @@ export default function TendersPage() {
   });
   const profileData = rawProfile ? ((rawProfile as any).data ?? rawProfile) : null;
 
+  const [translations, setTranslations] = useState<Record<string, string>>({});
+  const [translatingIds, setTranslatingIds] = useState<Record<string, boolean>>({});
+
+  const translateTender = async (tender: Tender) => {
+    if (translations[tender.id] || translatingIds[tender.id]) return;
+    setTranslatingIds(prev => ({ ...prev, [tender.id]: true }));
+    try {
+      const res = await fetch("/api/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: tender.title, target_language: "ta" }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTranslations(prev => ({ ...prev, [tender.id]: data.translated }));
+      }
+    } catch {}
+    setTranslatingIds(prev => ({ ...prev, [tender.id]: false }));
+  };
+
   const { data: tendersData, isLoading, error } = useQuery<TenderListResponse>({
     queryKey: ["tenders", filters],
     queryFn: async () => {
@@ -222,8 +242,11 @@ export default function TendersPage() {
                   className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
                 >
                   <h3 className="text-base font-semibold text-gray-900 mb-1 line-clamp-2">
-                    {tender.title}
+                    {translations[tender.id] || tender.title}
                   </h3>
+                  {translations[tender.id] && (
+                    <p className="text-xs text-gray-400 line-clamp-1 mb-1">{tender.title}</p>
+                  )}
                   <p className="text-gray-500 text-sm mb-1">{tender.procuring_entity}</p>
                   {tender.state && (
                     <p className="text-gray-400 text-xs mb-3">
