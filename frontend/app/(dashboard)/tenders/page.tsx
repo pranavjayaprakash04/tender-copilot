@@ -6,16 +6,16 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-function computeMatchScore(tender: Tender, profile: any): number {
+function computeMatchScore(tender: Tender, profile: any): number | null {
+  if (!profile) return null;
   const cat = ((tender.category || "") + " " + (tender.title || "")).toLowerCase();
   const loc = (tender.state || "").toLowerCase();
   const industry = (profile?.industry || "").toLowerCase();
   const location = (profile?.location || "").toLowerCase();
   const caps = (profile?.capabilities_text || "").toLowerCase();
 
-  let score = 30; // base score — everyone has some chance
+  let score = 30;
 
-  // Industry match
   const itKw = ["it", "software", "tech", "digital", "computer", "ai", "cloud", "data", "web"];
   const isIT = itKw.some((k: string) => industry.includes(k) || caps.includes(k));
   const catIsIT = itKw.some((k: string) => cat.includes(k));
@@ -26,23 +26,21 @@ function computeMatchScore(tender: Tender, profile: any): number {
   else if (isIT) score -= 10;
   else score += 20;
 
-  // Location match — generous
   if (location) {
     const locParts = location.toLowerCase().split(/[\s,/]+/).filter((w: string) => w.length > 2);
     if (locParts.some((w: string) => loc.includes(w))) score += 20;
     else score += 5;
   } else {
-    score += 10; // no location set — neutral
+    score += 10;
   }
 
-  // Capabilities match
   if (caps) {
     const capKw = caps.split(/[\s,]+/).filter((w: string) => w.length > 3);
     const hits = capKw.filter((w: string) => cat.includes(w)).length;
     score += Math.min(hits * 5, 15);
   }
 
-  return Math.max(15, Math.min(score, 97)); // always between 15-97
+  return Math.max(15, Math.min(score, 97));
 }
 
 interface Tender {
@@ -89,8 +87,7 @@ function daysLeft(dateStr: string | null | undefined): number | null {
   if (!dateStr) return null;
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return null;
-  const days = Math.ceil((d.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-  return days;
+  return Math.ceil((d.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 }
 
 function deadlineColor(days: number | null): string {
@@ -102,12 +99,10 @@ function deadlineColor(days: number | null): string {
 }
 
 function formatValue(estimated_value?: number, emd_amount?: number): string {
-  if (estimated_value && estimated_value > 0) {
+  if (estimated_value && estimated_value > 0)
     return `₹${estimated_value.toLocaleString("en-IN")}`;
-  }
-  if (emd_amount && emd_amount > 0) {
+  if (emd_amount && emd_amount > 0)
     return `EMD: ₹${emd_amount.toLocaleString("en-IN")}`;
-  }
   return "Value not disclosed";
 }
 
@@ -124,7 +119,6 @@ export default function TendersPage() {
     queryFn: () => api.company.getProfile().catch(() => null),
     staleTime: 300_000,
   });
-  // Backend may wrap in {data: ...} or return the object directly
   const profileData = rawProfile ? ((rawProfile as any).data ?? rawProfile) : null;
 
   const { data: tendersData, isLoading, error } = useQuery<TenderListResponse>({
@@ -161,7 +155,6 @@ export default function TendersPage() {
                 onChange={(e) => setFilters({ ...filters, search: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              {/* Category matches DB values: Works, Goods, Services */}
               <select
                 value={filters.category}
                 onChange={(e) => setFilters({ ...filters, category: e.target.value })}
@@ -172,7 +165,6 @@ export default function TendersPage() {
                 <option value="Goods">Goods</option>
                 <option value="Services">Services</option>
               </select>
-              {/* State filter searches location/city text in DB */}
               <select
                 value={filters.state}
                 onChange={(e) => setFilters({ ...filters, state: e.target.value })}
@@ -198,9 +190,7 @@ export default function TendersPage() {
                 <option value="30">Next 30 Days</option>
               </select>
             </div>
-            <Button
-              onClick={() => setFilters({ search: "", category: "", state: "", deadline: "" })}
-            >
+            <Button onClick={() => setFilters({ search: "", category: "", state: "", deadline: "" })}>
               Clear Filters
             </Button>
           </div>
@@ -222,6 +212,7 @@ export default function TendersPage() {
             tendersData.tenders.map((tender: Tender) => {
               const days = daysLeft(tender.bid_submission_deadline);
               const isExpired = days !== null && days < 0;
+              const score = computeMatchScore(tender, profileData);
 
               return (
                 <div
@@ -234,8 +225,7 @@ export default function TendersPage() {
                   <p className="text-gray-500 text-sm mb-1">{tender.procuring_entity}</p>
                   {tender.state && (
                     <p className="text-gray-400 text-xs mb-3">
-                      {tender.district ? `${tender.district}, ` : ""}
-                      {tender.state}
+                      {tender.district ? `${tender.district}, ` : ""}{tender.state}
                     </p>
                   )}
 
@@ -244,21 +234,17 @@ export default function TendersPage() {
                   </p>
 
                   <div className="flex justify-between items-center mb-3">
-                    {tender.match_score && tender.match_score > 0 ? (
-                      <span
-                        className={cn(
-                          "px-2 py-1 rounded-full text-xs font-medium",
-                          tender.match_score >= 80
-                            ? "bg-green-100 text-green-800"
-                            : tender.match_score >= 60
-                            ? "bg-yellow-100 text-yellow-800"
-                            : "bg-orange-100 text-orange-800"
-                        )}
-                      >
-                        Match: {tender.match_score}%
+                    {score !== null ? (
+                      <span className={cn(
+                        "px-2 py-1 rounded-full text-xs font-medium",
+                        score >= 70 ? "bg-green-100 text-green-800" :
+                        score >= 45 ? "bg-yellow-100 text-yellow-800" :
+                        "bg-orange-100 text-orange-800"
+                      )}>
+                        Match: {score}%
                       </span>
                     ) : (
-                      <span className="text-xs text-gray-400">—</span>
+                      <span className="text-xs text-gray-400">Complete profile for score</span>
                     )}
 
                     <div className={cn("text-right text-sm font-medium", deadlineColor(days))}>
@@ -278,10 +264,7 @@ export default function TendersPage() {
                   </div>
 
                   <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => (window.location.href = `/tenders/${tender.id}`)}
-                    >
+                    <Button size="sm" onClick={() => (window.location.href = `/tenders/${tender.id}`)}>
                       View Details
                     </Button>
                     <Button size="sm" variant="outline">
