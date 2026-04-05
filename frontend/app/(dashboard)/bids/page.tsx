@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { useLang } from "@/app/(dashboard)/layout";
 import { cn } from "@/lib/utils";
 
 interface Bid {
@@ -26,6 +27,7 @@ const statusColors: Record<string, string> = {
 };
 
 export default function BidsPage() {
+  const { t } = useLang();
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
   const { data: bidsData, isLoading, error } = useQuery({
@@ -57,7 +59,7 @@ export default function BidsPage() {
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 py-8">
           <div className="flex items-center justify-center py-12">
-            <span className="text-gray-600">Loading bids...</span>
+            <span className="text-gray-600">{t("Loading bids...","ஒப்பந்தங்கள் ஏற்றுகிறது...")}</span>
           </div>
         </div>
       </div>
@@ -107,7 +109,7 @@ export default function BidsPage() {
                 ))}
               </div>
               <div className="text-sm text-gray-600">
-                Total: {bids.length} bids
+                {t("Total","மொத்தம்")}: {bids.length} {t("bids","ஒப்பந்தங்கள்")}
               </div>
             </div>
           </div>
@@ -117,8 +119,8 @@ export default function BidsPage() {
               <div className="p-12 text-center">
                 <p className="text-gray-600 mb-4">
                   {statusFilter === "all"
-                    ? "No bids yet. Find a tender and start bidding!"
-                    : `No ${statusFilter} bids found.`}
+                    ? t("No bids yet. Find a tender and start bidding!","இன்னும் ஒப்பந்தங்கள் இல்லை. ஒரு டெண்டர் கண்டுபிடித்து தொடங்குங்கள்!")
+                    : `${t("No","இல்லை")} ${statusFilter} ${t("bids found","ஒப்பந்தங்கள் இல்லை")}.`}
                 </p>
                 <Button onClick={() => (window.location.href = "/tenders")}>
                   Browse Tenders
