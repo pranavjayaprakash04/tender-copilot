@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { useLang } from "@/app/(dashboard)/layout";
 import { cn } from "@/lib/utils";
 
 function computeMatchScore(tender: Tender, profile: any): number | null {
@@ -107,6 +108,7 @@ function formatValue(estimated_value?: number, emd_amount?: number): string {
 }
 
 export default function TendersPage() {
+  const { t, lang } = useLang();
   const [filters, setFilters] = useState<TenderListParams>({
     category: "",
     state: "",
@@ -144,13 +146,13 @@ export default function TendersPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-6">Tenders</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-6">{t("Tenders", "டெண்டர்கள்")}</h1>
 
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
               <input
                 type="text"
-                placeholder="Search tenders..."
+                placeholder={t("Search tenders...", "டெண்டர்களை தேடுங்கள்...")}
                 value={filters.search}
                 onChange={(e) => setFilters({ ...filters, search: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -160,7 +162,7 @@ export default function TendersPage() {
                 onChange={(e) => setFilters({ ...filters, category: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">All Categories</option>
+                <option value="">{t("All Categories", "அனைத்து வகைகள்")}</option>
                 <option value="Works">Works</option>
                 <option value="Goods">Goods</option>
                 <option value="Services">Services</option>
@@ -170,7 +172,7 @@ export default function TendersPage() {
                 onChange={(e) => setFilters({ ...filters, state: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">All States</option>
+                <option value="">{t("All States", "அனைத்து மாநிலங்கள்")}</option>
                 <option value="Chennai">Chennai</option>
                 <option value="Madurai">Madurai</option>
                 <option value="Coimbatore">Coimbatore</option>
@@ -184,7 +186,7 @@ export default function TendersPage() {
                 onChange={(e) => setFilters({ ...filters, deadline: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">All Deadlines</option>
+                <option value="">{t("All Deadlines", "அனைத்து காலக்கெடுகள்")}</option>
                 <option value="3">Next 3 Days</option>
                 <option value="7">Next 7 Days</option>
                 <option value="30">Next 30 Days</option>
@@ -202,11 +204,11 @@ export default function TendersPage() {
           ) : error ? (
             <div className="col-span-full text-center py-12">
               <p className="text-red-600 mb-4">Error loading tenders</p>
-              <Button onClick={() => window.location.reload()}>Retry</Button>
+              <Button onClick={() => window.location.reload()}>{t("Retry", "மீண்டும் முயற்சி")}</Button>
             </div>
           ) : !tendersData?.tenders || tendersData.tenders.length === 0 ? (
             <div className="col-span-full text-center py-12">
-              <p className="text-gray-600">No tenders found</p>
+              <p className="text-gray-600">{t("No tenders found", "டெண்டர்கள் இல்லை")}</p>
             </div>
           ) : (
             tendersData.tenders.map((tender: Tender) => {
