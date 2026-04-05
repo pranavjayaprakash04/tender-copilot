@@ -7,49 +7,42 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 function computeMatchScore(tender: Tender, profile: any): number {
-  // Always show some score based on category even without profile
-  let hasProfile = !!(profile?.industry || profile?.location || profile?.capabilities_text || profile?.name);
-
-  let score = 0;
-  const cat = (tender.category || "").toLowerCase();
+  const cat = ((tender.category || "") + " " + (tender.title || "")).toLowerCase();
   const loc = (tender.state || "").toLowerCase();
-  const title = (tender.title || "").toLowerCase();
-  const industry = (profile.industry || "").toLowerCase();
-  const location = (profile.location || "").toLowerCase();
-  const caps = (profile.capabilities_text || "").toLowerCase();
+  const industry = (profile?.industry || "").toLowerCase();
+  const location = (profile?.location || "").toLowerCase();
+  const caps = (profile?.capabilities_text || "").toLowerCase();
 
-  // Industry / category match
-  const itKeywords = ["it", "software", "technology", "tech", "digital", "computer", "ai", "cloud", "data"];
-  const worksKeywords = ["construction", "works", "civil", "road", "building", "infrastructure"];
-  const goodsKeywords = ["goods", "supply", "procurement", "purchase", "equipment", "material"];
-  const servicesKeywords = ["services", "consulting", "maintenance", "support", "management"];
+  let score = 30; // base score — everyone has some chance
 
-  const isIT = itKeywords.some(k => industry.includes(k) || caps.includes(k));
-  const catIsIT = itKeywords.some(k => cat.includes(k) || title.includes(k));
-  const catIsWorks = worksKeywords.some(k => cat.includes(k));
-  const catIsGoods = goodsKeywords.some(k => cat.includes(k));
-  const catIsServices = servicesKeywords.some(k => cat.includes(k) || title.includes(k));
+  // Industry match
+  const itKw = ["it", "software", "tech", "digital", "computer", "ai", "cloud", "data", "web"];
+  const isIT = itKw.some((k: string) => industry.includes(k) || caps.includes(k));
+  const catIsIT = itKw.some((k: string) => cat.includes(k));
+  const catIsServices = ["service", "consult", "support", "manag"].some((k: string) => cat.includes(k));
 
-  if (isIT && catIsIT) score += 50;
-  else if (isIT && catIsServices) score += 30;
-  else if (isIT && (catIsWorks || catIsGoods)) score += 10;
-  else if (!isIT && (catIsWorks || catIsGoods)) score += 35;
+  if (isIT && catIsIT) score += 40;
+  else if (isIT && catIsServices) score += 25;
+  else if (isIT) score -= 10;
   else score += 20;
 
-  // Location match
-  const locWords = location.split(/[,/\s]+/).filter((w: string) => w.length > 3);
-  const locMatch = locWords.some((w: string) => loc.includes(w) || title.includes(w));
-  if (locMatch) score += 25;
-  else score += 10;
-
-  // Capabilities keyword match
-  if (caps) {
-    const capWords = caps.split(/[,\s]+/).filter((w: string) => w.length > 3);
-    const capMatch = capWords.filter((w: string) => title.includes(w) || cat.includes(w)).length;
-    score += Math.min(capMatch * 5, 25);
+  // Location match — generous
+  if (location) {
+    const locParts = location.toLowerCase().split(/[\s,/]+/).filter((w: string) => w.length > 2);
+    if (locParts.some((w: string) => loc.includes(w))) score += 20;
+    else score += 5;
+  } else {
+    score += 10; // no location set — neutral
   }
 
-  return Math.min(score, 99);
+  // Capabilities match
+  if (caps) {
+    const capKw = caps.split(/[\s,]+/).filter((w: string) => w.length > 3);
+    const hits = capKw.filter((w: string) => cat.includes(w)).length;
+    score += Math.min(hits * 5, 15);
+  }
+
+  return Math.max(15, Math.min(score, 97)); // always between 15-97
 }
 
 interface Tender {
