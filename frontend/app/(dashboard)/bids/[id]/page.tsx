@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
-import { useLang } from "@/app/(dashboard)/layout";
+import { useLang } from "@/src/components/LanguageContext";
 
 interface BidDetail {
   id: string;
