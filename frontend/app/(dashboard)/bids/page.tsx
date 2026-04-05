@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
-import { useLang } from "@/app/(dashboard)/layout";
+import { useLang } from "@/src/components/LanguageContext";
 import { cn } from "@/lib/utils";
 
 interface Bid {
