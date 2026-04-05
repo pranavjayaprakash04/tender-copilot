@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { useLang } from "@/app/(dashboard)/layout";
 import { cn } from "@/lib/utils";
 
 interface TenderAlert {
@@ -45,6 +46,7 @@ const typeIcon: Record<string, string> = {
 
 export default function AlertsPage() {
   const qc = useQueryClient();
+  const { t } = useLang();
   const [filter, setFilter] = useState<"all" | "unread" | "high">("all");
 
   // Pull closing-soon tenders to generate deadline alerts
@@ -137,7 +139,7 @@ export default function AlertsPage() {
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Alerts</h1>
             <p className="text-gray-500 text-sm mt-1">
-              {unreadCount > 0 ? `${unreadCount} unread alert${unreadCount > 1 ? "s" : ""}` : "All caught up"}
+              {unreadCount > 0 ? `${unreadCount} ${t("unread alerts", "படிக்காத விழிப்பூட்டல்கள்")}` : t("All caught up", "அனைத்தும் படிக்கப்பட்டது")}
             </p>
           </div>
           {highCount > 0 && (
@@ -157,7 +159,7 @@ export default function AlertsPage() {
                   ? "bg-gray-900 text-white border-gray-900"
                   : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
               )}>
-              {f === "all" ? `All (${alerts.length})` : f === "unread" ? `Unread (${unreadCount})` : `Urgent (${highCount})`}
+              {f === "all" ? `${t("All","அனைத்தும்")} (${alerts.length})` : f === "unread" ? `${t("Unread","படிக்காதவை")} (${unreadCount})` : `${t("Urgent","அவசரம்")} (${highCount})`}
             </button>
           ))}
         </div>
@@ -167,7 +169,7 @@ export default function AlertsPage() {
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
             <div className="text-4xl mb-3">🎉</div>
             <p className="text-gray-600 font-medium">
-              {filter === "all" ? "No alerts right now — you're all caught up!" : `No ${filter} alerts.`}
+              {filter === "all" ? t("No alerts right now — you're all caught up!", "இப்போது விழிப்பூட்டல்கள் இல்லை!") : `${t("No","இல்லை")} ${filter} ${t("alerts","விழிப்பூட்டல்கள்")}.`}
             </p>
             <p className="text-gray-400 text-sm mt-1">Alerts appear when tenders are closing soon or bid status changes.</p>
           </div>
