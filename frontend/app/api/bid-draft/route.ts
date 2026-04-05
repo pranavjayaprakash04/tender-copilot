@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     const isTamil = language === "ta";
 
     const systemPrompt = isTamil
-      ? `நீங்கள் இந்திய அரசாங்க ஒப்பந்தங்களில் நிபுணத்துவம் பெற்ற ஒரு தொழில்முறை ஒப்பந்த ஆலோசகர். MSME நிறுவனங்களுக்கு தொழில்முறை ஒப்பந்த முன்மொழிவுகளை தமிழில் எழுதுவதில் நீங்கள் திறமையானவர். JSON மட்டுமே வழங்கவும், வேறு எதுவும் வேண்டாம்.`
+      ? `You are a Tamil bid proposal expert. You MUST respond with ONLY a valid JSON object. No markdown code blocks. No text before or after the JSON. The JSON values must be complete Tamil sentences. Never truncate.`
       : `You are an expert bid proposal writer specializing in Indian government tenders for MSMEs. You write professional, compelling, and compliant bid proposals. Return ONLY valid JSON, no markdown, no extra text.`;
 
     const valueStr = estimated_value
@@ -39,36 +39,20 @@ export async function POST(req: NextRequest) {
       : "Not specified";
 
     const userPrompt = isTamil
-      ? `பின்வரும் ஒப்பந்தத்திற்கு தமிழில் ஒரு தொழில்முறை ஒப்பந்த முன்மொழிவை உருவாக்கவும்:
+      ? `You must respond with ONLY a valid JSON object. No text before or after. No markdown. No explanation.
 
-ஒப்பந்த தகவல்கள்:
-- தலைப்பு: ${tender_title}
-- வகை: ${tender_category || "குறிப்பிடப்படவில்லை"}
-- விளக்கம்: ${tender_description || "விளக்கம் இல்லை"}
-- மதிப்பீடு: ${valueStr}
-- EMD தொகை: ${emdStr}
-- இடம்: ${tender_location || "குறிப்பிடப்படவில்லை"}
-- நிறுவனம்: ${procuring_entity || "குறிப்பிடப்படவில்லை"}
+Generate a Tamil bid proposal for this tender:
+- Title: ${tender_title}
+- Category: ${tender_category || "General"}
+- Value: ${valueStr}
+- EMD: ${emdStr}
+- Location: ${tender_location || "Tamil Nadu"}
+- Procuring Entity: ${procuring_entity || "Government"}
 
-நிறுவன தகவல்கள்:
-- பெயர்: ${company_name || "நிறுவனம்"}
-- தொழில்: ${company_industry || "IT/மென்பொருள்"}
-- இடம்: ${company_location || "தமிழ்நாடு"}
-- திறன்கள்: ${capabilities || "மென்பொருள் மேம்பாடு, AI, Cloud"}
+Company: ${company_name || "Our Company"} | Industry: ${company_industry || "IT"} | Location: ${company_location || "Coimbatore"} | Capabilities: ${capabilities || "Software, AI, Cloud"}
 
-பின்வரும் JSON வடிவத்தில் மட்டும் பதிலளிக்கவும்:
-{
-  "executive_summary": "சுருக்கம் (2-3 வாக்கியங்கள்)",
-  "company_overview": "நிறுவன அறிமுகம்",
-  "technical_approach": "தொழில்நுட்ப அணுகுமுறை",
-  "implementation_plan": "செயல்படுத்தல் திட்டம்",
-  "team_structure": "குழு அமைப்பு",
-  "quality_assurance": "தர உத்தரவாதம்",
-  "financial_proposal": "நிதி முன்மொழிவு",
-  "compliance_statement": "இணக்கத்தன்மை அறிக்கை",
-  "conclusion": "முடிவுரை",
-  "language": "ta"
-}`
+Respond ONLY with this exact JSON (all values must be complete Tamil sentences, no truncation):
+{"executive_summary":"[2-3 Tamil sentences about this bid]","company_overview":"[Tamil company introduction]","technical_approach":"[Tamil technical methodology]","implementation_plan":"[Tamil implementation steps]","team_structure":"[Tamil team description]","quality_assurance":"[Tamil QA approach]","financial_proposal":"[Tamil pricing strategy]","compliance_statement":"[Tamil compliance declaration]","conclusion":"[Tamil closing statement]","language":"ta"}`
       : `Generate a professional ${bid_type} bid proposal for the following tender:
 
 TENDER DETAILS:
