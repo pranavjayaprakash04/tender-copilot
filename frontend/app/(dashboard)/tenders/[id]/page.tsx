@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
+import BidDraftModal from "@/src/components/BidDraftModal";
 
 interface TenderDetail {
   id: string;
@@ -671,7 +672,7 @@ function PriceIntelligenceModal({ tender, companyId, onClose }: { tender: Tender
 export default function TenderDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const tenderId = params?.id;  // ← FIXED: null guard prevents first-load crash
-  const [modal, setModal] = useState<"winprob" | "competitors" | "market" | "eligibility" | "trackbid" | "checklist" | "priceintel" | null>(null);
+  const [modal, setModal] = useState<"winprob" | "competitors" | "market" | "eligibility" | "trackbid" | "checklist" | "priceintel" | "bidraft" | null>(null);
 
   const { data: rawData, isLoading, error, refetch } = useQuery({
     queryKey: ["tender", tenderId],
@@ -798,6 +799,7 @@ export default function TenderDetailPage({ params }: { params: { id: string } })
             <button onClick={() => setModal("priceintel")} className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-500 text-gray-900 rounded-md text-sm font-medium hover:bg-yellow-400">💰 Price Intel</button>
             <button onClick={() => setModal("checklist")} className="inline-flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-md text-sm font-medium hover:bg-violet-700">📋 Doc Checklist</button>
             <button onClick={() => setModal("trackbid")} className="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-md text-sm font-medium hover:bg-gray-800">📌 Track this Bid</button>
+            <button onClick={() => setModal("bidraft")} className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-md text-sm font-medium hover:from-violet-700 hover:to-purple-700">✍️ Draft Bid (AI)</button>
             <Button variant="outline" onClick={() => router.back()}>Back to Tenders</Button>
           </div>
         </div>
@@ -814,6 +816,13 @@ export default function TenderDetailPage({ params }: { params: { id: string } })
         <Modal title="Profile Required" onClose={() => setModal(null)}>
           <p style={{ color: "#94A3B8", fontSize: 14 }}>Please complete your <a href="/profile" style={{ color: "#3B82F6" }}>company profile</a> before using this feature.</p>
         </Modal>
+      )}
+      {modal === "bidraft" && (
+        <BidDraftModal
+          tender={tender}
+          profile={profileData}
+          onClose={() => setModal(null)}
+        />
       )}
     </div>
   );
