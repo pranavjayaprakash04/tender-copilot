@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import BidDraftModal from "@/src/components/BidDraftModal";
-import { useLang } from "@/app/(dashboard)/layout";
+import { useLang } from "@/src/components/LanguageContext";
 
 interface TenderDetail {
   id: string;
