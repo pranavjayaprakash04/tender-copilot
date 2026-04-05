@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { useLang } from "@/app/(dashboard)/layout";
 
 interface CompanyProfile {
   name?: string;
@@ -51,6 +52,7 @@ function Field({
 }
 
 export default function ProfilePage() {
+  const { t } = useLang();
   const queryClient = useQueryClient();
   const [saved, setSaved] = useState(false);
   const [formData, setFormData] = useState<CompanyProfile>({});
@@ -138,7 +140,7 @@ export default function ProfilePage() {
               <>
                 <Button variant="outline" onClick={() => { setIsEditing(false); setValidationError(""); }}>Cancel</Button>
                 <Button onClick={handleSave} disabled={mutation.isPending}>
-                  {mutation.isPending ? "Saving..." : "Save Changes"}
+                  {mutation.isPending ? t("Saving...","சேமிக்கிறது...") : t("Save Changes","மாற்றங்களை சேமி")}
                 </Button>
               </>
             ) : (
@@ -163,29 +165,29 @@ export default function ProfilePage() {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Contact <span className="text-xs text-gray-400 font-normal">(required to save)</span></h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {f("contact_email", "Contact Email", "contact@yourcompany.com", "email", true)}
-            {f("contact_phone", "Contact Phone", "+91 98765 43210")}
+            {f("contact_email", t("Contact Email","தொடர்பு மின்னஞ்சல்"), "contact@yourcompany.com", "email", true)}
+            {f("contact_phone", t("Contact Phone","தொடர்பு தொலைபேசி"), "+91 98765 43210")}
           </div>
         </div>
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Company Information</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {f("name", "Company Name", "Pynevera Technologies Pvt Ltd", "text", true)}
-            {f("industry", "Industry", "IT / Software", "text", true)}
-            {f("location", "Location / State", "Coimbatore, Tamil Nadu", "text", true)}
-            {f("turnover_range", "Turnover Range", "Below ₹40L")}
-            {f("website", "Website", "https://yourcompany.com", "url")}
-            {f("description", "Description", "Brief company description")}
+            {f("name", t("Company Name","நிறுவன பெயர்"), "Pynevera Technologies Pvt Ltd", "text", true)}
+            {f("industry", t("Industry","தொழில்"), "IT / Software", "text", true)}
+            {f("location", t("Location / State","இடம் / மாநிலம்"), "Coimbatore, Tamil Nadu", "text", true)}
+            {f("turnover_range", t("Turnover Range","வருவாய் வரம்பு"), "Below ₹40L")}
+            {f("website", t("Website","இணையதளம்"), "https://yourcompany.com", "url")}
+            {f("description", t("Description","விளக்கம்"), "Brief company description")}
           </div>
         </div>
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Registration</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {f("gstin", "GSTIN", "22AAAAA0000A1Z5")}
-            {f("udyam_number", "Udyam Number", "UDYAM-TN-00-0000000")}
-            {f("capabilities_text", "Capabilities", "e.g. Software development, AI, Cloud")}
+            {f("gstin", t("GSTIN","GSTIN"), "22AAAAA0000A1Z5")}
+            {f("udyam_number", t("Udyam Number","உத்யம் எண்"), "UDYAM-TN-00-0000000")}
+            {f("capabilities_text", t("Capabilities","திறன்கள்"), "e.g. Software development, AI, Cloud")}
           </div>
         </div>
 
