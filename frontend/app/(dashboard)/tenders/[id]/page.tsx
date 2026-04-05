@@ -418,12 +418,23 @@ function MarketPriceModal({ tender, onClose }: { tender: TenderDetail; onClose: 
           </div>
           <div style={{ background: "#1A1F2E", border: "1px solid #1E2537", borderRadius: 8, padding: 14 }}>
             <div style={{ fontSize: 11, color: "#64748B", marginBottom: 10 }}>Price Range Distribution</div>
-            <div style={{ height: 6, background: "#1E2537", borderRadius: 3, marginBottom: 6 }}>
-              <div style={{ height: 6, borderRadius: 3, background: "linear-gradient(90deg,#3B82F6,#10B981)", width: `${((data.avg_price - data.min_price) / (data.max_price - data.min_price)) * 100}%` }} />
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#475569", fontFamily: "monospace" }}>
-              <span>{fmt(data.min_price)}</span><span>Avg: {fmt(data.avg_price)}</span><span>{fmt(data.max_price)}</span>
-            </div>
+            {(() => {
+              // Use 10th percentile proxy if min looks anomalous (< 1% of avg)
+              const effectiveMin = data.min_price < data.avg_price * 0.01 ? data.avg_price * 0.5 : data.min_price;
+              const pct = Math.min(100, Math.max(5, ((data.avg_price - effectiveMin) / (data.max_price - effectiveMin)) * 100));
+              return (
+                <>
+                  <div style={{ height: 6, background: "#1E2537", borderRadius: 3, marginBottom: 6 }}>
+                    <div style={{ height: 6, borderRadius: 3, background: "linear-gradient(90deg,#3B82F6,#10B981)", width: `${pct}%` }} />
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#475569", fontFamily: "monospace" }}>
+                    <span>{data.min_price < data.avg_price * 0.01 ? "~" + fmt(effectiveMin) : fmt(data.min_price)}</span>
+                    <span>Avg: {fmt(data.avg_price)}</span>
+                    <span>{fmt(data.max_price)}</span>
+                  </div>
+                </>
+              );
+            })()}
             <div style={{ fontSize: 11, color: "#475569", marginTop: 8 }}>Based on {data.sample_count} tenders · Last updated {new Date(data.last_refreshed).toLocaleDateString("en-IN")}</div>
           </div>
         </>
