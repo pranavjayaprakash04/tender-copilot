@@ -288,13 +288,31 @@ export default function TendersPage() {
                     </div>
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <Button size="sm" onClick={() => (window.location.href = `/tenders/${tender.id}`)}>
-                      View Details
+                      {t("View Details", "விவரங்கள் பார்க்க")}
                     </Button>
                     <Button size="sm" variant="outline">
-                      Set Alert
+                      {t("Set Alert", "விழிப்பூட்டல் அமை")}
                     </Button>
+                    {!translations[tender.id] ? (
+                      <button
+                        onClick={() => translateTender(tender)}
+                        disabled={translatingIds[tender.id]}
+                        className="px-2 py-1 text-xs border border-orange-200 text-orange-600 rounded-md hover:bg-orange-50 disabled:opacity-50 transition-colors flex items-center gap-1"
+                        title="Translate to Tamil"
+                      >
+                        {translatingIds[tender.id] ? "⏳" : "🇮🇳 தமிழ்"}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setTranslations(prev => { const n = {...prev}; delete n[tender.id]; return n; })}
+                        className="px-2 py-1 text-xs border border-gray-200 text-gray-500 rounded-md hover:bg-gray-50 transition-colors"
+                        title="Show original"
+                      >
+                        🇬🇧 EN
+                      </button>
+                    )}
                   </div>
                 </div>
               );
