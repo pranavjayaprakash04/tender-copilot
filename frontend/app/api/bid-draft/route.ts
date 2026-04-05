@@ -39,20 +39,24 @@ export async function POST(req: NextRequest) {
       : "Not specified";
 
     const userPrompt = isTamil
-      ? `You must respond with ONLY a valid JSON object. No text before or after. No markdown. No explanation.
+      ? `Respond with ONLY a JSON object. No markdown. No explanation. Keep each value to 1-2 short sentences maximum.
 
-Generate a Tamil bid proposal for this tender:
-- Title: ${tender_title}
-- Category: ${tender_category || "General"}
-- Value: ${valueStr}
-- EMD: ${emdStr}
-- Location: ${tender_location || "Tamil Nadu"}
-- Procuring Entity: ${procuring_entity || "Government"}
+Tender: ${tender_title}
+Company: ${company_name || "Our Company"}, ${company_industry || "IT"}, ${company_location || "Coimbatore"}
 
-Company: ${company_name || "Our Company"} | Industry: ${company_industry || "IT"} | Location: ${company_location || "Coimbatore"} | Capabilities: ${capabilities || "Software, AI, Cloud"}
-
-Respond ONLY with this exact JSON (all values must be complete Tamil sentences, no truncation):
-{"executive_summary":"[2-3 Tamil sentences about this bid]","company_overview":"[Tamil company introduction]","technical_approach":"[Tamil technical methodology]","implementation_plan":"[Tamil implementation steps]","team_structure":"[Tamil team description]","quality_assurance":"[Tamil QA approach]","financial_proposal":"[Tamil pricing strategy]","compliance_statement":"[Tamil compliance declaration]","conclusion":"[Tamil closing statement]","language":"ta"}`
+JSON format (short Tamil sentences only):
+{
+"executive_summary": "1-2 sentences in Tamil",
+"company_overview": "1-2 sentences in Tamil",
+"technical_approach": "1-2 sentences in Tamil",
+"implementation_plan": "1-2 sentences in Tamil",
+"team_structure": "1-2 sentences in Tamil",
+"quality_assurance": "1-2 sentences in Tamil",
+"financial_proposal": "1-2 sentences in Tamil",
+"compliance_statement": "1-2 sentences in Tamil",
+"conclusion": "1-2 sentences in Tamil",
+"language": "ta"
+}`
       : `Generate a professional ${bid_type} bid proposal for the following tender:
 
 TENDER DETAILS:
@@ -97,7 +101,7 @@ Return ONLY this JSON structure:
           { role: "user", content: userPrompt },
         ],
         temperature: 0.7,
-        max_tokens: 2000,
+        max_tokens: 4000,
       }),
     });
 
