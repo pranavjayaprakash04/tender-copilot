@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import BidDraftModal from "@/src/components/BidDraftModal";
+import { useLang } from "@/app/(dashboard)/layout";
 
 interface TenderDetail {
   id: string;
@@ -274,7 +275,7 @@ function WinProbabilityModal({ tender, companyId, onClose }: { tender: TenderDet
   });
   const data = mutation.data;
   return (
-    <Modal title="🎯 Win Probability" onClose={onClose}>
+    <Modal title=t("🎯 Win Probability","🎯 வெற்றி நிகழ்தகவு") onClose={onClose}>
       <style>{`.i-input{width:100%;padding:9px 12px;background:#1A1F2E;border:1px solid #1E2537;border-radius:8px;color:#E2E8F0;font-size:13px;outline:none;margin-bottom:12px}.i-input:focus{border-color:#3B82F6}.i-btn{padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;background:#3B82F6;color:#fff}.i-btn:disabled{opacity:.4;cursor:not-allowed}.i-spinner{width:13px;height:13px;border:2px solid #1E2537;border-top-color:#3B82F6;border-radius:50%;animation:ispin .7s linear infinite;display:inline-block;vertical-align:middle;margin-right:6px}.i-range{background:#1A1F2E;border-radius:8px;padding:14px;margin-top:14px}.i-factors{background:#1A1F2E;border-radius:8px;padding:14px;margin-top:12px}@keyframes ispin{to{transform:rotate(360deg)}}`}</style>
       <input className="i-input" type="number" placeholder="Your bid amount in ₹ (optional)" value={bidAmount} onChange={e => setBidAmount(e.target.value)} />
       <button className="i-btn" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
@@ -671,7 +672,8 @@ function PriceIntelligenceModal({ tender, companyId, onClose }: { tender: Tender
 
 export default function TenderDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
-  const tenderId = params?.id;  // ← FIXED: null guard prevents first-load crash
+  const tenderId = params?.id;
+  const { t } = useLang();  // ← FIXED: null guard prevents first-load crash
   const [modal, setModal] = useState<"winprob" | "competitors" | "market" | "eligibility" | "trackbid" | "checklist" | "priceintel" | "bidraft" | null>(null);
 
   const { data: rawData, isLoading, error, refetch } = useQuery({
