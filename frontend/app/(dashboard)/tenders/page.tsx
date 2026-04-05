@@ -7,7 +7,8 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 function computeMatchScore(tender: Tender, profile: any): number {
-  if (!profile?.industry && !profile?.location && !profile?.capabilities_text) return 0;
+  // Always show some score based on category even without profile
+  let hasProfile = !!(profile?.industry || profile?.location || profile?.capabilities_text || profile?.name);
 
   let score = 0;
   const cat = (tender.category || "").toLowerCase();
@@ -125,11 +126,13 @@ export default function TendersPage() {
     search: "",
   });
 
-  const { data: profileData } = useQuery({
+  const { data: rawProfile } = useQuery({
     queryKey: ["company-profile"],
     queryFn: () => api.company.getProfile().catch(() => null),
     staleTime: 300_000,
   });
+  // Backend may wrap in {data: ...} or return the object directly
+  const profileData = rawProfile ? ((rawProfile as any).data ?? rawProfile) : null;
 
   const { data: tendersData, isLoading, error } = useQuery<TenderListResponse>({
     queryKey: ["tenders", filters],
