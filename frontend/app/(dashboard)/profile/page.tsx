@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
-import { useLang } from "@/app/(dashboard)/layout";
+import { useLang } from "@/src/components/LanguageContext";
 
 interface CompanyProfile {
   name?: string;
