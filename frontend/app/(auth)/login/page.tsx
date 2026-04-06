@@ -1,10 +1,11 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 
-// Inline SVG logo — no external file dependency
+const STABLE_URL = "https://tender-copilot-sable.vercel.app";
+
 function TenderCopilotLogo({ size = 48 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -25,12 +26,30 @@ function TenderCopilotLogo({ size = 48 }: { size?: number }) {
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get("redirectTo") || "/tenders";
+
+  // Safe redirectTo — never send to /register or /login after auth
+  const rawRedirect = searchParams.get("redirectTo") || "/tenders";
+  const blocked = ["/register", "/login", "/auth"];
+  const redirectTo = blocked.some(b => rawRedirect.startsWith(b)) ? "/tenders" : rawRedirect;
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [wrongUrl, setWrongUrl] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const isWrong =
+        window.location.hostname !== new URL(STABLE_URL).hostname &&
+        window.location.hostname !== "localhost";
+      setWrongUrl(isWrong);
+    }
+    if (searchParams.get("error") === "auth_failed") {
+      setError("Sign-in failed. Please try again or use email/password.");
+    }
+  }, [searchParams]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,18 +68,22 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = async () => {
+    if (wrongUrl) {
+      window.location.href = `${STABLE_URL}/login`;
+      return;
+    }
     setGoogleLoading(true);
     setError(null);
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback?redirectTo=${redirectTo}`,
+          redirectTo: `${STABLE_URL}/auth/callback?redirectTo=${redirectTo}`,
         },
       });
       if (error) throw error;
     } catch (err: any) {
-      setError("Google sign-in is not configured yet. Please use email/password.");
+      setError("Google sign-in is not available. Please use email/password.");
       setGoogleLoading(false);
     }
   };
@@ -71,11 +94,27 @@ export default function LoginPage() {
       style={{
         background: "#020B18",
         fontFamily: "'Mona Sans', 'Inter', sans-serif",
-        backgroundImage: "radial-gradient(ellipse at 20% 50%, rgba(59,130,246,0.06) 0%, transparent 60%), radial-gradient(ellipse at 80% 20%, rgba(20,184,166,0.04) 0%, transparent 50%)",
+        backgroundImage:
+          "radial-gradient(ellipse at 20% 50%, rgba(59,130,246,0.06) 0%, transparent 60%), radial-gradient(ellipse at 80% 20%, rgba(20,184,166,0.04) 0%, transparent 50%)",
       }}
     >
       <div className="max-w-md w-full">
-        {/* Logo */}
+        {wrongUrl && (
+          <div
+            className="mb-4 px-4 py-3 rounded-lg text-sm text-center"
+            style={{
+              background: "rgba(245,158,11,0.12)",
+              border: "1px solid rgba(245,158,11,0.3)",
+              color: "#FCD34D",
+            }}
+          >
+            ⚠️ You're on an old URL.{" "}
+            <a href={STABLE_URL} style={{ color: "#FBBF24", fontWeight: 600, textDecoration: "underline" }}>
+              Click here to use the correct link →
+            </a>
+          </div>
+        )}
+
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-3">
             <TenderCopilotLogo size={48} />
@@ -107,17 +146,12 @@ export default function LoginPage() {
           {error && (
             <div
               className="mb-4 px-4 py-3 rounded-lg text-sm"
-              style={{
-                background: "rgba(239,68,68,0.12)",
-                border: "1px solid rgba(239,68,68,0.25)",
-                color: "#FCA5A5",
-              }}
+              style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.25)", color: "#FCA5A5" }}
             >
               {error}
             </div>
           )}
 
-          {/* Google Sign In */}
           <button
             onClick={handleGoogleLogin}
             disabled={googleLoading}
@@ -136,7 +170,7 @@ export default function LoginPage() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
                 </svg>
-                Connecting...
+                Redirecting to Google…
               </>
             ) : (
               <>
@@ -159,54 +193,29 @@ export default function LoginPage() {
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: "#94A3B8" }}>
-                Email Address
-              </label>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "#94A3B8" }}>Email Address</label>
               <input
-                type="email"
-                required
-                value={email}
+                type="email" required value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@company.com"
-                autoComplete="email"
-                className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all"
-                style={{
-                  background: "rgba(255,255,255,0.06)",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  color: "#F1F5F9",
-                }}
+                placeholder="you@company.com" autoComplete="email"
+                className="w-full px-4 py-2.5 rounded-lg text-sm outline-none"
+                style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "#F1F5F9" }}
               />
             </div>
-
             <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: "#94A3B8" }}>
-                Password
-              </label>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "#94A3B8" }}>Password</label>
               <input
-                type="password"
-                required
-                value={password}
+                type="password" required value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                autoComplete="current-password"
-                className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all"
-                style={{
-                  background: "rgba(255,255,255,0.06)",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  color: "#F1F5F9",
-                }}
+                placeholder="••••••••" autoComplete="current-password"
+                className="w-full px-4 py-2.5 rounded-lg text-sm outline-none"
+                style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "#F1F5F9" }}
               />
             </div>
-
             <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 rounded-lg text-sm font-semibold transition-all"
-              style={{
-                background: loading ? "rgba(59,130,246,0.5)" : "#3B82F6",
-                color: "#fff",
-                cursor: loading ? "not-allowed" : "pointer",
-              }}
+              type="submit" disabled={loading}
+              className="w-full py-3 rounded-lg text-sm font-semibold"
+              style={{ background: loading ? "rgba(59,130,246,0.5)" : "#3B82F6", color: "#fff", cursor: loading ? "not-allowed" : "pointer" }}
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -222,9 +231,7 @@ export default function LoginPage() {
 
           <p className="text-center text-sm mt-6" style={{ color: "#475569" }}>
             Don&apos;t have an account?{" "}
-            <Link href="/register" style={{ color: "#3B82F6", fontWeight: 500 }}>
-              Create account
-            </Link>
+            <Link href="/register" style={{ color: "#3B82F6", fontWeight: 500 }}>Create account</Link>
           </p>
         </div>
 
