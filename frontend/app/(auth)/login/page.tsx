@@ -27,7 +27,6 @@ export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Safe redirectTo — never send to /register or /login after auth
   const rawRedirect = searchParams.get("redirectTo") || "/tenders";
   const blocked = ["/register", "/login", "/auth"];
   const redirectTo = blocked.some(b => rawRedirect.startsWith(b)) ? "/tenders" : rawRedirect;
@@ -51,6 +50,13 @@ export default function LoginPage() {
     }
   }, [searchParams]);
 
+  // If already logged in, skip to tenders
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) router.replace("/tenders");
+    });
+  }, [router]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -58,11 +64,10 @@ export default function LoginPage() {
     try {
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
       if (signInError) throw signInError;
-      router.push(redirectTo);
-      router.refresh();
+      // Use replace instead of push, and NO router.refresh() — that kills the session
+      router.replace(redirectTo);
     } catch (err: any) {
       setError(err.message || "Login failed. Please try again.");
-    } finally {
       setLoading(false);
     }
   };
