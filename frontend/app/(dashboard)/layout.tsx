@@ -1,7 +1,8 @@
 "use client";
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import LoadingSpinner from "@/src/components/LoadingSpinner";
 import { LanguageProvider, LanguageToggle, useLang } from "@/src/components/LanguageContext";
 
 export { useLang };
@@ -17,7 +18,21 @@ const NAV = [
 function NavBar() {
   const pathname = usePathname();
   const { lang, t } = useLang();
+  const [loading, setLoading] = useState(false);
+  const prevPath = React.useRef(pathname);
+
+  useEffect(() => {
+    if (prevPath.current !== pathname) {
+      prevPath.current = pathname;
+      setLoading(true);
+      const t = setTimeout(() => setLoading(false), 600);
+      return () => clearTimeout(t);
+    }
+  }, [pathname]);
+
   return (
+    <>
+    {loading && <LoadingSpinner fullScreen message="Loading..." />}
     <nav className="bg-white shadow-sm border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
@@ -50,6 +65,7 @@ function NavBar() {
         </div>
       </div>
     </nav>
+    </>
   );
 }
 
