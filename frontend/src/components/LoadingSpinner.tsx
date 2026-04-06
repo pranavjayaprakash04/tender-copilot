@@ -5,50 +5,64 @@ interface LoadingSpinnerProps {
   message?: string;
 }
 
-export default function LoadingSpinner({ fullScreen = false, message }: LoadingSpinnerProps) {
-  const content = (
-    <div className="flex flex-col items-center justify-center gap-4">
-      {/* Spinning ring around logo icon */}
-      <div style={{ position: "relative", width: 64, height: 64 }}>
-        {/* Outer spinning ring */}
-        <svg
-          width="64" height="64" viewBox="0 0 64 64"
-          style={{ position: "absolute", top: 0, left: 0, animation: "tc-spin 1.2s linear infinite" }}
-        >
-          <style>{`@keyframes tc-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-          <circle cx="32" cy="32" r="28" fill="none" stroke="#1E3A6E" strokeWidth="3"/>
-          <path d="M32 4 A28 28 0 0 1 60 32" fill="none" stroke="#1E5EFF" strokeWidth="3" strokeLinecap="round"/>
-          {/* Teal dot on arc tip */}
-          <circle cx="60" cy="32" r="3" fill="#00C6B3"/>
-        </svg>
-        {/* Logo icon in center */}
-        <img
-          src="/logo-icon.png"
-          alt="Loading"
-          style={{ position: "absolute", top: 10, left: 10, width: 44, height: 44, borderRadius: 8 }}
-        />
-      </div>
-      {message && (
-        <p style={{ color: "#7B9CC8", fontSize: 13, fontFamily: "system-ui, sans-serif" }}>{message}</p>
-      )}
+// Inline SVG spinning hexagon — no logo-icon.png needed
+function SpinningHexagon() {
+  return (
+    <div style={{ position: "relative", width: 52, height: 52 }}>
+      {/* Spinning ring */}
+      <svg
+        width="52"
+        height="52"
+        viewBox="0 0 52 52"
+        fill="none"
+        style={{ animation: "spin 1.2s linear infinite", position: "absolute", top: 0, left: 0 }}
+      >
+        <circle cx="26" cy="26" r="22" stroke="#3B82F6" strokeWidth="3" strokeDasharray="100 40" strokeLinecap="round" opacity="0.6"/>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); transform-origin: 26px 26px; } }`}</style>
+      </svg>
+      {/* Static hexagon in center */}
+      <svg
+        width="52"
+        height="52"
+        viewBox="0 0 48 48"
+        fill="none"
+        style={{ position: "absolute", top: 0, left: 0 }}
+      >
+        <polygon points="24,6 40,15 40,33 24,42 8,33 8,15" fill="#0F172A" stroke="#3B82F6" strokeWidth="1.5"/>
+        <path d="M20 28 L28 21" stroke="#3B82F6" strokeWidth="1.8" strokeLinecap="round"/>
+        <path d="M25 21 L28 21 L28 24" stroke="#3B82F6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
     </div>
   );
+}
 
+export default function LoadingSpinner({ fullScreen = false, message = "Loading..." }: LoadingSpinnerProps) {
   if (fullScreen) {
     return (
-      <div style={{
-        position: "fixed", inset: 0, zIndex: 9999,
-        background: "#020B18",
-        display: "flex", alignItems: "center", justifyContent: "center",
-      }}>
-        {content}
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(255,255,255,0.85)",
+          backdropFilter: "blur(4px)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+          gap: 16,
+        }}
+      >
+        <SpinningHexagon />
+        <p style={{ fontSize: 13, color: "#64748B", fontWeight: 500 }}>{message}</p>
       </div>
     );
   }
 
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "3rem 0" }}>
-      {content}
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: 32 }}>
+      <SpinningHexagon />
+      <p style={{ fontSize: 13, color: "#64748B" }}>{message}</p>
     </div>
   );
 }
