@@ -6,15 +6,15 @@ import { Providers } from "./providers";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Tender Copilot",
+  title: "TenderCopilot — AI Tender Intelligence for Indian MSMEs",
   description: "AI-powered government tender intelligence for Indian MSMEs",
+  icons: {
+    icon: "/logo-icon.png",
+    apple: "/logo-icon.png",
+  },
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body className={inter.className}>
