@@ -4,6 +4,24 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 
+// Inline SVG logo — no external file dependency
+function TenderCopilotLogo({ size = 48 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <polygon points="24,2 44,13 44,35 24,46 4,35 4,13" fill="#0F172A" stroke="#3B82F6" strokeWidth="1.5"/>
+      <rect x="14" y="13" width="14" height="18" rx="2" fill="none" stroke="#94A3B8" strokeWidth="1.2"/>
+      <line x1="17" y1="18" x2="25" y2="18" stroke="#94A3B8" strokeWidth="1.2" strokeLinecap="round"/>
+      <line x1="17" y1="21.5" x2="25" y2="21.5" stroke="#94A3B8" strokeWidth="1.2" strokeLinecap="round"/>
+      <line x1="17" y1="25" x2="22" y2="25" stroke="#94A3B8" strokeWidth="1.2" strokeLinecap="round"/>
+      <path d="M26 27 L34 20" stroke="#3B82F6" strokeWidth="1.8" strokeLinecap="round"/>
+      <path d="M30 20 L34 20 L34 24" stroke="#3B82F6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+      <circle cx="36" cy="10" r="2" fill="#14B8A6" opacity="0.8"/>
+      <circle cx="12" cy="10" r="2" fill="#14B8A6" opacity="0.8"/>
+      <circle cx="12" cy="38" r="2" fill="#14B8A6" opacity="0.8"/>
+    </svg>
+  );
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -31,8 +49,8 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = async () => {
-    setError(null);
     setGoogleLoading(true);
+    setError(null);
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
@@ -42,36 +60,45 @@ export default function LoginPage() {
       });
       if (error) throw error;
     } catch (err: any) {
-      setError(err.message || "Google sign-in failed.");
+      setError("Google sign-in is not configured yet. Please use email/password.");
       setGoogleLoading(false);
     }
   };
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center px-4"
-      style={{ background: "#020B18", fontFamily: "'Mona Sans', 'Inter', sans-serif" }}
+      className="min-h-screen flex flex-col items-center justify-center px-4"
+      style={{
+        background: "#020B18",
+        fontFamily: "'Mona Sans', 'Inter', sans-serif",
+        backgroundImage: "radial-gradient(ellipse at 20% 50%, rgba(59,130,246,0.06) 0%, transparent 60%), radial-gradient(ellipse at 80% 20%, rgba(20,184,166,0.04) 0%, transparent 50%)",
+      }}
     >
       <div className="max-w-md w-full">
-
-        {/* Logo + Brand */}
+        {/* Logo */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-3">
-            <img src="/logo-icon.png" alt="TenderCopilot" style={{ width: 48, height: 48 }} />
-            <h1 className="text-3xl font-bold" style={{ color: "#FFFFFF" }}>
-              Tender<span style={{ color: "#1E5EFF" }}>Copilot</span>
-            </h1>
+            <TenderCopilotLogo size={48} />
+            <div className="text-left">
+              <h1 className="text-3xl font-bold leading-none">
+                <span style={{ color: "#F1F5F9" }}>Tender</span>
+                <span style={{ color: "#3B82F6" }}>Copilot</span>
+              </h1>
+              <div style={{ height: "2px", background: "linear-gradient(90deg, #3B82F6, #14B8A6)", borderRadius: "2px", marginTop: "3px" }} />
+            </div>
           </div>
-          <div style={{ width: 48, height: 2, background: "#00C6B3", margin: "0 auto 10px" }} />
-          <p className="text-sm" style={{ color: "#7B9CC8" }}>
+          <p className="text-sm" style={{ color: "#64748B" }}>
             AI-powered tender intelligence for Indian MSMEs
           </p>
         </div>
 
-        {/* Card */}
         <div
           className="rounded-2xl p-8 shadow-2xl"
-          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(30,94,255,0.2)" }}
+          style={{
+            background: "rgba(255,255,255,0.04)",
+            border: "1px solid rgba(59,130,246,0.15)",
+            backdropFilter: "blur(12px)",
+          }}
         >
           <h2 className="text-xl font-semibold mb-6" style={{ color: "#F1F5F9" }}>
             Sign in to your account
@@ -80,7 +107,11 @@ export default function LoginPage() {
           {error && (
             <div
               className="mb-4 px-4 py-3 rounded-lg text-sm"
-              style={{ background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", color: "#FCA5A5" }}
+              style={{
+                background: "rgba(239,68,68,0.12)",
+                border: "1px solid rgba(239,68,68,0.25)",
+                color: "#FCA5A5",
+              }}
             >
               {error}
             </div>
@@ -89,14 +120,14 @@ export default function LoginPage() {
           {/* Google Sign In */}
           <button
             onClick={handleGoogleLogin}
-            disabled={googleLoading || loading}
-            className="w-full py-3 rounded-lg text-sm font-semibold mb-5 flex items-center justify-center gap-3 transition-all"
+            disabled={googleLoading}
+            className="w-full flex items-center justify-center gap-3 py-2.5 rounded-lg text-sm font-medium mb-4 transition-all"
             style={{
-              background: "rgba(255,255,255,0.07)",
-              border: "1px solid rgba(255,255,255,0.15)",
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.12)",
               color: "#F1F5F9",
               cursor: googleLoading ? "not-allowed" : "pointer",
-              opacity: googleLoading ? 0.7 : 1,
+              opacity: googleLoading ? 0.6 : 1,
             }}
           >
             {googleLoading ? (
@@ -105,26 +136,25 @@ export default function LoginPage() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
                 </svg>
-                Connecting…
+                Connecting...
               </>
             ) : (
               <>
-                <svg width="18" height="18" viewBox="0 0 24 24">
-                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                <svg width="18" height="18" viewBox="0 0 48 48">
+                  <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.2l6.7-6.7C35.7 2.5 30.2 0 24 0 14.8 0 6.9 5.4 3 13.3l7.8 6C12.7 13.1 17.9 9.5 24 9.5z"/>
+                  <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8C43.5 37.5 46.5 31.5 46.5 24.5z"/>
+                  <path fill="#FBBC05" d="M10.8 28.7A14.8 14.8 0 0 1 9.5 24c0-1.6.3-3.2.8-4.7L2.5 13.3A23.9 23.9 0 0 0 0 24c0 3.9.9 7.5 2.5 10.7l8.3-6z"/>
+                  <path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-7.5-5.8c-2 1.4-4.6 2.2-7.7 2.2-6.1 0-11.3-3.6-13.2-9.2l-8.3 6C6.9 42.6 14.8 48 24 48z"/>
                 </svg>
                 Continue with Google
               </>
             )}
           </button>
 
-          {/* Divider */}
-          <div className="flex items-center gap-3 mb-5">
-            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
-            <span style={{ color: "#475569", fontSize: 12 }}>or sign in with email</span>
-            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
+          <div className="flex items-center gap-3 mb-4">
+            <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.08)" }} />
+            <span className="text-xs" style={{ color: "#475569" }}>or sign in with email</span>
+            <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.08)" }} />
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
@@ -139,14 +169,15 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@company.com"
                 autoComplete="email"
-                className="w-full px-4 py-2.5 rounded-lg text-sm outline-none"
+                className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all"
                 style={{
                   background: "rgba(255,255,255,0.06)",
-                  border: "1px solid rgba(255,255,255,0.12)",
+                  border: "1px solid rgba(255,255,255,0.1)",
                   color: "#F1F5F9",
                 }}
               />
             </div>
+
             <div>
               <label className="block text-xs font-medium mb-1.5" style={{ color: "#94A3B8" }}>
                 Password
@@ -158,21 +189,22 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 autoComplete="current-password"
-                className="w-full px-4 py-2.5 rounded-lg text-sm outline-none"
+                className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all"
                 style={{
                   background: "rgba(255,255,255,0.06)",
-                  border: "1px solid rgba(255,255,255,0.12)",
+                  border: "1px solid rgba(255,255,255,0.1)",
                   color: "#F1F5F9",
                 }}
               />
             </div>
+
             <button
               type="submit"
-              disabled={loading || googleLoading}
+              disabled={loading}
               className="w-full py-3 rounded-lg text-sm font-semibold transition-all"
               style={{
-                background: loading ? "rgba(30,94,255,0.5)" : "#1E5EFF",
-                color: "#FFFFFF",
+                background: loading ? "rgba(59,130,246,0.5)" : "#3B82F6",
+                color: "#fff",
                 cursor: loading ? "not-allowed" : "pointer",
               }}
             >
@@ -188,16 +220,15 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p className="text-center text-sm mt-6" style={{ color: "#64748B" }}>
+          <p className="text-center text-sm mt-6" style={{ color: "#475569" }}>
             Don&apos;t have an account?{" "}
-            <Link href="/register" className="font-medium" style={{ color: "#00C6B3" }}>
+            <Link href="/register" style={{ color: "#3B82F6", fontWeight: 500 }}>
               Create account
             </Link>
           </p>
         </div>
 
-        {/* Footer */}
-        <p className="text-center text-xs mt-6" style={{ color: "#1E3A6E" }}>
+        <p className="text-center text-xs mt-6" style={{ color: "#334155" }}>
           Pynevera Technologies Pvt Ltd · Coimbatore
         </p>
       </div>
